@@ -1,0 +1,67 @@
+/* ============================================================
+   CodeWar 设计 Token 单一来源（占位规范 v1，票据 13）
+   ------------------------------------------------------------
+   规则（细则见 docs/design/004-placeholder-art-standard.md）：
+   1. 全仓库组件样式与占位 SVG 只允许引用本文件的 var(--cw-*)；
+      任何色值/字号写在别处即为违规（风格页自查项）。
+   2. 三职业主色锚点来自 docs/design/003 §6：剑士赭红 / 法师紫 / 游侠绿。
+   3. 深色主题为基线；正式美术替换时保持 token 名不变，只换值。
+   ============================================================ */
+
+:root {
+  /* ---------- 颜色 · 中性色阶（深色主题基线） ---------- */
+  --cw-color-bg-base: #12141A;      /* 页面最底层背景 */
+  --cw-color-bg-surface: #1A1E28;   /* 面板/卡片表面 */
+  --cw-color-bg-raised: #232836;    /* 浮层、悬停抬升面 */
+  --cw-color-bg-inset: #0D0F14;     /* 内嵌凹陷区（代码编辑器底） */
+  --cw-color-border: #2A3040;       /* 常规描边 */
+  --cw-color-border-strong: #3D465C;/* 强调描边（聚焦/悬停） */
+  --cw-color-text-primary: #E8EAF0; /* 主文本 */
+  --cw-color-text-secondary: #9AA1B2;/* 次要文本 */
+  --cw-color-text-muted: #5C6373;   /* 弱化文本（占位提示、禁用） */
+
+  /* ---------- 颜色 · 强调与状态 ---------- */
+  --cw-color-accent: #4F8DDB;       /* 品牌强调（主按钮、聚焦、进度） */
+  --cw-color-state-danger: #D05555; /* 危险（低血量、失败、错误提交） */
+  --cw-color-state-success: #58A873;/* 成功（胜利、通过） */
+  --cw-color-state-warning: #D9A03F;/* 警示（冷却临近、超时预警） */
+
+  /* ---------- 颜色 · 三职业主色（锚点见 docs/design/003 §6） ---------- */
+  --cw-color-class-warrior: #B5482A;/* 剑士 · 赭红（重甲巨剑） */
+  --cw-color-class-mage: #7C5CBF;   /* 法师 · 紫（长袍法杖） */
+  --cw-color-class-ranger: #3E8E5A; /* 游侠 · 绿（轻甲短弓） */
+
+  /* ---------- 字体 ---------- */
+  --cw-font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+                  "Microsoft YaHei", sans-serif;   /* 界面正文（零外部依赖） */
+  --cw-font-mono: ui-monospace, "Cascadia Code", Consolas,
+                  "JetBrains Mono", monospace;      /* 代码编辑器与等宽数值 */
+  --cw-font-size-xs: 0.75rem;    /* 辅助标注、badge */
+  --cw-font-size-sm: 0.875rem;   /* 次要正文、组件标注 */
+  --cw-font-size-md: 1rem;       /* 正文基准 */
+  --cw-font-size-lg: 1.25rem;    /* 小标题 */
+  --cw-font-size-xl: 1.5rem;     /* 区块标题 */
+  --cw-font-size-xxl: 2rem;      /* 页面标题 */
+  --cw-font-weight-regular: 400;
+  --cw-font-weight-medium: 500;
+  --cw-font-weight-semibold: 600;
+
+  /* ---------- 间距（4px 基准，--cw-space-24 兼作 1 格占位尺寸） ---------- */
+  --cw-space-1: 4px;
+  --cw-space-2: 8px;
+  --cw-space-3: 12px;
+  --cw-space-4: 16px;
+  --cw-space-5: 20px;
+  --cw-space-6: 24px;
+  --cw-space-8: 32px;
+  --cw-space-10: 40px;
+  --cw-space-12: 48px;
+  --cw-space-16: 64px;
+  --cw-space-24: 96px;   /* 1 格占位尺寸（网格格位/职业剪影基准格） */
+
+  /* ---------- 圆角 ---------- */
+  --cw-radius-sm: 4px;   /* badge、刻度 */
+  --cw-radius-md: 8px;   /* 按钮、题卡内嵌块 */
+  --cw-radius-lg: 12px;  /* 题卡、结算面板 */
+  --cw-radius-full: 999px; /* 圆形（头像底、药丸标签） */
+}
