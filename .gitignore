@@ -1,0 +1,20 @@
+# 参考资料只留本地，不入库
+ref_resources/
+
+# worktree 池（仓库内）
+.worktrees/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+coverage/
+
+# 环境与本地配置
+.env
+.env.*
+*.local
+
+# 编辑器与系统
+.DS_Store
+Thumbs.db
