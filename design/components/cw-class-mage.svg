@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="法师占位剪影：长袍与法杖">
-  <!-- 法师：长袍 + 法杖顶球（1 格占位，颜色经 currentColor 由 .cw-avatar--mage 注入） -->
+  <!-- 法师：长袍 + 法杖顶球（1 格占位，颜色经 currentColor 由宿主的 mage 修饰类注入） -->
   <g fill="currentColor">
     <!-- 兜帽 -->
     <path d="M26 3 Q35 5 34 17 Q26 21 18 17 Q17 5 26 3 Z"/>

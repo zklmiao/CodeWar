@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="难度星级图标">
-  <!-- 难度星级（L1-L5，实心数量 = 档位；空心态由 .cw-stars__star--off 降低不透明度） -->
+  <!-- 难度星级（L1 到 L5，实心数量 = 档位；空心态由 stars 的 off 修饰降低不透明度） -->
   <path fill="currentColor" d="M12 2.5 L14.85 8.9 L21.8 9.55 L16.55 14.15 L18.1 21 L12 17.4 L5.9 21 L7.45 14.15 L2.2 9.55 L9.15 8.9 Z"/>
 </svg>

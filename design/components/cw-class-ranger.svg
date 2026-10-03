@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="游侠占位剪影：轻甲与短弓">
-  <!-- 游侠：轻甲窄身 + 短弓箭（1 格占位，颜色经 currentColor 由 .cw-avatar--ranger 注入） -->
+  <!-- 游侠：轻甲窄身 + 短弓箭（1 格占位，颜色经 currentColor 由宿主的 ranger 修饰类注入） -->
   <g fill="currentColor">
     <!-- 头部与兜帽 -->
     <circle cx="24" cy="12" r="6"/>

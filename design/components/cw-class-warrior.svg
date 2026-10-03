@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="剑士占位剪影：重甲宽肩与巨剑">
-  <!-- 剑士：重甲宽肩 + 巨剑（1 格占位，颜色经 currentColor 由 .cw-avatar--warrior 注入） -->
+  <!-- 剑士：重甲宽肩 + 巨剑（1 格占位，颜色经 currentColor 由宿主的 warrior 修饰类注入） -->
   <g fill="currentColor">
     <!-- 头盔与盔缨 -->
     <rect x="22.5" y="2" width="3" height="6" rx="1"/>
