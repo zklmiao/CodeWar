@@ -128,7 +128,8 @@
 .cw-hp__fill--warrior { background: var(--cw-color-class-warrior); }
 .cw-hp__fill--mage    { background: var(--cw-color-class-mage); }
 .cw-hp__fill--ranger  { background: var(--cw-color-class-ranger); }
-/* 低血量态（语义：<30HP，联动 --cw-color-state-danger） */
+/* 低血量态（语义：HP ≤ 30%，见 docs/design/004 §1——UI 默认语义，非 spec 数值）。
+   必须置于职业色修饰（--warrior/--mage/--ranger）之后：同特异性，靠源序覆盖。 */
 .cw-hp__fill--low { background: var(--cw-color-state-danger); }
 /* 25% 分隔刻度：每 25% 宽一条底色竖线 */
 .cw-hp__ticks {
