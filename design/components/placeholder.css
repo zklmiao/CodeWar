@@ -1,12 +1,13 @@
 /* ============================================================
-   CodeWar 占位组件样式（票据 13）
+   CodeWar 占位组件样式（票据 13 建，票据 14 霓虹质感精修）
    ------------------------------------------------------------
    规则：
    1. 颜色与字号一律引用 var(--cw-*)（来源：design/tokens.css），
       本文件出现任何裸色值/裸字号即为违规（验收 grep 项）。
    2. 半透明层次统一用 color-mix(in srgb, var(--cw-*) N%, transparent)
-      表达，不引入新 token、不写 rgba。
+      表达，不引入新 token、不写 rgba；辉光强度档位见 004 §5。
    3. 类名约定：.cw-<块>__<元素>--<修饰符>（BEM，见 docs/design/004）。
+   4. 动效时长一律 var(--cw-motion-*)，且被页尾 reduced-motion 块兜底。
    ============================================================ */
 
 /* ---------- 通用 ---------- */
@@ -23,16 +24,25 @@
   font-size: var(--cw-font-size-sm);
   font-weight: var(--cw-font-weight-medium);
   cursor: pointer;
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-accent) 30%, transparent);
+  transition: transform var(--cw-motion-fast) ease, box-shadow var(--cw-motion-fast) ease;
+}
+.cw-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-accent) 55%, transparent);
 }
 .cw-btn--ghost {
   background: transparent;
   color: var(--cw-color-accent);
+  box-shadow: none;
 }
 .cw-btn:disabled {
   border-color: var(--cw-color-border);
   background: var(--cw-color-bg-raised);
   color: var(--cw-color-text-muted);
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .cw-badge {
@@ -57,13 +67,26 @@
   padding: var(--cw-space-3);
   border-radius: var(--cw-radius-lg);
   border: 1px solid var(--cw-color-border);
-  background: var(--cw-color-bg-surface);
+  /* 终端扫描线（4px 周期，≤3% 强度，见 004 §5）叠在表面上 */
+  background-image: repeating-linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--cw-color-accent) 3%, transparent) 0 1px,
+    transparent 1px 4px
+  );
+  background-color: var(--cw-color-bg-surface);
+  box-shadow:
+    0 0 var(--cw-space-4) color-mix(in srgb, var(--cw-color-accent) 12%, transparent),
+    inset 0 0 var(--cw-space-6) color-mix(in srgb, var(--cw-color-accent) 8%, transparent);
 }
 .cw-grid__cell {
   position: relative;
   border-radius: var(--cw-radius-sm);
   border: 1px solid var(--cw-color-border);
   background-color: var(--cw-color-bg-base);
+  transition: border-color var(--cw-motion-fast) ease;
+}
+.cw-grid__cell:hover {
+  border-color: var(--cw-color-border-strong);
 }
 /* 格位底纹：cw-tile-floor.svg 作 alpha 蒙版叠在底色上，颜色取自弱化文本 token */
 .cw-grid__cell--textured::before {
@@ -78,38 +101,54 @@
   mask-size: 100% 100%;
 }
 .cw-grid__cell--hero-warrior {
-  background-color: color-mix(in srgb, var(--cw-color-class-warrior) 26%, var(--cw-color-bg-surface));
+  background-color: color-mix(in srgb, var(--cw-color-class-warrior) 30%, var(--cw-color-bg-surface));
   border-color: color-mix(in srgb, var(--cw-color-class-warrior) 75%, transparent);
+  box-shadow: inset 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-warrior) 40%, transparent);
 }
 .cw-grid__cell--hero-mage {
-  background-color: color-mix(in srgb, var(--cw-color-class-mage) 26%, var(--cw-color-bg-surface));
+  background-color: color-mix(in srgb, var(--cw-color-class-mage) 30%, var(--cw-color-bg-surface));
   border-color: color-mix(in srgb, var(--cw-color-class-mage) 75%, transparent);
+  box-shadow: inset 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-mage) 40%, transparent);
 }
 .cw-grid__cell--hero-ranger {
-  background-color: color-mix(in srgb, var(--cw-color-class-ranger) 26%, var(--cw-color-bg-surface));
+  background-color: color-mix(in srgb, var(--cw-color-class-ranger) 30%, var(--cw-color-bg-surface));
   border-color: color-mix(in srgb, var(--cw-color-class-ranger) 75%, transparent);
+  box-shadow: inset 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-ranger) 40%, transparent);
 }
-/* 攻击覆盖格（形状命中的待判定区） */
+/* 攻击覆盖格（形状命中的待判定区）：危险呼吸 */
 .cw-grid__cell--coverage {
   background-color: color-mix(in srgb, var(--cw-color-state-danger) 30%, var(--cw-color-bg-base));
   border-color: color-mix(in srgb, var(--cw-color-state-danger) 70%, transparent);
+  animation: cw-breathe var(--cw-motion-pulse) ease-in-out infinite;
+}
+@keyframes cw-breathe {
+  50% { opacity: 0.55; }
 }
 
-/* ---------- 职业占位剪影容器（1 格尺寸） ---------- */
+/* ---------- 职业占位剪影容器（1 格尺寸；mask 引用，见 004 §3.1） ---------- */
 .cw-avatar {
   width: var(--cw-space-24);
   height: var(--cw-space-24);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
-.cw-avatar > svg {
-  width: 80%;
-  height: 80%;
+.cw-avatar--warrior {
+  color: var(--cw-color-class-warrior);
+  -webkit-mask-image: url("cw-class-warrior.svg");
+  mask-image: url("cw-class-warrior.svg");
 }
-.cw-avatar--warrior { color: var(--cw-color-class-warrior); }
-.cw-avatar--mage    { color: var(--cw-color-class-mage); }
-.cw-avatar--ranger  { color: var(--cw-color-class-ranger); }
+.cw-avatar--mage {
+  color: var(--cw-color-class-mage);
+  -webkit-mask-image: url("cw-class-mage.svg");
+  mask-image: url("cw-class-mage.svg");
+}
+.cw-avatar--ranger {
+  color: var(--cw-color-class-ranger);
+  -webkit-mask-image: url("cw-class-ranger.svg");
+  mask-image: url("cw-class-ranger.svg");
+}
 
 /* ---------- 血条（语义：满值 = 100HP，25% 分隔刻度，spec 数值初稿） ---------- */
 .cw-hp {
@@ -119,18 +158,34 @@
   border-radius: var(--cw-radius-sm);
   border: 1px solid var(--cw-color-border-strong);
   background: var(--cw-color-bg-inset);
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--cw-color-bg-base) 60%, transparent);
   overflow: hidden;
 }
 .cw-hp__fill {
+  position: relative;
   height: 100%;
   background: var(--cw-color-state-success); /* 中立/默认血量色 */
+}
+/* 顶部高光线（玻璃管感，霓虹填充的受光面） */
+.cw-hp__fill::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--cw-color-text-primary) 45%, transparent);
 }
 .cw-hp__fill--warrior { background: var(--cw-color-class-warrior); }
 .cw-hp__fill--mage    { background: var(--cw-color-class-mage); }
 .cw-hp__fill--ranger  { background: var(--cw-color-class-ranger); }
 /* 低血量态（语义：HP ≤ 30%，见 docs/design/004 §1——UI 默认语义，非 spec 数值）。
    必须置于职业色修饰（--warrior/--mage/--ranger）之后：同特异性，靠源序覆盖。 */
-.cw-hp__fill--low { background: var(--cw-color-state-danger); }
+.cw-hp__fill--low {
+  background: var(--cw-color-state-danger);
+  animation: cw-pulse var(--cw-motion-pulse) ease-in-out infinite;
+}
+@keyframes cw-pulse {
+  50% { opacity: 0.55; }
+}
 /* 25% 分隔刻度：每 25% 宽一条底色竖线 */
 .cw-hp__ticks {
   position: absolute;
@@ -153,19 +208,28 @@
   padding: var(--cw-space-4);
   border-radius: var(--cw-radius-lg);
   border: 1px solid var(--cw-color-border);
-  background: var(--cw-color-bg-surface);
+  background: linear-gradient(180deg, var(--cw-color-bg-raised), var(--cw-color-bg-surface));
+  transition: transform var(--cw-motion-fast) ease, border-color var(--cw-motion-fast) ease;
+}
+.cw-card:hover {
+  transform: translateY(calc(-1 * var(--cw-space-1)));
+  border-color: var(--cw-color-border-strong);
 }
 .cw-card--action-attack {
   border-left: 3px solid var(--cw-color-state-danger);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-state-danger) 18%, transparent);
 }
 .cw-card--action-move {
   border-left: 3px solid var(--cw-color-accent);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-accent) 18%, transparent);
 }
 .cw-card--action-defend {
   border-left: 3px solid var(--cw-color-state-warning);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-state-warning) 18%, transparent);
 }
 .cw-card--action-skill {
   border-left: 3px solid var(--cw-color-state-success);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-state-success) 18%, transparent);
 }
 .cw-card__head {
   display: flex;
@@ -173,10 +237,34 @@
   gap: var(--cw-space-3);
 }
 .cw-card__spacer { flex: 1; }
+/* 卡片图标：mask 引用（004 §3.1），颜色经 currentColor 承载 */
 .cw-card__icon {
   width: var(--cw-space-5);
   height: var(--cw-space-5);
+  background-color: currentColor;
   color: var(--cw-color-text-secondary);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.cw-card__icon--attack {
+  color: var(--cw-color-state-danger);
+  -webkit-mask-image: url("cw-icon-attack.svg");
+  mask-image: url("cw-icon-attack.svg");
+}
+.cw-card__icon--move {
+  color: var(--cw-color-accent);
+  -webkit-mask-image: url("cw-icon-move.svg");
+  mask-image: url("cw-icon-move.svg");
+}
+.cw-card__icon--defend {
+  color: var(--cw-color-state-warning);
+  -webkit-mask-image: url("cw-icon-defend.svg");
+  mask-image: url("cw-icon-defend.svg");
+}
+.cw-card__icon--skill {
+  color: var(--cw-color-state-success);
+  -webkit-mask-image: url("cw-icon-skill.svg");
+  mask-image: url("cw-icon-skill.svg");
 }
 .cw-card__statement {
   font-family: var(--cw-font-sans);
@@ -228,7 +316,7 @@
   display: inline-block;
   width: var(--cw-space-4);
   height: var(--cw-space-4);
-  background-color: var(--cw-color-state-warning);
+  background-color: currentColor;
   -webkit-mask-image: url("cw-icon-star.svg");
   mask-image: url("cw-icon-star.svg");
   -webkit-mask-size: 100% 100%;
@@ -249,22 +337,36 @@
   justify-content: center;
   overflow: hidden;
 }
+/* 槽内图标：mask 引用，颜色由职业修饰类的 color 承载 */
 .cw-skill-slot__icon {
   width: 55%;
   height: 55%;
+  background-color: currentColor;
   color: var(--cw-color-text-secondary);
+  -webkit-mask-image: url("cw-icon-skill.svg");
+  mask-image: url("cw-icon-skill.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
-.cw-skill-slot--warrior { border-color: var(--cw-color-class-warrior); }
+.cw-skill-slot--warrior {
+  border-color: var(--cw-color-class-warrior);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-warrior) 40%, transparent);
+}
 .cw-skill-slot--warrior .cw-skill-slot__icon { color: var(--cw-color-class-warrior); }
 .cw-skill-slot--mage {
   border-color: var(--cw-color-class-mage);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-mage) 40%, transparent);
 }
 .cw-skill-slot--mage .cw-skill-slot__icon { color: var(--cw-color-class-mage); }
-.cw-skill-slot--ranger { border-color: var(--cw-color-class-ranger); }
+.cw-skill-slot--ranger {
+  border-color: var(--cw-color-class-ranger);
+  box-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-class-ranger) 40%, transparent);
+}
 .cw-skill-slot--ranger .cw-skill-slot__icon { color: var(--cw-color-class-ranger); }
 .cw-skill-slot--empty {
   border-style: dashed;
   border-color: var(--cw-color-border);
+  box-shadow: none;
 }
 .cw-skill-slot--empty::after {
   content: "空";
@@ -272,12 +374,20 @@
   font-size: var(--cw-font-size-xs);
   color: var(--cw-color-text-muted);
 }
-/* 冷却态：压暗 + 剩余回合数字（data-cd 提供数值） */
+/* 冷却态：conic 径向扫描 + 剩余回合数字（data-cd 提供数值） */
 .cw-skill-slot--cooldown::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--cw-color-bg-base) 70%, transparent);
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--cw-color-bg-base) 75%, transparent) 0 60%,
+    transparent 60%
+  );
+  animation: cw-sweep var(--cw-motion-pulse) linear infinite;
+}
+@keyframes cw-sweep {
+  to { transform: rotate(360deg); }
 }
 .cw-skill-slot--cooldown::after {
   content: attr(data-cd);
@@ -298,6 +408,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--cw-space-4);
+  animation: cw-enter var(--cw-motion-slow) ease both;
+}
+@keyframes cw-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--cw-space-2));
+  }
 }
 .cw-panel__title {
   font-family: var(--cw-font-sans);
@@ -305,11 +422,19 @@
   font-weight: var(--cw-font-weight-semibold);
   text-align: center;
 }
-.cw-panel--victory .cw-panel__title { color: var(--cw-color-state-success); }
-.cw-panel--defeat  .cw-panel__title { color: var(--cw-color-state-danger); }
+.cw-panel--victory .cw-panel__title {
+  color: var(--cw-color-state-success);
+  text-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-state-success) 55%, transparent);
+}
+.cw-panel--defeat .cw-panel__title {
+  color: var(--cw-color-state-danger);
+  text-shadow: 0 0 var(--cw-space-3) color-mix(in srgb, var(--cw-color-state-danger) 55%, transparent);
+}
 .cw-panel__row {
   display: flex;
   justify-content: space-between;
+  padding-top: var(--cw-space-2);
+  border-top: 1px solid color-mix(in srgb, var(--cw-color-border) 60%, transparent);
   font-family: var(--cw-font-sans);
   font-size: var(--cw-font-size-sm);
   color: var(--cw-color-text-secondary);
@@ -322,4 +447,19 @@
   display: flex;
   gap: var(--cw-space-3);
   justify-content: center;
+}
+
+/* ---------- 动效兜底（无障碍：偏好减少动效时全部静止） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .cw-grid__cell--coverage,
+  .cw-hp__fill--low,
+  .cw-skill-slot--cooldown::before,
+  .cw-panel {
+    animation: none;
+  }
+  .cw-card,
+  .cw-btn,
+  .cw-grid__cell {
+    transition: none;
+  }
 }
