@@ -1,0 +1,9 @@
+# judge：Python gRPC 判题服务
+# 01 号票为简易执行器（无沙箱）；02 号票在此镜像边界内硬化（资源限制/禁网）
+FROM python:3.13-slim
+WORKDIR /srv
+COPY judge/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY judge/ .
+EXPOSE 50051
+CMD ["python", "-m", "judgesvc.server"]

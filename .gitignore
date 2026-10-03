@@ -18,3 +18,13 @@ coverage/
 # 编辑器与系统
 .DS_Store
 Thumbs.db
+
+# monorepo 构建产物
+client/dist/
+client/node_modules/
+node_modules/
+judge/__pycache__/
+judge/**/__pycache__/
+*.pyc
+server/codewar
+*.exe
