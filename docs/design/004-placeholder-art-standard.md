@@ -50,6 +50,7 @@
 - **内联 SVG**（风格页与后续客户端组件的推荐方式）：`currentColor` 继承自 `class="cw-avatar--warrior"` 等修饰类。
 - **CSS mask**（同图复用染色的场景，如星级、格位底纹）：`mask-image: url(cw-*.svg)` + `background-color: var(--cw-*)`，蒙版只取 alpha。
 - **禁止 `<img>` 引用**：`<img>` 上下文中 `currentColor` 无法被页面染色（会退化为黑）。
+- **⚠️ XML 注释禁用连续连字符**：SVG 是 XML 文档，注释中出现 `--`（如引用 BEM 类名 `.cw-avatar--warrior`）会导致整个文件解析失败、作为图像/蒙版时静默变空白。注释里提及类名时写"宿主的 warrior 修饰类"这类文字。入库前用 `python -c "import xml.etree.ElementTree as ET; ET.parse(文件)"` 验证。
 
 ### 3.2 CSS 类名
 
