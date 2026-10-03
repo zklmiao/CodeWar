@@ -1,24 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="剑士占位剪影：重甲宽肩与巨剑">
-  <!-- 剑士：重甲宽肩 + 巨剑（1 格占位，颜色经 currentColor 由宿主的 warrior 修饰类注入） -->
-  <g fill="currentColor">
-    <!-- 头盔与盔缨 -->
-    <rect x="22.5" y="2" width="3" height="6" rx="1"/>
-    <circle cx="24" cy="13" r="6.5"/>
-    <!-- 肩甲 -->
-    <circle cx="12" cy="26" r="6"/>
-    <circle cx="36" cy="26" r="6"/>
-    <!-- 宽肩躯干 -->
-    <path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/>
-    <!-- 腰带（透明度分层） -->
-    <rect x="13" y="42" width="22" height="4" opacity="0.35"/>
-    <!-- 双腿 -->
-    <rect x="15" y="52" width="8" height="9" rx="1"/>
-    <rect x="25" y="52" width="8" height="9" rx="1"/>
-    <!-- 巨剑：刃 -->
-    <path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/>
-    <!-- 巨剑：护手 / 握柄 / 柄尾 -->
-    <rect x="46" y="33" width="13" height="4" rx="1"/>
-    <rect x="50.5" y="37" width="4" height="9"/>
-    <circle cx="52.5" cy="49" r="3"/>
+  <!-- 剑士：重甲宽肩 + 巨剑（霓虹质感：辉光晕 + 垂直渐变 + 装甲缝细节；
+       颜色经 currentColor 由宿主的 warrior 修饰类注入，结构约定见 004 §5） -->
+  <defs>
+    <g id="cwWarriorBody">
+      <rect x="22.5" y="2" width="3" height="6" rx="1"/>
+      <circle cx="24" cy="13" r="6.5"/>
+      <circle cx="12" cy="26" r="6"/>
+      <circle cx="36" cy="26" r="6"/>
+      <path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/>
+      <rect x="15" y="52" width="8" height="9" rx="1"/>
+      <rect x="25" y="52" width="8" height="9" rx="1"/>
+      <path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/>
+      <rect x="46" y="33" width="13" height="4" rx="1"/>
+      <rect x="50.5" y="37" width="4" height="9"/>
+      <circle cx="52.5" cy="49" r="3"/>
+    </g>
+    <linearGradient id="cwWarriorGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="currentColor" stop-opacity="1"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.55"/>
+    </linearGradient>
+    <filter id="cwWarriorGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+  <!-- 辉光晕：同形体模糊层 -->
+  <use href="#cwWarriorBody" fill="currentColor" opacity="0.55" filter="url(#cwWarriorGlow)"/>
+  <!-- 主体：垂直渐变（顶亮底暗） -->
+  <use href="#cwWarriorBody" fill="url(#cwWarriorGrad)"/>
+  <!-- 轮廓描边 -->
+  <use href="#cwWarriorBody" fill="none" stroke="currentColor" stroke-opacity="0.9" stroke-width="1"/>
+  <!-- 腰带（半透明覆盖层） -->
+  <rect x="13" y="42" width="22" height="4" fill="currentColor" opacity="0.35"/>
+  <!-- 装甲缝细节 -->
+  <g stroke="currentColor" stroke-width="1" opacity="0.4" fill="none">
+    <path d="M16 30 L16 42"/>
+    <path d="M32 30 L32 42"/>
+    <path d="M13 46 L35 46"/>
   </g>
 </svg>
