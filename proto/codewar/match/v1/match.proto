@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package codewar.match.v1;
+
+option go_package = "codewar/server/gen/matchpb;matchpb";
+
+// ============ 对局同步契约（ADR-0002：事件流同步） ============
+// 服务端权威：客户端只上行提交、下行应用事件。
+// JSON 序列化走 protojson / ts-proto fromJson：int64 字段在 JSON 中是字符串，
+// uint32/int32 是数字；事件类型判别靠 oneof 字段名。
+
+// ============ 服务端 → 客户端 ============
+
+enum MatchPhase {
+  MATCH_PHASE_UNSPECIFIED = 0;
+  MATCH_PHASE_WAITING = 1; // 等对手接入
+  MATCH_PHASE_ROUND_ACTIVE = 2;
+  MATCH_PHASE_ENDED = 3;
+}
+
+message ServerMessage {
+  oneof payload {
+    Snapshot snapshot = 1; // 接入/重连时先发快照，之后逐事件下发
+    Envelope event = 2;
+  }
+}
+
+message Snapshot {
+  uint32 seq = 1; // 已应用到的最后事件序号
+  MatchPhase phase = 2;
+  repeated PlayerView players = 3;
+  uint32 round = 4;
+  // 当前回合截止时间（phase=ROUND_ACTIVE 时有效）；int64 → JSON 字符串
+  int64 deadline_unix_ms = 5;
+  Problem problem = 6; // 当前回合镜像题（就绪时）
+  // 查看者自己的提交锁截止（0 = 未锁定）；快照按连接下发，可含查看者私有视图
+  int64 viewer_lock_until_unix_ms = 7;
+  MatchResult result = 8; // phase=ENDED 时有效
+}
+
+message PlayerView {
+  string id = 1; // "p1" | "p2"
+  int32 hp = 2;
+}
+
+message Problem {
+  string id = 1;
+  string statement = 2; // 题面（含示例说明）
+  string signature = 3; // 函数签名行，如 def two_sum(nums, target):
+  string starter_code = 4; // 编辑器初始内容
+}
+
+message MatchResult {
+  // 胜者 "p1"/"p2"；空 = 平局
+  string winner = 1;
+  // ko（攻击致死）| self-ko（错误自损致死）| rounds-cap（回合上限按剩余 HP 判）
+  string reason = 2;
+}
+
+// ============ 事件（对局事件流，六类；spec「实现决策」） ============
+
+message Envelope {
+  uint32 seq = 1; // 单调递增，断号 → 客户端触发重连（ADR-0002）
+  int64 unix_ms = 2; // 服务端时间戳（客户端校偏渲染倒计时）
+  oneof event {
+    RoundStarted round_started = 3;
+    PanelReady panel_ready = 4;
+    SubmissionJudged submission_judged = 5;
+    ActionResolved action_resolved = 6;
+    HpChanged hp_changed = 7;
+    MatchEnded match_ended = 8;
+  }
+}
+
+message RoundStarted {
+  uint32 round = 1; // 1 起
+  int64 deadline_unix_ms = 2;
+}
+
+message PanelReady {
+  Problem problem = 1; // 镜像题：双方同实例（spec 用户故事 12）
+}
+
+message SubmissionJudged {
+  string player = 1;
+  bool passed = 2;
+  // ok | wrong-answer | locked | timeout | syntax | runtime-error | judge-error
+  string category = 3;
+  // 解题耗时（回合开始→通过），仅 passed=true 有意义；驱动时间系数
+  int32 solve_ms = 4;
+  // 该次失败是否施加了自损（locked/judge-error/syntax 不罚，见引擎规则）
+  bool self_damage_applied = 5;
+}
+
+message ActionResolved {
+  string attacker = 1;
+  int32 damage = 2; // 基础 22 × 时间系数（0.6~1.0）取整；本票固定站位必然命中
+  int32 solve_ms = 3;
+}
+
+message HpChanged {
+  string player = 1;
+  int32 hp = 2; // 变更后
+  int32 delta = 3; // 负值=受伤
+  // attack | self-damage
+  string cause = 4;
+}
+
+message MatchEnded {
+  string winner = 1; // "p1"/"p2"；空 = 平局
+  // ko | self-ko | rounds-cap
+  string reason = 2;
+}
+
+// ============ 客户端 → 服务端 ============
+
+message ClientMessage {
+  oneof payload {
+    JoinRequest join = 1; // 首条消息必须 join
+    SubmitRequest submit = 2;
+  }
+}
+
+message JoinRequest {
+  string player = 1; // "p1" | "p2"
+}
+
+message SubmitRequest {
+  string code = 1;
+}
