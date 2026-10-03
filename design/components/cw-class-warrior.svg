@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="剑士占位剪影：重甲宽肩与巨剑">
+  <!-- 剑士：重甲宽肩 + 巨剑（1 格占位，颜色经 currentColor 由 .cw-avatar--warrior 注入） -->
+  <g fill="currentColor">
+    <!-- 头盔与盔缨 -->
+    <rect x="22.5" y="2" width="3" height="6" rx="1"/>
+    <circle cx="24" cy="13" r="6.5"/>
+    <!-- 肩甲 -->
+    <circle cx="12" cy="26" r="6"/>
+    <circle cx="36" cy="26" r="6"/>
+    <!-- 宽肩躯干 -->
+    <path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/>
+    <!-- 腰带（透明度分层） -->
+    <rect x="13" y="42" width="22" height="4" opacity="0.35"/>
+    <!-- 双腿 -->
+    <rect x="15" y="52" width="8" height="9" rx="1"/>
+    <rect x="25" y="52" width="8" height="9" rx="1"/>
+    <!-- 巨剑：刃 -->
+    <path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/>
+    <!-- 巨剑：护手 / 握柄 / 柄尾 -->
+    <rect x="46" y="33" width="13" height="4" rx="1"/>
+    <rect x="50.5" y="37" width="4" height="9"/>
+    <circle cx="52.5" cy="49" r="3"/>
+  </g>
+</svg>

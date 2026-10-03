@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="格位底纹">
+  <!-- 格位底纹：作为 CSS mask-image 使用时仅取 alpha 通道，
+       颜色（currentColor）由引用方元素的 background-color 决定 -->
+  <g stroke="currentColor" fill="none">
+    <rect x="1" y="1" width="62" height="62" rx="3" stroke-width="1.5" opacity="0.35"/>
+    <path d="M-6 22 L22 -6" stroke-width="1.5" opacity="0.14"/>
+    <path d="M-2 66 L66 -2" stroke-width="1.5" opacity="0.14"/>
+    <path d="M42 70 L70 42" stroke-width="1.5" opacity="0.14"/>
+    <path d="M14 14 L18 14 M14 14 L14 18" stroke-width="1.5" opacity="0.3"/>
+    <path d="M50 50 L54 50 M54 50 L54 46" stroke-width="1.5" opacity="0.3"/>
+  </g>
+</svg>

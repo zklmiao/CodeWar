@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="游侠占位剪影：轻甲与短弓">
+  <!-- 游侠：轻甲窄身 + 短弓箭（1 格占位，颜色经 currentColor 由 .cw-avatar--ranger 注入） -->
+  <g fill="currentColor">
+    <!-- 头部与兜帽 -->
+    <circle cx="24" cy="12" r="6"/>
+    <path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/>
+    <!-- 窄身轻甲躯干 -->
+    <path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/>
+    <!-- 腰带（透明度分层） -->
+    <rect x="17" y="34" width="14" height="3" opacity="0.35"/>
+    <!-- 双腿（窄） -->
+    <rect x="18" y="48" width="6" height="12" rx="1"/>
+    <rect x="26" y="48" width="6" height="12" rx="1"/>
+  </g>
+  <!-- 短弓：弓臂弧线 / 弓弦 / 搭箭 -->
+  <g stroke="currentColor" fill="none">
+    <path d="M47 6 Q61 28 47 50" stroke-width="3" stroke-linecap="round"/>
+    <path d="M47 6 L47 50" stroke-width="1.5" opacity="0.5"/>
+    <path d="M36 28 L58 28" stroke-width="2"/>
+  </g>
+  <g fill="currentColor">
+    <!-- 箭头 -->
+    <path d="M60 28 L53 25 L53 31 Z"/>
+    <!-- 尾羽 -->
+    <path d="M36 28 L31 24.5 L31 27 Z"/>
+    <path d="M36 28 L31 31.5 L31 29 Z"/>
+  </g>
+</svg>

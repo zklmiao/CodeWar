@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="法师占位剪影：长袍与法杖">
+  <!-- 法师：长袍 + 法杖顶球（1 格占位，颜色经 currentColor 由 .cw-avatar--mage 注入） -->
+  <g fill="currentColor">
+    <!-- 兜帽 -->
+    <path d="M26 3 Q35 5 34 17 Q26 21 18 17 Q17 5 26 3 Z"/>
+    <!-- A 形长袍 -->
+    <path d="M18 18 L12 54 Q26 62 40 54 L34 18 Q26 14 18 18 Z"/>
+    <!-- 腰绳（透明度分层） -->
+    <rect x="17" y="32" width="18" height="3" opacity="0.35"/>
+    <!-- 法杖杖身 -->
+    <rect x="49" y="12" width="3" height="46" rx="1.5"/>
+    <!-- 法杖顶球：光晕 + 球体 -->
+    <circle cx="50.5" cy="8" r="8" opacity="0.25"/>
+    <circle cx="50.5" cy="8" r="5"/>
+  </g>
+</svg>

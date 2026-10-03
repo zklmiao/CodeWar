@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="攻击动作图标：交叉双剑">
+  <!-- 攻击（action: attack） -->
+  <g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
+    <path d="M4 4 L18 18"/>
+    <path d="M20 4 L6 18"/>
+    <!-- 护手 -->
+    <path d="M15 19 L19 15"/>
+    <path d="M9 19 L5 15"/>
+    <!-- 握柄 -->
+    <path d="M18 18 L21 21"/>
+    <path d="M6 18 L3 21"/>
+  </g>
+</svg>
