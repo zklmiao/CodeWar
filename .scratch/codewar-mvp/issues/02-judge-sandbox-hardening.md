@@ -1,6 +1,6 @@
 # 02: 判题沙箱硬化
 
-**What to build:** 用生产级沙箱判题（Judge：judge(code, testCases) → {passed, category, durationMs}）替换 Tracer 中的简易判题。100% 用例通过才算通过；死循环在时限内被终止、资源超限与联网尝试被安全拒绝。这是安全边界票：判题器必须能在公网环境承载不可信代码。判题管线流程、verdict 契约与遥测点见 docs/design/002-question-system.md §5-§6；沙箱机制选型在本票内以 ADR 落地。
+**What to build:** 用生产级沙箱判题（Judge：judge(code, testCases) → {passed, category, durationMs}）替换 Tracer 中的简易判题。100% 用例通过才算通过；死循环在时限内被终止、资源超限与联网尝试被安全拒绝。这是安全边界票：判题器必须能在公网环境承载不可信代码。判题管线流程、verdict 契约与遥测点见 docs/design/002-question-system.md §5-§6；judge 为独立 Python 微服务（ADR-0001），沙箱机制 ADR 在该服务边界内选定（容器运行时访问权或用户命名空间），Compose 部署形态已为此预留。
 
 **Blocked by:** 01 (Tracer——热座最小对局)
 
