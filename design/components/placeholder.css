@@ -1,0 +1,324 @@
+/* ============================================================
+   CodeWar 占位组件样式（票据 13）
+   ------------------------------------------------------------
+   规则：
+   1. 颜色与字号一律引用 var(--cw-*)（来源：design/tokens.css），
+      本文件出现任何裸色值/裸字号即为违规（验收 grep 项）。
+   2. 半透明层次统一用 color-mix(in srgb, var(--cw-*) N%, transparent)
+      表达，不引入新 token、不写 rgba。
+   3. 类名约定：.cw-<块>__<元素>--<修饰符>（BEM，见 docs/design/004）。
+   ============================================================ */
+
+/* ---------- 通用 ---------- */
+.cw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cw-space-2);
+  padding: var(--cw-space-2) var(--cw-space-5);
+  border-radius: var(--cw-radius-md);
+  border: 1px solid var(--cw-color-accent);
+  background: var(--cw-color-accent);
+  color: var(--cw-color-bg-base);
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-sm);
+  font-weight: var(--cw-font-weight-medium);
+  cursor: pointer;
+}
+.cw-btn--ghost {
+  background: transparent;
+  color: var(--cw-color-accent);
+}
+.cw-btn:disabled {
+  border-color: var(--cw-color-border);
+  background: var(--cw-color-bg-raised);
+  color: var(--cw-color-text-muted);
+  cursor: not-allowed;
+}
+
+.cw-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--cw-space-2);
+  border-radius: var(--cw-radius-sm);
+  border: 1px solid var(--cw-color-border-strong);
+  background: var(--cw-color-bg-raised);
+  color: var(--cw-color-text-secondary);
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-xs);
+  line-height: 1.8;
+}
+
+/* ---------- 网格（5×5 竞技场，1 格 = --cw-space-24） ---------- */
+.cw-grid {
+  display: grid;
+  grid-template-columns: repeat(5, var(--cw-space-24));
+  grid-template-rows: repeat(5, var(--cw-space-24));
+  gap: var(--cw-space-1);
+  padding: var(--cw-space-3);
+  border-radius: var(--cw-radius-lg);
+  border: 1px solid var(--cw-color-border);
+  background: var(--cw-color-bg-surface);
+}
+.cw-grid__cell {
+  position: relative;
+  border-radius: var(--cw-radius-sm);
+  border: 1px solid var(--cw-color-border);
+  background-color: var(--cw-color-bg-base);
+}
+/* 格位底纹：cw-tile-floor.svg 作 alpha 蒙版叠在底色上，颜色取自弱化文本 token */
+.cw-grid__cell--textured::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--cw-color-text-muted);
+  opacity: 0.3;
+  -webkit-mask-image: url("cw-tile-floor.svg");
+  mask-image: url("cw-tile-floor.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.cw-grid__cell--hero-warrior {
+  background-color: color-mix(in srgb, var(--cw-color-class-warrior) 26%, var(--cw-color-bg-surface));
+  border-color: color-mix(in srgb, var(--cw-color-class-warrior) 75%, transparent);
+}
+.cw-grid__cell--hero-mage {
+  background-color: color-mix(in srgb, var(--cw-color-class-mage) 26%, var(--cw-color-bg-surface));
+  border-color: color-mix(in srgb, var(--cw-color-class-mage) 75%, transparent);
+}
+.cw-grid__cell--hero-ranger {
+  background-color: color-mix(in srgb, var(--cw-color-class-ranger) 26%, var(--cw-color-bg-surface));
+  border-color: color-mix(in srgb, var(--cw-color-class-ranger) 75%, transparent);
+}
+/* 攻击覆盖格（形状命中的待判定区） */
+.cw-grid__cell--coverage {
+  background-color: color-mix(in srgb, var(--cw-color-state-danger) 30%, var(--cw-color-bg-base));
+  border-color: color-mix(in srgb, var(--cw-color-state-danger) 70%, transparent);
+}
+
+/* ---------- 职业占位剪影容器（1 格尺寸） ---------- */
+.cw-avatar {
+  width: var(--cw-space-24);
+  height: var(--cw-space-24);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cw-avatar > svg {
+  width: 80%;
+  height: 80%;
+}
+.cw-avatar--warrior { color: var(--cw-color-class-warrior); }
+.cw-avatar--mage    { color: var(--cw-color-class-mage); }
+.cw-avatar--ranger  { color: var(--cw-color-class-ranger); }
+
+/* ---------- 血条（语义：满值 = 100HP，25% 分隔刻度，spec 数值初稿） ---------- */
+.cw-hp {
+  position: relative;
+  width: 100%;
+  height: var(--cw-space-4);
+  border-radius: var(--cw-radius-sm);
+  border: 1px solid var(--cw-color-border-strong);
+  background: var(--cw-color-bg-inset);
+  overflow: hidden;
+}
+.cw-hp__fill {
+  height: 100%;
+  background: var(--cw-color-state-success); /* 中立/默认血量色 */
+}
+.cw-hp__fill--warrior { background: var(--cw-color-class-warrior); }
+.cw-hp__fill--mage    { background: var(--cw-color-class-mage); }
+.cw-hp__fill--ranger  { background: var(--cw-color-class-ranger); }
+/* 低血量态（语义：<30HP，联动 --cw-color-state-danger） */
+.cw-hp__fill--low { background: var(--cw-color-state-danger); }
+/* 25% 分隔刻度：每 25% 宽一条底色竖线 */
+.cw-hp__ticks {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(90deg, var(--cw-color-bg-inset) 1px, transparent 1px);
+  background-size: 25% 100%;
+  background-position: -1px 0;
+}
+.cw-hp__label {
+  font-family: var(--cw-font-mono);
+  font-size: var(--cw-font-size-xs);
+  color: var(--cw-color-text-secondary);
+}
+
+/* ---------- 题卡（四语义槽位：题型徽标 / 难度星级 / 题面区 / 编辑器区） ---------- */
+.cw-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cw-space-3);
+  padding: var(--cw-space-4);
+  border-radius: var(--cw-radius-lg);
+  border: 1px solid var(--cw-color-border);
+  background: var(--cw-color-bg-surface);
+}
+.cw-card--action-attack {
+  border-left: 3px solid var(--cw-color-state-danger);
+}
+.cw-card--action-move {
+  border-left: 3px solid var(--cw-color-accent);
+}
+.cw-card--action-defend {
+  border-left: 3px solid var(--cw-color-state-warning);
+}
+.cw-card--action-skill {
+  border-left: 3px solid var(--cw-color-state-success);
+}
+.cw-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--cw-space-3);
+}
+.cw-card__spacer { flex: 1; }
+.cw-card__icon {
+  width: var(--cw-space-5);
+  height: var(--cw-space-5);
+  color: var(--cw-color-text-secondary);
+}
+.cw-card__statement {
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-md);
+  color: var(--cw-color-text-primary);
+  line-height: 1.6;
+}
+
+/* 编辑器区（占位：等宽字体 + 行号槽 + 代码行） */
+.cw-card__editor {
+  border-radius: var(--cw-radius-md);
+  border: 1px solid var(--cw-color-border);
+  background: var(--cw-color-bg-inset);
+  padding: var(--cw-space-3);
+  display: flex;
+  gap: var(--cw-space-3);
+  font-family: var(--cw-font-mono);
+  font-size: var(--cw-font-size-sm);
+  line-height: 1.7;
+}
+.cw-card__gutter {
+  color: var(--cw-color-text-muted);
+  text-align: right;
+  white-space: pre;
+}
+.cw-card__code {
+  color: var(--cw-color-text-primary);
+  white-space: pre;
+}
+/* 填空形式（1-3 行核心行挖空，见设计 002 §2） */
+.cw-card__blank {
+  display: inline-block;
+  min-width: 12ch;
+  padding: 0 var(--cw-space-1);
+  border-radius: var(--cw-radius-sm);
+  border: 1px dashed var(--cw-color-accent);
+  background: color-mix(in srgb, var(--cw-color-accent) 16%, transparent);
+  color: var(--cw-color-text-muted);
+  text-align: center;
+}
+
+/* 难度星级（L1-L5 → 实心数量；星形由 cw-icon-star.svg 作 alpha 蒙版注入） */
+.cw-stars {
+  display: inline-flex;
+  gap: var(--cw-space-1);
+  color: var(--cw-color-state-warning);
+}
+.cw-stars__star {
+  display: inline-block;
+  width: var(--cw-space-4);
+  height: var(--cw-space-4);
+  background-color: var(--cw-color-state-warning);
+  -webkit-mask-image: url("cw-icon-star.svg");
+  mask-image: url("cw-icon-star.svg");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.cw-stars__star--off { opacity: 0.25; }
+
+/* ---------- 技能槽（空 / 已装备 / 冷却） ---------- */
+.cw-skill-slot {
+  position: relative;
+  width: var(--cw-space-16);
+  height: var(--cw-space-16);
+  border-radius: var(--cw-radius-md);
+  border: 1px solid var(--cw-color-border-strong);
+  background: var(--cw-color-bg-raised);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.cw-skill-slot__icon {
+  width: 55%;
+  height: 55%;
+  color: var(--cw-color-text-secondary);
+}
+.cw-skill-slot--warrior { border-color: var(--cw-color-class-warrior); }
+.cw-skill-slot--warrior .cw-skill-slot__icon { color: var(--cw-color-class-warrior); }
+.cw-skill-slot--mage {
+  border-color: var(--cw-color-class-mage);
+}
+.cw-skill-slot--mage .cw-skill-slot__icon { color: var(--cw-color-class-mage); }
+.cw-skill-slot--ranger { border-color: var(--cw-color-class-ranger); }
+.cw-skill-slot--ranger .cw-skill-slot__icon { color: var(--cw-color-class-ranger); }
+.cw-skill-slot--empty {
+  border-style: dashed;
+  border-color: var(--cw-color-border);
+}
+.cw-skill-slot--empty::after {
+  content: "空";
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-xs);
+  color: var(--cw-color-text-muted);
+}
+/* 冷却态：压暗 + 剩余回合数字（data-cd 提供数值） */
+.cw-skill-slot--cooldown::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--cw-color-bg-base) 70%, transparent);
+}
+.cw-skill-slot--cooldown::after {
+  content: attr(data-cd);
+  position: relative;
+  font-family: var(--cw-font-mono);
+  font-size: var(--cw-font-size-lg);
+  font-weight: var(--cw-font-weight-semibold);
+  color: var(--cw-color-state-warning);
+}
+
+/* ---------- 结算面板（胜利 / 失败） ---------- */
+.cw-panel {
+  width: min(360px, 100%);
+  padding: var(--cw-space-6);
+  border-radius: var(--cw-radius-lg);
+  border: 1px solid var(--cw-color-border-strong);
+  background: var(--cw-color-bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cw-space-4);
+}
+.cw-panel__title {
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-xl);
+  font-weight: var(--cw-font-weight-semibold);
+  text-align: center;
+}
+.cw-panel--victory .cw-panel__title { color: var(--cw-color-state-success); }
+.cw-panel--defeat  .cw-panel__title { color: var(--cw-color-state-danger); }
+.cw-panel__row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--cw-font-sans);
+  font-size: var(--cw-font-size-sm);
+  color: var(--cw-color-text-secondary);
+}
+.cw-panel__value {
+  font-family: var(--cw-font-mono);
+  color: var(--cw-color-text-primary);
+}
+.cw-panel__actions {
+  display: flex;
+  gap: var(--cw-space-3);
+  justify-content: center;
+}
