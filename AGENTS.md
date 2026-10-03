@@ -18,6 +18,20 @@ CodeWar（代码战争）：网页端 Python 编程对抗游戏。
 
 架构决策（技术栈、对局同步方案等）写成 ADR 放 `docs/adr/`，随对应票据落地。
 
+## Agent skills
+
+### Issue tracker
+
+本地 markdown：spec 在 `docs/specs/`，票据在 `.scratch/<feature>/issues/`（当前 feature：codewar-mvp）。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+沿用五个默认角色标签（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context（根 GLOSSARY.md + docs/adr/；术语表暂居 spec 附注）。See `docs/agents/domain.md`.
+
 ## 环境
 
 - 并行开发时 dev server 端口 `PORT=30NN`（NN=票号），互不抢占。
