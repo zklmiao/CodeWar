@@ -1,6 +1,10 @@
 # judge：Python gRPC 判题服务
-# 01 号票为简易执行器（无沙箱）；02 号票在此镜像边界内硬化（资源限制/禁网）
+# 02 号票：一次性容器沙箱（ADR-0003）——本镜像加装 docker-cli，compose 挂载
+# 宿主 docker.sock（docker-out-of-docker）；沙箱镜像 python:3.12-slim 在服务
+# 启动时预拉（构建期无 daemon，见 server.py ensure_sandbox_image）
 FROM python:3.13-slim
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /srv
 COPY judge/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

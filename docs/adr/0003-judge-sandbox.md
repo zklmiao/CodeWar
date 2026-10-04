@@ -29,7 +29,7 @@ docker run --rm
   python:3.12-slim python /sandbox/_harness.py
 ```
 
-- **容器粒度 = 每次提交一个容器**（不是每用例一个）：容器启动约 300–800ms，每用例一个容器会把 5–8 个隐藏用例的开销放大数倍；容器内 harness 用子进程逐用例执行，单个用例的超时/超限只杀子进程，不影响同容器内后续判定。
+- **容器粒度 = 每次提交一个容器**（不是每用例一个）：容器启动约 300–800ms，每用例一个容器会把 5–8 个隐藏用例的开销放大数倍；容器内 harness 用子进程逐用例执行，单个用例的超时/超限只杀子进程，不影响同容器内后续判定。worker 另设 `RLIMIT_AS=256m`（大分配转 MemoryError）纵深于容器级 `--memory` 之内；fork 炸弹由容器级 `--pids-limit` 转 EAGAIN（errno 11，worker 按 errno 归因——root 用户不受 NPROC 约束，NPROC 设置仅作将来 `--user` 运行的纵深）。worker 协议行以换行为界，防多进程写污染（fail-closed）。
 - **每用例超时 = `PER_TEST_TIMEOUT_MS`（默认 3000ms，judge 侧常量）**：请求携带的 `timeout_ms` 若为正且更小则采用（兼容旧调用与测试的小超时）；harness 首败即停（设计 002 §5），恶意循环最多消耗一个 per-test 配额即判 `timeout`。
 - **容器整体墙钟上限 = 用例数 × per-test + 30s**：宿主 `subprocess` 超时施加，为第二道保险；超时则整单判 `timeout`（若 harness 已有结论以 harness 为准）。
 - **延迟预算**：单次提交 ≤ 5 秒（容器启动 + 首败即停的用例执行），75 秒回合内可接受；全过路径每个用例毫秒级，总耗时主要由容器启动构成。
