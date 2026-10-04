@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"codewar/server/gen/matchpb"
 	"codewar/server/internal/match"
@@ -162,7 +163,86 @@ func TestBroadcastSkipsSelfPlay(t *testing.T) {
 	}
 }
 
-// 无效 token 建连被拒（客户端应重登后重试，不静默降级为匿名）。
+// 有效 token 建连绑定席位；断开后连接与席位一并清除（H1：
+// 否则同席位换身份重连会沿用旧身份结算）。
+func TestJoinBindsUserAndCleansUpOnDisconnect(t *testing.T) {
+	a, _ := testUsers()
+	st := &stubStore{userByToken: map[string]store.User{"tok-a": a}}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("拨号失败：%v", err)
+	}
+	join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+		Join: &matchpb.JoinRequest{Player: "p1", Token: "tok-a"},
+	}})
+	if err := ws.WriteMessage(websocket.TextMessage, join); err != nil {
+		t.Fatalf("发送 join 失败：%v", err)
+	}
+	// 建连被接受的证据：收到快照（被拒则直接关连接，读失败）
+	_ = ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, data, err := ws.ReadMessage()
+	if err != nil {
+		t.Fatalf("有效 token 应建连成功并下发快照：%v", err)
+	}
+	var msg matchpb.ServerMessage
+	if err := (protojson.UnmarshalOptions{}).Unmarshal(data, &msg); err != nil || msg.GetSnapshot() == nil {
+		t.Fatalf("首条下行应为快照：err=%v msg=%v", err, &msg)
+	}
+
+	h.mu.Lock()
+	_, bound := h.seats[match.P1]
+	nconns := len(h.conns)
+	h.mu.Unlock()
+	if !bound || nconns != 1 {
+		t.Fatalf("席位应已绑定：bound=%v conns=%d", bound, nconns)
+	}
+
+	ws.Close()
+	// readLoop 的 defer 异步清理，轮询等它（2s 上限防挂死）
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		h.mu.Lock()
+		empty := len(h.conns) == 0 && len(h.seats) == 0
+		h.mu.Unlock()
+		if empty {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("断开后连接与席位应在 2s 内清空")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// 有 token 但服务端无库：拒连（会话无法验证，不静默降级为匿名）。
+func TestJoinWithTokenButNoStoreIsRejected(t *testing.T) {
+	h := New(nil, slog.Default(), nil)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("拨号失败：%v", err)
+	}
+	defer ws.Close()
+	join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+		Join: &matchpb.JoinRequest{Player: "p1", Token: "tok"},
+	}})
+	if err := ws.WriteMessage(websocket.TextMessage, join); err != nil {
+		t.Fatalf("发送 join 失败：%v", err)
+	}
+	if _, _, err := ws.ReadMessage(); err == nil {
+		t.Fatal("无库模式带 token 应被拒连")
+	}
+	if h.engine != nil {
+		t.Fatal("被拒的连接不得创建引擎")
+	}
+}
 func TestJoinRejectsInvalidToken(t *testing.T) {
 	st := &stubStore{authErr: store.ErrUnauthorized}
 	h := New(nil, slog.Default(), nil)

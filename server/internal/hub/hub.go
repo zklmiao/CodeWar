@@ -176,11 +176,7 @@ func (h *Hub) reject(ws *websocket.Conn, msg string) {
 func (h *Hub) readLoop(c *conn) {
 	defer func() {
 		c.close()
-		h.mu.Lock()
-		if h.conns[c.player] == c {
-			delete(h.conns, c.player)
-		}
-		h.mu.Unlock()
+		h.removeConn(c)
 		c.ws.Close()
 		h.logger.Info("玩家断开", "player", c.player)
 	}()
@@ -204,6 +200,16 @@ func (h *Hub) readLoop(c *conn) {
 			}
 		}
 	}
+}
+
+func (h *Hub) removeConn(c *conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns[c.player] == c {
+		delete(h.conns, c.player)
+	}
+	// 席位绑定一并清除：同席位换身份重连不得沿用旧身份结算（fail-closed）。
+	delete(h.seats, c.player)
 }
 
 func (h *Hub) writePump(c *conn) {
