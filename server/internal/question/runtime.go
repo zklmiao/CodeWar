@@ -138,6 +138,7 @@ var strAlphabets = map[string]string{
 	"alpha":  "abcde",
 	"binary": "ab",
 	"digit":  "0123456789",
+	"moves":  "UDLR",
 }
 
 // Str：构造定长随机字符串。

@@ -11,19 +11,38 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 
 	"codewar/server/gen/matchpb"
+	"codewar/server/internal/question"
+	"codewar/server/internal/question/templates"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// 与 server/internal/match/stub.go 的四道题一一对应的正确解
-var solutions = map[string]string{
-	"palindrome-L2": "def is_palindrome(s: str) -> bool:\n    return s == s[::-1]\n",
-	"two-sum-L3":    "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        if target - n in seen:\n            return [seen[target - n], i]\n        seen[n] = i\n",
-	"run-length-L3": "def compress(s):\n    out = []\n    i = 0\n    while i < len(s):\n        j = i\n        while j < len(s) and s[j] == s[i]:\n            j += 1\n        out.append(s[i] + str(j - i))\n        i = j\n    return \"\".join(out)\n",
-	"dedup-L2":      "def dedup(nums):\n    seen = set()\n    out = []\n    for n in nums:\n        if n not in seen:\n            seen.add(n)\n            out.append(n)\n    return out\n",
+// solutions：模板 ID → 参考解（04 号票：出题工厂实例随机化，但函数语义固定，
+// 同一模板的参考解可解任意实例；问题 ID 形如 "<模板ID>@<种子>:<形式>"）。
+var solutions = buildSolutions()
+
+func buildSolutions() map[string]string {
+	out := map[string]string{}
+	for _, tm := range templates.All() {
+		in, err := tm.Generate(question.NewRNG(question.DeriveSeed("smoke", tm.Meta().ID)))
+		if err != nil {
+			panic(err)
+		}
+		out[tm.Meta().ID] = in.AnswerKey
+	}
+	return out
+}
+
+// templateIDOf：从问题 ID 还原模板 ID。
+func templateIDOf(problemID string) string {
+	if i := strings.Index(problemID, "@"); i >= 0 {
+		return problemID[:i]
+	}
+	return problemID
 }
 
 func main() {
@@ -66,9 +85,9 @@ func play(addr, player string, done chan<- *matchpb.MatchEnded) {
 		}
 		if env := msg.GetEvent(); env != nil {
 			if pr := env.GetPanelReady(); pr != nil {
-				code, ok := solutions[pr.GetProblem().GetId()]
+				code, ok := solutions[templateIDOf(pr.GetProblem().GetId())]
 				if !ok {
-					log.Fatalf("未知题目 %s（smoke 的解表需要同步 stub.go）", pr.GetProblem().GetId())
+					log.Fatalf("未知题目 %s（smoke 的解表来自 templates.All，模板缺失？）", pr.GetProblem().GetId())
 				}
 				mustSend(ws, &matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Submit{Submit: &matchpb.SubmitRequest{Code: code}}})
 			}

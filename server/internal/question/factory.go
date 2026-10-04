@@ -4,6 +4,7 @@
 package question
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -90,6 +91,16 @@ func DeriveSeed(matchSeed string, dims ...string) int64 {
 	}
 	sum := h.Sum(nil)
 	return int64(binary.BigEndian.Uint64(sum[:8]))
+}
+
+// NewMatchSeed：生成一局的 matchSeed（每局不同，连打两局实例不同）。
+// 生产调用；测试注入固定值以保复现。
+func NewMatchSeed() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "fallback-match"
+	}
+	return fmt.Sprintf("match-%x", b)
 }
 
 // Create：按 spec 精确取题并实例化（同 spec+seed 必同实例）。
