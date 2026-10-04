@@ -16,7 +16,7 @@
 judge 容器挂载宿主 `/var/run/docker.sock`，判题时执行（要点逐条对应）：
 
 ```txt
-docker run --rm
+docker run --rm -i
   --network=none                 # 容器级断网
   --memory=256m                  # 内存上限
   --pids-limit=64                # 进程数上限（防 fork 炸弹）
@@ -26,14 +26,16 @@ docker run --rm
   --tmpfs /tmp:size=16m,exec     # 唯一可写区（小而可执行，供解释器展开用）
   -v <代码目录>:/sandbox:ro       # 玩家代码经挂载注入，不经网络
   -e PYTHONDONTWRITEBYTECODE=1   # 配合只读根文件系统（禁 .pyc 落盘）
-  python:3.12-slim python /sandbox/_harness.py   # 用例经 stdin 管道注入，全程不落盘
+  python:3.12-slim python /sandbox/_harness.py <per-test-ms>  # stdin 只收 call 列表
 ```
 
-- **容器粒度 = 每次提交一个容器**（不是每用例一个）：容器启动约 300–800ms，每用例一个容器会把 5–8 个隐藏用例的开销放大数倍；容器内 harness 用子进程逐用例执行，单个用例的超时/超限只杀子进程，不影响同容器内后续判定。worker 另设 `RLIMIT_AS=256m`（大分配转 MemoryError）纵深于容器级 `--memory` 之内；fork 炸弹由容器级 `--pids-limit` 转 EAGAIN（errno 11，worker 按 errno 归因——root 用户不受 NPROC 约束，NPROC 设置仅作将来 `--user` 运行的纵深）。worker 协议行以换行为界，防多进程写污染（fail-closed）。
-- **每用例超时 = `PER_TEST_TIMEOUT_MS`（默认 3000ms，judge 侧常量）**：请求携带的 `timeout_ms` 若为正且更小则采用（兼容旧调用与测试的小超时）；harness 首败即停（设计 002 §5），恶意循环最多消耗一个 per-test 配额即判 `timeout`。
-- **容器整体墙钟上限 = 用例数 × per-test + 30s**：宿主 `subprocess` 超时施加，为第二道保险；超时则整单判 `timeout`（若 harness 已有结论以 harness 为准）。
+- **期望值不进容器（比对在宿主）**：容器 stdin 只接收 call 表达式列表（`[{name, call}]`，测试输入天然对执行进程可见，可接受）；worker 逐用例执行并逐行输出 `{i, status, repr/err}`（`repr` 仅正常返回时有）；**repr 与 expected 的字符串相等判断、category 汇总全部在宿主 `_assemble_verdict` 完成**。玩家代码即使读遍 `__main__` 命名空间也见不到任何期望值（泄漏断言见 judge 测试）。
+- **容器粒度 = 每次提交一个容器**（不是每用例一个）：容器启动约 300–800ms，每用例一个容器会把 5–8 个隐藏用例的开销放大数倍；容器内 harness 用子进程逐用例执行，首败即停（任何非 ok 状态立即收尾，调用期异常也停——抛异常即没算出值，不可能正确）。worker 另设 `RLIMIT_AS=256m`（大分配转 MemoryError）纵深于容器级 `--memory` 之内；fork 炸弹由容器级 `--pids-limit` 转 EAGAIN（errno 11，harness 按 errno 归因——root 用户不受 NPROC 约束，NPROC 设置仅作将来 `--user` 运行的纵深）。worker 协议行以换行为界，真值行恒为末行（玩家输出截留在内存，`__stdout__` 直写只会污染出 fail-closed 的 runtime-error），防多进程写污染。
+- **每用例超时 = `PER_TEST_TIMEOUT_MS`（默认 3000ms，judge 侧常量）**：请求携带的 `timeout_ms` 若为正且更小则采用（兼容旧调用与测试的小超时）；harness 对 worker 施加 `subprocess` 超时并判 `timeout` 首败即停，恶意循环最多消耗一个 per-test 配额。
+- **容器整体墙钟上限 = 用例数 × per-test + 30s**：宿主 `Popen.communicate` 超时施加，为第二道保险。熔断时先 kill 再兜底回收已 flush 的 stdout 行（`_DRAIN_TIMEOUT_S`），**已完成的用例按其结论计入汇总，未完成的判 timeout**——harness 每行 flush 且正常结束必带 summary 行，此承诺由实现保证（首败即停下外层熔断几乎不可达）。
 - **延迟预算**：单次提交 ≤ 5 秒（容器启动 + 首败即停的用例执行），75 秒回合内可接受；全过路径每个用例毫秒级，总耗时主要由容器启动构成。
-- **`duration_ms` = 该次提交全部用例执行的总墙钟（容器内 harness 测量）**：与玩家解题耗时（引擎 ClockPort 计时、驱动时间系数）是两个量——沙箱侧不做任何换算，只如实上报（遥测见设计 002 §6）。
+- **`duration_ms` = harness summary 行实测的用例总墙钟**（容器内测量）；仅当容器被外层熔断、无 summary 行时退化为宿主实测墙钟。与玩家解题耗时（引擎 ClockPort 计时、驱动时间系数）是两个量——沙箱侧不做任何换算，只如实上报（遥测见设计 002 §6）。
+
 - **失败反馈契约（设计 002 §3 收紧）**：verdict 只含 `{passed, category, duration_ms}` 三字段；
   `category ∈ ok / wrong-answer / runtime-error / timeout / limit-exceeded / syntax / judge-error`；
   `detail` 只允许语法错误行号这类无害信息（`line N: <msg>`），其余类别一律空字符串——禁止携带任何可推断隐藏用例通过情况的内容（含通过计数、stderr、actual/expected）。
