@@ -4,11 +4,11 @@
 
 **Blocked by:** 13 (美术占位规范)——堆叠分支：本票基于 `ticket/13-art-placeholder-standard` 创建（design/ 全在 13 上）；13 合并 main 后本分支 rebase 跟进。
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 质感升级后 grep 自检（裸色值/裸字号/十六进制色）仍全绿，currentColor + token 单源契约不变
-- [ ] 动效四件套落地（低血脉动/冷却扫描/悬停反馈/面板入场）且 `prefers-reduced-motion: reduce` 下全部静止
-- [ ] `--cw-motion-*` 族注册进 tokens.css 并更新 004 §2；004 新增「霓虹质感规范」章节（辉光分级/渐变方向/纹理密度）
-- [ ] 三职业可辨性精修后不降级（风格页并排区目验）
-- [ ] 风格页资产引用去内联化（剪影/图标改 CSS mask），004 §3.1 引用契约同步修订
-- [ ] 交付汇报附升级前后对比截图
+- [x] 质感升级后 grep 自检（裸色值/裸字号/十六进制色）仍全绿，currentColor + token 单源契约不变
+- [x] 动效四件套落地（低血脉动/冷却扫描/悬停反馈/面板入场）且 `prefers-reduced-motion: reduce` 下全部静止
+- [x] `--cw-motion-*` 族注册进 tokens.css 并更新 004 §2；004 新增「霓虹质感规范」章节（辉光分级/渐变方向/纹理密度）
+- [x] 三职业可辨性精修后不降级（风格页并排区目验）
+- [x] 风格页资产引用去内联化（剪影/图标改 CSS mask），004 §3.1 引用契约同步修订
+- [x] 交付汇报附升级前后对比截图
