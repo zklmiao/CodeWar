@@ -149,7 +149,13 @@ func (h *Hub) readLoop(c *conn) {
 			continue
 		}
 		if sub := msg.GetSubmit(); sub != nil {
-			h.engine.Submit(c.player, sub.GetCode())
+			// 引擎可能在终局广播后被置空（下一场对局重建），nil 保护避免空指针。
+			h.mu.Lock()
+			eng := h.engine
+			h.mu.Unlock()
+			if eng != nil {
+				eng.Submit(c.player, sub.GetCode())
+			}
 		}
 	}
 }
@@ -182,6 +188,12 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if env.GetMatchEnded() != nil {
+		// 对局结束即作废引擎：下一场对局由下一条 join 重新创建。
+		// 否则 ENDED 相位的引擎被永久复用，后续所有接入永远无法开赛——
+		// UI 承诺的"刷新两个窗口可再来一局"将落空（浏览器验收发现的 P0）。
+		h.engine = nil
+	}
 	for _, c := range h.conns {
 		c.send(b)
 	}
