@@ -116,6 +116,10 @@ func TestAuthFlow(t *testing.T) {
 			t.Fatalf("令牌 %d 鉴权失败：%v %+v", i, err, got)
 		}
 	}
+	// P3：多会话计数（CountSessionsByUser 此前零调用，此处转正）
+	if n, err := s.q.CountSessionsByUser(ctx, u.ID); err != nil || n != 2 {
+		t.Fatalf("登录两次后会话数应为 2：n=%d err=%v", n, err)
+	}
 
 	// 注销其一，另一个不受影响
 	if err := s.Logout(ctx, tok1); err != nil {
@@ -302,5 +306,11 @@ func TestConcurrentRecordSameMatch(t *testing.T) {
 	}
 	if err := s.DB().QueryRow("SELECT COUNT(*) FROM elo_history WHERE match_id = $1", mid).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("ELO 历史应恰 2：n=%d err=%v", n, err)
+	}
+	// H5：输家事务整体回滚，ELO 只应被结算一次（双重记分会是 1031/969 量级）
+	ua, _ := s.q.GetUserByID(ctx, a.ID)
+	ub, _ := s.q.GetUserByID(ctx, b.ID)
+	if ua.Elo != 1016 || ub.Elo != 984 {
+		t.Fatalf("并发结算只应生效一次：%d / %d", ua.Elo, ub.Elo)
 	}
 }
