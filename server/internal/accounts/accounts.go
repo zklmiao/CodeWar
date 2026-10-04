@@ -90,7 +90,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, store.ErrUsernameTaken):
 			writeErr(w, http.StatusConflict, err.Error())
-		case isValidation(err):
+		case errors.Is(err, store.ErrInvalidUsername) || isValidation(err):
 			writeErr(w, http.StatusBadRequest, "用户名 2~32 字符（不含空白）、密码 6~72 字符")
 		default:
 			h.logger.Error("注册失败", "err", err)

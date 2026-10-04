@@ -27,6 +27,8 @@ var (
 	ErrInvalidCredentials = errors.New("用户名或密码错误")
 	// ErrUsernameTaken：注册用户名冲突（大小写不敏感）。
 	ErrUsernameTaken = errors.New("用户名已被占用")
+	// ErrInvalidUsername：用户名形态不合法（长度/空白），注册时报 400。
+	ErrInvalidUsername = errors.New("用户名不合法")
 	// ErrUnauthorized：令牌缺失 / 未知 / 过期。
 	ErrUnauthorized = errors.New("未登录或会话已过期")
 )
@@ -41,7 +43,7 @@ type credentials struct {
 
 func checkCredentials(username, password string) error {
 	if strings.ContainsFunc(username, func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }) {
-		return fmt.Errorf("用户名不能含空白字符")
+		return ErrInvalidUsername
 	}
 	return validate.Struct(credentials{Username: username, Password: password})
 }

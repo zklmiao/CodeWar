@@ -107,6 +107,10 @@ func TestHTTPFlow(t *testing.T) {
 	if rec := call("POST", "/api/register", `{"username":"x","password":"pw-1234"}`, ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("非法参数应 400，实际 %d", rec.Code)
 	}
+	// 含空白用户名 400（P1：曾误判 500——store 哨兵错误未被 handler 映射）
+	if rec := call("POST", "/api/register", `{"username":"bad name","password":"pw-1234"}`, ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("含空白用户名应 400，实际 %d：%s", rec.Code, rec.Body.String())
+	}
 	// 错误密码 401（与用户不存在同错，响应体同文）
 	rec = call("POST", "/api/login", `{"username":"HttpUser","password":"nope-nope"}`, "")
 	if rec.Code != http.StatusUnauthorized {
