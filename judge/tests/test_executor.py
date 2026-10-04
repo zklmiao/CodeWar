@@ -4,6 +4,7 @@
 全部走真实容器沙箱（ADR-0003）：每个容器化测试有 1-3 秒开销，数量克制。
 无 docker 环境时容器化测试 skip（fail-closed，不伪装通过）。
 """
+import json
 import sys
 from pathlib import Path
 
@@ -75,6 +76,19 @@ SNOOP = (
     "    return [0, 1]\n"
 )
 
+# 进程内窃取者：扫描 __main__ 命名空间找期望值，找到就地返回正确结果。
+# 期望值不出宿主时只能退化为硬编码 → 部分通过判失败；
+# 若期望值泄漏进容器，本测试会判 passed=True 而变红（真回归测试）。
+STEALER = (
+    "import sys\n"
+    "def two_sum(nums, target):\n"
+    "    ns = getattr(sys.modules.get('__main__'), '__dict__', {})\n"
+    "    for v in list(ns.values()):\n"
+    "        if isinstance(v, dict) and isinstance(v.get('expected'), str):\n"
+    "            return eval(v['expected'])\n"
+    "    return [0, 1]\n"
+)
+
 
 @needs_docker
 def test_correct_code_passes():
@@ -142,10 +156,12 @@ def test_empty_code_fails(bad):
 
 @needs_docker
 def test_network_attempt_blocked():
-    # 容器级断网：socket 建连立即失败，提交判失败且服务存活
+    # 容器级断网：--network=none 下 connect 即时抛 OSError(ENETUNREACH)，
+    # 不等待封包超时（实测 3/3 次 ~1s 内返回，均为容器启动开销）；
+    # 调用期异常按值失败语义判 wrong-answer（机理确定，pin 单值）。
     r = executor.run(NETWORK, CASES, timeout_ms=5000)
     assert r["passed"] is False
-    assert r["category"] in ("wrong-answer", "timeout")
+    assert r["category"] == "wrong-answer"
     assert r["detail"] == ""
 
 
@@ -174,6 +190,22 @@ def test_snoop_cannot_read_cases_from_disk():
     r = executor.run(SNOOP, CASES, timeout_ms=5000)
     assert r["passed"] is False
     assert r["category"] == "wrong-answer"
+
+
+def test_calls_payload_has_no_expected():
+    # 进容器的 stdin 载荷只含 name/call：键白名单断言（多一个键都算泄漏）
+    payload = executor.build_calls_payload(CASES)
+    assert all(set(c) == {"name", "call"} for c in json.loads(payload))
+
+
+@needs_docker
+def test_worker_cannot_steal_expected_in_process():
+    # 期望值不进容器：__main__ 命名空间里就没有，进程内扫描拿不到任何
+    # expected repr，窃取代码退化为硬编码 → 部分通过判失败
+    r = executor.run(STEALER, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] == "wrong-answer"
+    assert r["detail"] == ""
 
 
 @needs_docker
