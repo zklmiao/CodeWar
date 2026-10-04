@@ -161,6 +161,22 @@ export interface MatchEnded {
   winner: string;
   /** ko | self-ko | rounds-cap */
   reason: string;
+  /**
+   * 已结算对局的双方 ELO 变化（07 号票：结果落库后附在同一条 MatchEnded 上发出）。
+   * 平局仍携带（elo_before == elo_after，delta=0），以便客户端区分"已结算平局（+0）"
+   * 与"匿名未结算（字段为空）"；任一方匿名的对局该字段为空，终局面板不显示 ELO 区块。
+   */
+  elo: PlayerElo[];
+}
+
+/** 单名玩家在一次已结算对局中的 ELO 变化（MatchEnded.elo 的元素）。 */
+export interface PlayerElo {
+  /** "p1" | "p2" */
+  player: string;
+  /** 用户 UUID（字符串形态） */
+  userId: string;
+  eloBefore: number;
+  eloAfter: number;
 }
 
 export interface ClientMessage {
@@ -172,6 +188,13 @@ export interface ClientMessage {
 export interface JoinRequest {
   /** "p1" | "p2" */
   player: string;
+  /**
+   * 可选认证令牌（07 号票）：注册/登录接口下发的服务端不透明会话令牌，
+   * 客户端存 sessionStorage（按标签页隔离，支持同机双账号热座），WS 建连时明文携带（与页面同源）。
+   * 为空 = 匿名热座，与 01 号票行为完全一致（向后兼容，不强制登录）；
+   * 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
+   */
+  token: string;
 }
 
 export interface SubmitRequest {
@@ -1532,7 +1555,7 @@ export const HpChanged: MessageFns<HpChanged> = {
 };
 
 function createBaseMatchEnded(): MatchEnded {
-  return { winner: "", reason: "" };
+  return { winner: "", reason: "", elo: [] };
 }
 
 export const MatchEnded: MessageFns<MatchEnded> = {
@@ -1542,6 +1565,9 @@ export const MatchEnded: MessageFns<MatchEnded> = {
     }
     if (message.reason !== "") {
       writer.uint32(18).string(message.reason);
+    }
+    for (const v of message.elo) {
+      PlayerElo.encode(v!, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -1575,6 +1601,14 @@ export const MatchEnded: MessageFns<MatchEnded> = {
             message.reason = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.elo.push(PlayerElo.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1591,6 +1625,7 @@ export const MatchEnded: MessageFns<MatchEnded> = {
     return {
       winner: isSet(object.winner) ? globalThis.String(object.winner) : "",
       reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+      elo: globalThis.Array.isArray(object?.elo) ? object.elo.map((e: any) => PlayerElo.fromJSON(e)) : [],
     };
   },
 
@@ -1602,6 +1637,9 @@ export const MatchEnded: MessageFns<MatchEnded> = {
     if (message.reason !== "") {
       obj.reason = message.reason;
     }
+    if (message.elo?.length) {
+      obj.elo = message.elo.map((e) => PlayerElo.toJSON(e));
+    }
     return obj;
   },
 
@@ -1612,6 +1650,136 @@ export const MatchEnded: MessageFns<MatchEnded> = {
     const message = createBaseMatchEnded();
     message.winner = object.winner ?? "";
     message.reason = object.reason ?? "";
+    message.elo = object.elo?.map((e) => PlayerElo.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBasePlayerElo(): PlayerElo {
+  return { player: "", userId: "", eloBefore: 0, eloAfter: 0 };
+}
+
+export const PlayerElo: MessageFns<PlayerElo> = {
+  encode(message: PlayerElo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.player !== "") {
+      writer.uint32(10).string(message.player);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    if (message.eloBefore !== 0) {
+      writer.uint32(24).int32(message.eloBefore);
+    }
+    if (message.eloAfter !== 0) {
+      writer.uint32(32).int32(message.eloAfter);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlayerElo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePlayerElo();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.player = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.userId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.eloBefore = reader.int32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.eloAfter = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): PlayerElo {
+    return {
+      player: isSet(object.player) ? globalThis.String(object.player) : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      eloBefore: isSet(object.eloBefore)
+        ? globalThis.Number(object.eloBefore)
+        : isSet(object.elo_before)
+        ? globalThis.Number(object.elo_before)
+        : 0,
+      eloAfter: isSet(object.eloAfter)
+        ? globalThis.Number(object.eloAfter)
+        : isSet(object.elo_after)
+        ? globalThis.Number(object.elo_after)
+        : 0,
+    };
+  },
+
+  toJSON(message: PlayerElo): unknown {
+    const obj: any = {};
+    if (message.player !== "") {
+      obj.player = message.player;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.eloBefore !== 0) {
+      obj.eloBefore = Math.round(message.eloBefore);
+    }
+    if (message.eloAfter !== 0) {
+      obj.eloAfter = Math.round(message.eloAfter);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PlayerElo>, I>>(base?: I): PlayerElo {
+    return PlayerElo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PlayerElo>, I>>(object: I): PlayerElo {
+    const message = createBasePlayerElo();
+    message.player = object.player ?? "";
+    message.userId = object.userId ?? "";
+    message.eloBefore = object.eloBefore ?? 0;
+    message.eloAfter = object.eloAfter ?? 0;
     return message;
   },
 };
@@ -1706,13 +1874,16 @@ export const ClientMessage: MessageFns<ClientMessage> = {
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { player: "" };
+  return { player: "", token: "" };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
   encode(message: JoinRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.player !== "") {
       writer.uint32(10).string(message.player);
+    }
+    if (message.token !== "") {
+      writer.uint32(18).string(message.token);
     }
     return writer;
   },
@@ -1738,6 +1909,14 @@ export const JoinRequest: MessageFns<JoinRequest> = {
             message.player = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.token = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1751,13 +1930,19 @@ export const JoinRequest: MessageFns<JoinRequest> = {
   },
 
   fromJSON(object: any): JoinRequest {
-    return { player: isSet(object.player) ? globalThis.String(object.player) : "" };
+    return {
+      player: isSet(object.player) ? globalThis.String(object.player) : "",
+      token: isSet(object.token) ? globalThis.String(object.token) : "",
+    };
   },
 
   toJSON(message: JoinRequest): unknown {
     const obj: any = {};
     if (message.player !== "") {
       obj.player = message.player;
+    }
+    if (message.token !== "") {
+      obj.token = message.token;
     }
     return obj;
   },
@@ -1768,6 +1953,7 @@ export const JoinRequest: MessageFns<JoinRequest> = {
   fromPartial<I extends Exact<DeepPartial<JoinRequest>, I>>(object: I): JoinRequest {
     const message = createBaseJoinRequest();
     message.player = object.player ?? "";
+    message.token = object.token ?? "";
     return message;
   },
 };
