@@ -1,0 +1,191 @@
+package hub
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"codewar/server/gen/matchpb"
+	"codewar/server/internal/match"
+	"codewar/server/internal/store"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
+)
+
+// stubStore：accountStore 桩（记录调用，预设结算结果/错误）。
+type stubStore struct {
+	userByToken map[string]store.User
+	authErr     error
+	recordErr   error
+	lastRes     *store.MatchResult
+	d1, d2      store.EloDelta
+}
+
+func (s *stubStore) Authenticate(_ context.Context, token string) (store.User, error) {
+	if s.authErr != nil {
+		return store.User{}, s.authErr
+	}
+	if u, ok := s.userByToken[token]; ok {
+		return u, nil
+	}
+	return store.User{}, store.ErrUnauthorized
+}
+
+func (s *stubStore) RecordMatch(_ context.Context, res store.MatchResult) (store.EloDelta, store.EloDelta, error) {
+	if s.recordErr != nil {
+		return store.EloDelta{}, store.EloDelta{}, s.recordErr
+	}
+	cp := res
+	s.lastRes = &cp
+	return s.d1, s.d2, nil
+}
+
+func testUsers() (a, b store.User) {
+	a = store.User{ID: uuid.New(), Username: "alice", Elo: 1000}
+	b = store.User{ID: uuid.New(), Username: "bob", Elo: 1000}
+	return a, b
+}
+
+// 双认证终局：MatchEnded 附上双方 ELO（同分 p1 胜 → 1016/984），引擎照常作废。
+func TestBroadcastAttachesEloWhenBothAuthenticated(t *testing.T) {
+	a, b := testUsers()
+	st := &stubStore{
+		d1: store.EloDelta{Player: "p1", UserID: a.ID, Before: 1000, After: 1016},
+		d2: store.EloDelta{Player: "p2", UserID: b.ID, Before: 1000, After: 984},
+	}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.seats[match.P1] = a
+	h.seats[match.P2] = b
+	h.engine = match.NewEngine(match.RealClock{}, match.StubQuestions{}, nil, h.broadcast)
+
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Winner: "p1", Reason: match.ReasonKO,
+	}}}
+	h.broadcast(env)
+
+	me := env.GetMatchEnded()
+	if len(me.GetElo()) != 2 {
+		t.Fatalf("双认证终局应附 2 条 ELO，实际 %d", len(me.GetElo()))
+	}
+	if me.GetElo()[0].GetEloBefore() != 1000 || me.GetElo()[0].GetEloAfter() != 1016 {
+		t.Fatalf("p1 ELO 不符：%v", me.GetElo()[0])
+	}
+	if me.GetElo()[1].GetUserId() != b.ID.String() || me.GetElo()[1].GetEloAfter() != 984 {
+		t.Fatalf("p2 ELO 不符：%v", me.GetElo()[1])
+	}
+	if st.lastRes == nil || st.lastRes.Winner != "p1" || st.lastRes.P1UserID != a.ID {
+		t.Fatalf("落库参数不符：%+v", st.lastRes)
+	}
+	if h.engine != nil {
+		t.Fatal("MatchEnded 后引擎仍应被置空")
+	}
+}
+
+// 任一方匿名：不调用落库，elo 字段为空（向后兼容断言：与 01 号票事件完全一致）。
+func TestBroadcastNoEloWhenAnonymous(t *testing.T) {
+	a, _ := testUsers()
+	st := &stubStore{}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.seats[match.P1] = a // 仅一方认证
+
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Winner: "p1", Reason: match.ReasonKO,
+	}}}
+	h.broadcast(env)
+
+	if len(env.GetMatchEnded().GetElo()) != 0 {
+		t.Fatalf("匿名对局不得带 elo：%v", env.GetMatchEnded().GetElo())
+	}
+	if st.lastRes != nil {
+		t.Fatal("匿名对局不得落库")
+	}
+}
+
+// 无库模式（st=nil）：纯匿名热座，终局无 elo 且不断连。
+func TestBroadcastNoEloWithoutStore(t *testing.T) {
+	h := New(nil, slog.Default(), nil)
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Reason: match.ReasonRoundsCap, // 平局
+	}}}
+	h.broadcast(env) // 不得 panic
+	if len(env.GetMatchEnded().GetElo()) != 0 {
+		t.Fatal("无库模式不得带 elo")
+	}
+}
+
+// 落库失败：降级为无 ELO 广播，对局照常结束（不断连、不重发）。
+func TestBroadcastDegradesOnRecordError(t *testing.T) {
+	a, b := testUsers()
+	st := &stubStore{recordErr: context.DeadlineExceeded}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.seats[match.P1] = a
+	h.seats[match.P2] = b
+	h.engine = match.NewEngine(match.RealClock{}, match.StubQuestions{}, nil, h.broadcast)
+
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Winner: "p2", Reason: match.ReasonKO,
+	}}}
+	h.broadcast(env)
+
+	if len(env.GetMatchEnded().GetElo()) != 0 {
+		t.Fatal("落库失败时不得带 elo")
+	}
+	if h.engine != nil {
+		t.Fatal("落库失败引擎仍应作废（对局照常结束）")
+	}
+}
+
+// 同用户分饰双方：跳过结算（防自刷分），无落库无 elo。
+func TestBroadcastSkipsSelfPlay(t *testing.T) {
+	a, _ := testUsers()
+	st := &stubStore{}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.seats[match.P1] = a
+	h.seats[match.P2] = a
+
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Winner: "p1", Reason: match.ReasonKO,
+	}}}
+	h.broadcast(env)
+
+	if st.lastRes != nil || len(env.GetMatchEnded().GetElo()) != 0 {
+		t.Fatal("自对弈不得结算落库")
+	}
+}
+
+// 无效 token 建连被拒（客户端应重登后重试，不静默降级为匿名）。
+func TestJoinRejectsInvalidToken(t *testing.T) {
+	st := &stubStore{authErr: store.ErrUnauthorized}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("拨号失败：%v", err)
+	}
+	defer ws.Close()
+	join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+		Join: &matchpb.JoinRequest{Player: "p1", Token: "bogus"},
+	}})
+	if err := ws.WriteMessage(websocket.TextMessage, join); err != nil {
+		t.Fatalf("发送 join 失败：%v", err)
+	}
+	// 服务端拒连即关连接：读应失败（CloseError 或 EOF）。
+	if _, _, err := ws.ReadMessage(); err == nil {
+		t.Fatal("无效 token 应被拒连（读应失败）")
+	}
+	if h.engine != nil {
+		t.Fatal("被拒的连接不得创建引擎")
+	}
+}
