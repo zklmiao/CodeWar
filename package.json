@@ -1,0 +1,13 @@
+{
+  "name": "codewar",
+  "private": true,
+  "scripts": {
+    "gen:proto": "bash scripts/gen-proto.sh",
+    "dev:client": "pnpm --dir client dev",
+    "build:client": "pnpm --dir client build",
+    "test:client": "pnpm --dir client test",
+    "test:server": "go test ./...",
+    "test:judge": "python -m pytest judge/tests -q"
+  },
+  "packageManager": "pnpm@12.4.1"
+}

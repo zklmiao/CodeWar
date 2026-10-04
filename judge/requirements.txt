@@ -1,0 +1,5 @@
+# 运行时依赖（判题执行 + gRPC 服务 + 测试）
+grpcio>=1.66
+protobuf>=5.26
+pytest>=8.0
+# 代码生成用（proto 变更时才需要；产物已入库）：grpcio-tools

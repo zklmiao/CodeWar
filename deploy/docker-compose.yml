@@ -1,0 +1,40 @@
+# CodeWar 三服务栈（ADR-0001）：app(Go) + judge(Python) + postgres
+# 用途：本地/演示环境一键拉起。本地日常开发用 vite dev + go run + python -m judgesvc.server。
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.app
+    ports:
+      - "3001:3001"
+    environment:
+      ADDR: ":3001"
+      JUDGE_ADDR: "judge:50051"
+      STATIC_DIR: "/srv/dist"
+    depends_on:
+      - judge
+
+  judge:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.judge
+    ports:
+      - "50051:50051"
+    environment:
+      JUDGE_PORT: "50051"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codewar
+      POSTGRES_PASSWORD: codewar-dev
+      POSTGRES_DB: codewar
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 迁移脚手架（01 号票只落 schema，07 号票接入持久化）
+      - ../db/migrations:/migrations:ro
+
+volumes:
+  pgdata:

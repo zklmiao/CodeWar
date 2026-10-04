@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package codewar.judge.v1;
+
+option go_package = "codewar/server/gen/judgepb;judgepb";
+
+// JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
+// 本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+service JudgeService {
+  rpc Judge(JudgeRequest) returns (JudgeVerdict);
+}
+
+message JudgeRequest {
+  // 玩家提交的完整代码（本票只支持"补全函数"形式，代码即完整函数定义）
+  string code = 1;
+  // 该题全部隐藏测试；全部通过才判 passed
+  repeated TestCase test_cases = 2;
+  // 执行整体超时（毫秒），简易版按整次判题一次超时（02 号票改为 per-test）
+  int32 timeout_ms = 3;
+}
+
+message TestCase {
+  string name = 1;
+  // Python 表达式：调用玩家函数，如 two_sum([2, 7, 11, 15], 9)
+  string call = 2;
+  // 期望结果的 Python repr，如 [0, 1]
+  string expected = 3;
+}
+
+message JudgeVerdict {
+  bool passed = 1;
+  // ok | wrong-answer | runtime-error | syntax | timeout | judge-error
+  string category = 2;
+  // 代码执行总耗时（wall clock，反作弊遥测用；与玩家解题耗时是两个量）
+  int32 duration_ms = 3;
+  // 仅 syntax 类别携带玩家自身代码的报错摘要（其类别不回传任何隐藏用例信息——设计 002 §3）
+  string detail = 4;
+}
