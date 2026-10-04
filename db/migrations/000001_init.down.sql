@@ -1,2 +1,4 @@
-DROP TABLE IF EXISTS match_events;
+DROP TABLE IF EXISTS elo_history;
 DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;

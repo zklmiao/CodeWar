@@ -1,0 +1,15 @@
+# sqlc 配置（07 号票首次接线，ADR-0001：SQL 即真相）。
+# schema 指向 db/migrations（按文件名顺序建表：down 先执行 DROP IF EXISTS，再 up 建表）；
+# 查询在 db/queries；生成代码入库（server/internal/store/storedb），CI 不需要装 sqlc CLI。
+# 用法：sqlc generate（需自装 CLI：go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest）
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "db/queries"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "storedb"
+        out: "server/internal/store/storedb"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true
