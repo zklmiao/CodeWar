@@ -259,9 +259,9 @@ def _assemble_verdict(lines: list[dict], test_cases: list[dict],
             detail = ""
         return verdict("syntax", detail)
     if isinstance(neg, dict) and neg.get("status") == "runtime-error":
-        # harness 前置故障（宿主读 solution.py 失败）：玩家代码未被执行，
-        # 不是超时，归 runtime-error
-        return verdict("runtime-error")
+        # harness 前置故障（宿主读 solution.py 失败等）：发生在任何玩家代码
+        # 执行之前，属基础设施故障——按 spec 的 judge-error 语义不罚不锁可重交
+        return verdict("judge-error")
 
     for idx, tc in enumerate(test_cases):
         r = by_i.get(idx)

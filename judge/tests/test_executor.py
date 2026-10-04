@@ -199,13 +199,33 @@ def test_calls_payload_has_no_expected():
     assert all(set(c) == {"name", "call"} for c in json.loads(payload))
 
 
-def test_harness_prefailure_maps_to_runtime_error():
+def test_harness_prefailure_maps_to_judge_error():
     # harness 前置故障行（宿主读 solution.py 失败，玩家代码未被执行）：
-    # 纯函数单测，无需容器；归因 runtime-error 而非 timeout
+    # 纯函数单测，无需容器。属基础设施故障 → judge-error（不罚不锁可重交），
+    # 归 runtime-error/timeout 会让无辜玩家自损
     r = executor._assemble_verdict(
         [{"i": -1, "status": "runtime-error"}], CASES, 5)
-    assert r == {"passed": False, "category": "runtime-error",
+    assert r == {"passed": False, "category": "judge-error",
                  "duration_ms": 5, "detail": ""}
+
+
+def test_empty_drain_output_maps_to_judge_error(monkeypatch):
+    # 熔断后 drain 出 0 条结论行 = harness 挂死/夭折（infra）→ judge-error，
+    # 而不是把全部用例判 timeout 惩罚玩家（走 run() 全链路的 mock 测试）
+    class _MuteContainer:
+        def communicate(self, input=None, timeout=None):
+            if input is not None:  # 首次 communicate（携带用例）：整体墙钟熔断
+                raise subprocess.TimeoutExpired(cmd="docker", timeout=1)
+            return ("", "")  # drain：空输出
+
+        def kill(self):
+            return None
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _MuteContainer())
+    r = executor.run(GOOD, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] == "judge-error"
+    assert r["detail"] == ""
 
 
 @needs_docker
