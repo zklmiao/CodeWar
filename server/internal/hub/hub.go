@@ -49,6 +49,10 @@ func (c *conn) close() {
 	})
 }
 
+// settleTimeout：终局落库的 DB 预算（H3）。结算实测毫秒级，5s 只拦挂死；
+// 超时走"落库失败降级"分支（无 ELO 广播，对局照常结束），不引入新失败模式。
+const settleTimeout = 5 * time.Second
+
 type Hub struct {
 	mu     sync.Mutex
 	engine *match.Engine
@@ -272,15 +276,21 @@ func (h *Hub) settleEnded(me *matchpb.MatchEnded) {
 		h.logger.Info("同用户分饰双方，跳过结算落库（防自刷分）")
 		return
 	}
-	durationMs := int32(time.Since(h.matchStart).Milliseconds())
-	if durationMs < 0 {
-		durationMs = 0
-	}
 	if h.matchID == uuid.Nil {
 		// 防御：终局先于开赛记账的路径（仅测试/未来拓扑）也应有唯一 ID，不复用零值。
 		h.matchID = uuid.New()
 	}
-	d1, d2, err := h.st.RecordMatch(context.Background(), store.MatchResult{
+	if h.matchStart.IsZero() {
+		// H2：与上同源——零值计时会导致 duration 回绕成垃圾毫秒数入库。
+		h.matchStart = time.Now()
+	}
+	durationMs := int32(time.Since(h.matchStart).Milliseconds())
+	if durationMs < 0 {
+		durationMs = 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settleTimeout)
+	defer cancel()
+	d1, d2, err := h.st.RecordMatch(ctx, store.MatchResult{
 		MatchID:    h.matchID,
 		Winner:     me.GetWinner(),
 		Reason:     me.GetReason(),

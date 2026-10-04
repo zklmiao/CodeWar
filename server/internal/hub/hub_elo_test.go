@@ -24,6 +24,7 @@ type stubStore struct {
 	authErr     error
 	recordErr   error
 	lastRes     *store.MatchResult
+	gotDeadline bool
 	d1, d2      store.EloDelta
 }
 
@@ -37,9 +38,12 @@ func (s *stubStore) Authenticate(_ context.Context, token string) (store.User, e
 	return store.User{}, store.ErrUnauthorized
 }
 
-func (s *stubStore) RecordMatch(_ context.Context, res store.MatchResult) (store.EloDelta, store.EloDelta, error) {
+func (s *stubStore) RecordMatch(ctx context.Context, res store.MatchResult) (store.EloDelta, store.EloDelta, error) {
 	if s.recordErr != nil {
 		return store.EloDelta{}, store.EloDelta{}, s.recordErr
+	}
+	if _, ok := ctx.Deadline(); ok {
+		s.gotDeadline = true
 	}
 	cp := res
 	s.lastRes = &cp
@@ -83,12 +87,39 @@ func TestBroadcastAttachesEloWhenBothAuthenticated(t *testing.T) {
 	if st.lastRes == nil || st.lastRes.Winner != "p1" || st.lastRes.P1UserID != a.ID {
 		t.Fatalf("落库参数不符：%+v", st.lastRes)
 	}
+	// H2：测试桩未走开赛记账（matchStart 零值），时长也应 sane，不能是回绕垃圾
+	if d := st.lastRes.DurationMs; d < 0 || d > 5000 {
+		t.Fatalf("对局时长应为合理毫秒数，实际 %d", d)
+	}
 	if h.engine != nil {
 		t.Fatal("MatchEnded 后引擎仍应被置空")
 	}
 }
 
-// 任一方匿名：不调用落库，elo 字段为空（向后兼容断言：与 01 号票事件完全一致）。
+// 结算落库在带超时的 context 下执行（H3：DB 挂起不得永久卡住持锁的广播路径）。
+func TestSettleUsesBoundedContext(t *testing.T) {
+	a, b := testUsers()
+	st := &stubStore{
+		d1: store.EloDelta{Player: "p1", UserID: a.ID, Before: 1000, After: 1016},
+		d2: store.EloDelta{Player: "p2", UserID: b.ID, Before: 1000, After: 984},
+	}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.seats[match.P1] = a
+	h.seats[match.P2] = b
+
+	env := &matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
+		Winner: "p1", Reason: match.ReasonKO,
+	}}}
+	h.broadcast(env)
+
+	if !st.gotDeadline {
+		t.Fatal("结算落库应在带超时的 context 下执行")
+	}
+	if len(env.GetMatchEnded().GetElo()) != 2 {
+		t.Fatal("带超时结算成功时仍应附 ELO")
+	}
+}
 func TestBroadcastNoEloWhenAnonymous(t *testing.T) {
 	a, _ := testUsers()
 	st := &stubStore{}
