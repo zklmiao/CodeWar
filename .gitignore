@@ -28,3 +28,7 @@ judge/**/__pycache__/
 *.pyc
 server/codewar
 *.exe
+
+# python
+__pycache__/
+*.pyc
