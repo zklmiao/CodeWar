@@ -699,8 +699,10 @@ type SubmissionJudged struct {
 	SolveMs int32 `protobuf:"varint,4,opt,name=solve_ms,json=solveMs,proto3" json:"solve_ms,omitempty"`
 	// 该次失败是否施加了自损（locked/judge-error/syntax 不罚，见引擎规则）
 	SelfDamageApplied bool `protobuf:"varint,5,opt,name=self_damage_applied,json=selfDamageApplied,proto3" json:"self_damage_applied,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 提交者的锁定截止时间；仅本次判定触发锁定（自损路径）时携带，0 = 未触发锁定
+	LockUntilUnixMs int64 `protobuf:"varint,6,opt,name=lock_until_unix_ms,json=lockUntilUnixMs,proto3" json:"lock_until_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SubmissionJudged) Reset() {
@@ -766,6 +768,13 @@ func (x *SubmissionJudged) GetSelfDamageApplied() bool {
 		return x.SelfDamageApplied
 	}
 	return false
+}
+
+func (x *SubmissionJudged) GetLockUntilUnixMs() int64 {
+	if x != nil {
+		return x.LockUntilUnixMs
+	}
+	return 0
 }
 
 type ActionResolved struct {
@@ -1168,13 +1177,14 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x02 \x01(\x03R\x0edeadlineUnixMs\"A\n" +
 	"\n" +
 	"PanelReady\x123\n" +
-	"\aproblem\x18\x01 \x01(\v2\x19.codewar.match.v1.ProblemR\aproblem\"\xa9\x01\n" +
+	"\aproblem\x18\x01 \x01(\v2\x19.codewar.match.v1.ProblemR\aproblem\"\xd6\x01\n" +
 	"\x10SubmissionJudged\x12\x16\n" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x16\n" +
 	"\x06passed\x18\x02 \x01(\bR\x06passed\x12\x1a\n" +
 	"\bcategory\x18\x03 \x01(\tR\bcategory\x12\x19\n" +
 	"\bsolve_ms\x18\x04 \x01(\x05R\asolveMs\x12.\n" +
-	"\x13self_damage_applied\x18\x05 \x01(\bR\x11selfDamageApplied\"_\n" +
+	"\x13self_damage_applied\x18\x05 \x01(\bR\x11selfDamageApplied\x12+\n" +
+	"\x12lock_until_unix_ms\x18\x06 \x01(\x03R\x0flockUntilUnixMs\"_\n" +
 	"\x0eActionResolved\x12\x1a\n" +
 	"\battacker\x18\x01 \x01(\tR\battacker\x12\x16\n" +
 	"\x06damage\x18\x02 \x01(\x05R\x06damage\x12\x19\n" +

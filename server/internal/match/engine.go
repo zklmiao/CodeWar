@@ -34,7 +34,6 @@ type Engine struct {
 	solveCnt   int64
 	timer      Timer
 	timerC     <-chan time.Time
-	events     []*matchpb.Envelope
 	done       chan struct{} // 结束时关闭，停掉计时泵
 }
 
@@ -134,9 +133,10 @@ func (e *Engine) Submit(player Player, code string) {
 
 	// 错误提交：自损 + 锁定
 	e.hp[player] -= SelfDamage
-	e.lockUntil[player] = now.Add(LockMs * time.Millisecond)
+	e.lockUntil[player] = now.Add(LockDuration)
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 		Player: player, Passed: false, Category: res.Category, SelfDamageApplied: true,
+		LockUntilUnixMs: e.lockUntil[player].UnixMilli(),
 	}}})
 	e.emitHp(player, -SelfDamage, "self-damage")
 	e.checkSelfKO(player)
@@ -223,7 +223,7 @@ func (e *Engine) startRound(n int) {
 	e.problem = e.questions.AttackQuestion(n)
 	now := e.clock.Now()
 	e.roundStart = now
-	e.deadline = now.Add(RoundMs * time.Millisecond)
+	e.deadline = now.Add(RoundDuration)
 	e.solved = map[Player]int64{}
 	e.solveSeq = map[Player]int64{}
 	e.solveCnt = 0
@@ -239,7 +239,7 @@ func (e *Engine) startRound(n int) {
 
 func (e *Engine) armTimer() {
 	e.stopTimer()
-	t := e.clock.NewTimer(RoundMs * time.Millisecond)
+	t := e.clock.NewTimer(RoundDuration)
 	e.timer = t
 	e.timerC = t.C()
 }
@@ -271,7 +271,6 @@ func (e *Engine) emit(env *matchpb.Envelope) {
 	e.seq++
 	env.Seq = e.seq
 	env.UnixMs = e.clock.Now().UnixMilli()
-	e.events = append(e.events, env)
 	if e.broadcast != nil {
 		e.broadcast(env)
 	}
@@ -300,18 +299,9 @@ func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 	return s
 }
 
-// Events：事件日志副本（审计/测试断言用）。
-func (e *Engine) Events() []*matchpb.Envelope {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	out := make([]*matchpb.Envelope, len(e.events))
-	copy(out, e.events)
-	return out
-}
-
 // damageFor：伤害 = 基础 22 × 时间系数（solveMs→[0.6,1.0] 线性）四舍五入。
 func damageFor(solveMs int64) int32 {
-	ratio := float64(solveMs) / float64(RoundMs)
+	ratio := float64(solveMs) / float64(RoundDuration.Milliseconds())
 	if ratio > 1 {
 		ratio = 1
 	}

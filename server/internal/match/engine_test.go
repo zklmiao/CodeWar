@@ -174,7 +174,7 @@ func TestWrongSubmissionPenaltyAndLock(t *testing.T) {
 	}
 
 	// 时钟拨过 5 秒：恢复惩罚
-	h.clk.Advance(LockMs * time.Millisecond)
+	h.clk.Advance(LockDuration)
 	h.eng.Submit(P1, "bad third")
 	if got := len(hpChanges(h.events())); got != 2 {
 		t.Fatalf("锁过期后错误提交应再罚，掉血事件数=%d", got)
@@ -280,7 +280,7 @@ func TestSolvedPlayerCannotResubmit(t *testing.T) {
 func TestLateSubmissionIgnored(t *testing.T) {
 	h := newHarness(t, failWrong())
 	for i := 0; i < 40 && len(endings(h.events())) == 0; i++ {
-		h.clk.Advance(LockMs*time.Millisecond + time.Millisecond)
+		h.clk.Advance(LockDuration + time.Millisecond)
 		h.eng.Submit(P1, "bad")
 	}
 	if len(endings(h.events())) == 0 {
@@ -298,7 +298,7 @@ func TestLateSubmissionIgnored(t *testing.T) {
 func TestSelfKO(t *testing.T) {
 	h := newHarness(t, failWrong())
 	for i := 0; i < 40 && len(endings(h.events())) == 0; i++ {
-		h.clk.Advance(LockMs*time.Millisecond + time.Millisecond)
+		h.clk.Advance(LockDuration + time.Millisecond)
 		h.eng.Submit(P1, "bad")
 	}
 	ends := endings(h.events())
@@ -335,7 +335,7 @@ func TestFirstStrikeKO(t *testing.T) {
 	h := newHarness(t, passOK(), failWrong())
 	for r := 1; r <= 10 && len(endings(h.events())) == 0; r++ {
 		h.eng.Submit(P1, "good") // 秒解，伤害 22
-		h.clk.Advance(LockMs*time.Millisecond + time.Millisecond)
+		h.clk.Advance(LockDuration + time.Millisecond)
 		h.eng.Submit(P2, "bad") // P2 自损 3（错答后不再交）
 		h.eng.HandleRoundTimeout()
 	}

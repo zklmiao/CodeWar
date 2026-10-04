@@ -90,6 +90,8 @@ message SubmissionJudged {
   int32 solve_ms = 4;
   // 该次失败是否施加了自损（locked/judge-error/syntax 不罚，见引擎规则）
   bool self_damage_applied = 5;
+  // 提交者的锁定截止时间；仅本次判定触发锁定（自损路径）时携带，0 = 未触发锁定
+  int64 lock_until_unix_ms = 6;
 }
 
 message ActionResolved {

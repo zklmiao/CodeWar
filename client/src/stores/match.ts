@@ -144,9 +144,10 @@ export const useMatchStore = defineStore("match", {
       } else if (j.category === "judge-error") {
         this.pushLog(`⚠ 判题服务波动，${j.player} 可重新提交`);
       } else if (j.selfDamageApplied && j.player === this.viewerId) {
-        // 服务端锁 5 秒；本地给同步预览倒计时（权威仍在服务端）
-        this.viewerLockUntil = Date.now() + this.serverOffsetMs + 5000;
-        this.pushLog(`✖ ${this.viewerId} 提交错误，锁定 5 秒并自损 3`);
+        // 锁定截止以服务端下发时间为准（judged 事件与快照同字段同源；服务端调参不漂移）
+        const lockUntil = Number(j.lockUntilUnixMs);
+        if (lockUntil > 0) this.viewerLockUntil = lockUntil;
+        this.pushLog(`✖ ${this.viewerId} 提交错误，锁定并自损 3`);
       } else {
         this.pushLog(`✖ ${j.player} 提交错误（${j.category}）`);
       }

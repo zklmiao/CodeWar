@@ -38,7 +38,8 @@ def test_correct_code_passes():
     r = executor.run(GOOD, CASES, timeout_ms=5000)
     assert r["passed"] is True
     assert r["category"] == "ok"
-    assert r["duration_ms"] >= 0
+    # 真实子进程执行的耗时计量（python 启动即 >0ms）；`>= 0` 对 int 恒真
+    assert r["duration_ms"] > 0
 
 
 def test_syntax_error_reports_category_and_detail():

@@ -135,6 +135,8 @@ export interface SubmissionJudged {
   solveMs: number;
   /** 该次失败是否施加了自损（locked/judge-error/syntax 不罚，见引擎规则） */
   selfDamageApplied: boolean;
+  /** 提交者的锁定截止时间；仅本次判定触发锁定（自损路径）时携带，0 = 未触发锁定 */
+  lockUntilUnixMs: string;
 }
 
 export interface ActionResolved {
@@ -1147,7 +1149,7 @@ export const PanelReady: MessageFns<PanelReady> = {
 };
 
 function createBaseSubmissionJudged(): SubmissionJudged {
-  return { player: "", passed: false, category: "", solveMs: 0, selfDamageApplied: false };
+  return { player: "", passed: false, category: "", solveMs: 0, selfDamageApplied: false, lockUntilUnixMs: "0" };
 }
 
 export const SubmissionJudged: MessageFns<SubmissionJudged> = {
@@ -1166,6 +1168,9 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     }
     if (message.selfDamageApplied !== false) {
       writer.uint32(40).bool(message.selfDamageApplied);
+    }
+    if (message.lockUntilUnixMs !== "0") {
+      writer.uint32(48).int64(message.lockUntilUnixMs);
     }
     return writer;
   },
@@ -1223,6 +1228,14 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
             message.selfDamageApplied = reader.bool();
             continue;
           }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.lockUntilUnixMs = reader.int64().toString();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1250,6 +1263,11 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
         : isSet(object.self_damage_applied)
         ? globalThis.Boolean(object.self_damage_applied)
         : false,
+      lockUntilUnixMs: isSet(object.lockUntilUnixMs)
+        ? globalThis.String(object.lockUntilUnixMs)
+        : isSet(object.lock_until_unix_ms)
+        ? globalThis.String(object.lock_until_unix_ms)
+        : "0",
     };
   },
 
@@ -1270,6 +1288,9 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     if (message.selfDamageApplied !== false) {
       obj.selfDamageApplied = message.selfDamageApplied;
     }
+    if (message.lockUntilUnixMs !== "0") {
+      obj.lockUntilUnixMs = message.lockUntilUnixMs;
+    }
     return obj;
   },
 
@@ -1283,6 +1304,7 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     message.category = object.category ?? "";
     message.solveMs = object.solveMs ?? 0;
     message.selfDamageApplied = object.selfDamageApplied ?? false;
+    message.lockUntilUnixMs = object.lockUntilUnixMs ?? "0";
     return message;
   },
 };

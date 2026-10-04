@@ -71,10 +71,20 @@ describe("对局状态机（事件流驱动）", () => {
   it("错误提交触发查看者锁定预览", () => {
     const s = useMatchStore();
     s.applyServerMessage({ snapshot: { seq: 0, phase: "MATCH_PHASE_ROUND_ACTIVE", round: 1, players: [] } }, "p1");
+    // 锁定截止由服务端在 judged 事件中下发（与快照同字段同源），客户端不再本地推算
+    const lockUntil = String(Date.now() + 5000);
     s.applyEnvelope(
-      Envelope.fromJSON(envelope(1, "submissionJudged", { player: "p1", passed: false, category: "wrong-answer", selfDamageApplied: true })),
+      Envelope.fromJSON(
+        envelope(1, "submissionJudged", {
+          player: "p1",
+          passed: false,
+          category: "wrong-answer",
+          selfDamageApplied: true,
+          lockUntilUnixMs: lockUntil,
+        }),
+      ),
     );
-    expect(s.viewerLockUntil).toBeGreaterThan(Date.now());
+    expect(s.viewerLockUntil).toBe(Number(lockUntil));
     expect(s.viewerSolved).toBe(false);
   });
 

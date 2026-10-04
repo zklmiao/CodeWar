@@ -3,18 +3,20 @@ package match
 import (
 	"context"
 	"time"
-
-	"codewar/server/gen/matchpb"
 )
 
 // 本票战斗数值（spec 附注初稿；调参以 spec 表为准）
 const (
-	BaseDamage = 22  // 普攻基础伤害
-	RoundMs    = 75000
-	LockMs     = 5000
+	BaseDamage = 22 // 普攻基础伤害
+
+	// 时长一律用 time.Duration 类型常量，杜绝裸 int 手工换算（review 修复：
+	// 散落的 * time.Millisecond 是 timer 单位 bug 的成因）
+	RoundDuration = 75 * time.Second // 回合倒计时
+	LockDuration  = 5 * time.Second  // 错误提交锁定
+
 	SelfDamage = 3
 	MaxRounds  = 10
-	// 时间系数：solveMs ∈ [0, RoundMs] 线性映射到 [1.0, CoeffMin]
+	// 时间系数：solveMs ∈ [0, RoundDuration] 线性映射到 [1.0, CoeffMin]
 	CoeffMin  = 0.6
 	CoeffSpan = 0.4
 )
@@ -89,5 +91,3 @@ const (
 	CategoryRuntime     = "runtime-error"
 	CategoryJudgeError  = "judge-error"
 )
-
-var _ = matchpb.MatchPhase_MATCH_PHASE_WAITING // 引用生成包，防 import 空置
