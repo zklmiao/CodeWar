@@ -1,0 +1,11 @@
+# 构建上下文瘦身与隔离（上下文=仓库根）
+.git
+.worktrees
+ref_resources
+node_modules
+client/node_modules
+client/dist
+judge/__pycache__
+**/__pycache__
+*.pyc
+.coverage
