@@ -55,3 +55,9 @@ docker run --rm -i
 - **(+)** 主服务零改动：verdict 仍是字符串 category，引擎对非 `judge-error` 失败一律自损+锁（含新增 `limit-exceeded`，fail-closed 到惩罚路径）。
 - **(−)** 判题依赖宿主 docker.sock（compose 挂载；特权面扩大但仅限 judge 服务），Windows 开发机上挂载路径为 `os.path.abspath` 后的字面 Windows 路径（仅相对转绝对，不做盘符/分隔符转换），由 Docker Desktop 直接接受（本票已实测可用）。
 - **(−)** 每个容器化测试增加 1–3 秒开销，容器化测试数量克制；CI 可跑（ubuntu 自带 docker），无 docker 环境下容器化测试 skip（`judge-error` 不伪装成通过）。
+
+## 已知递延（归属明确，防止静默丢失）
+
+- 静态卫兵完整版（长度上限 / import 白名单 / 禁用模式，设计 002 §5 步骤 ①）→ 归 **11 号票**（反作弊；已挂入其验收清单）
+- 遥测扩展（内存峰值 / 异常类型分布上报，设计 002 §6）→ 归 **11 号票**（反作弊；已挂入其验收清单）
+- judge 容器非 root 用户（当前容器内 root + 挂载 docker.sock ≈ 宿主 root，本 ADR 明示接受该风险）→ 归 **08 号票开票时的部署加固**（在线化前收紧）
