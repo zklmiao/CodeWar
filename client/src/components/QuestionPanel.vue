@@ -1,12 +1,19 @@
 <script setup lang="ts">
 // 题卡 + CodeMirror 6 编辑器 + 提交（ADR-0001 前端栈；锁定与已解状态由服务端事件驱动）
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useMatchStore } from "../stores/match";
 import { socket } from "../api/socket";
 import CodeEditor from "./CodeEditor.vue";
 
 const store = useMatchStore();
 const code = ref("");
+// 题目切换时，编辑器内容重置为新题的 starter code（而非残留上一题的作答）
+watch(
+  () => store.problem && store.problem.id,
+  () => {
+    code.value = (store.problem && store.problem.starterCode) || "";
+  },
+);
 const now = ref(Date.now());
 setInterval(() => (now.value = Date.now()), 100);
 

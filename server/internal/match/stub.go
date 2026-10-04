@@ -26,7 +26,7 @@ var DemoQuestions = []Question{
 			{Name: "basic", Call: "two_sum([2, 7, 11, 15], 9)", Expected: "[0, 1]"},
 			{Name: "middle", Call: "two_sum([3, 2, 4], 6)", Expected: "[1, 2]"},
 			{Name: "duplicates", Call: "two_sum([3, 3], 6)", Expected: "[0, 1]"},
-			{Name: "negative", Call: "two_sum([-1, 5, 10, -7], 3)", Expected: "[0, 2]"},
+			{Name: "negative", Call: "two_sum([-1, 5, 10, -7], 3)", Expected: "[2, 3]"},
 		},
 	},
 	{

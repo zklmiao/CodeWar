@@ -86,15 +86,17 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	c := &conn{player: player, ws: ws, outbox: make(chan []byte, 64), closed: make(chan struct{})}
 	h.conns[player] = c
 	eng := h.engine
-	started := false
-	if len(h.conns) == 2 && eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING {
-		eng.StartMatch()
-		go eng.Run() // 计时泵：服务端权威倒计时（ADR-0002）
-		started = true
-	}
+	// 开赛必须在释放 h.mu 之后：StartMatch 会同步 emit 事件 → broadcast 再次请求 h.mu，
+	// 持锁调用会自死锁（sync.Mutex 不可重入）。
+	shouldStart := len(h.conns) == 2 && eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING
 	h.mu.Unlock()
 
-	h.logger.Info("玩家接入", "player", player, "match_started", started)
+	if shouldStart {
+		eng.StartMatch()
+		go eng.Run() // 计时泵：服务端权威倒计时（ADR-0002）
+	}
+
+	h.logger.Info("玩家接入", "player", player, "match_started", shouldStart)
 	go h.writePump(c)
 	h.sendSnapshot(c, player)
 	h.readLoop(c)

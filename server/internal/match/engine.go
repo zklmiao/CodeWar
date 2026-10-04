@@ -134,7 +134,7 @@ func (e *Engine) Submit(player Player, code string) {
 
 	// 错误提交：自损 + 锁定
 	e.hp[player] -= SelfDamage
-	e.lockUntil[player] = now.Add(LockMs)
+	e.lockUntil[player] = now.Add(LockMs * time.Millisecond)
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 		Player: player, Passed: false, Category: res.Category, SelfDamageApplied: true,
 	}}})
@@ -223,7 +223,7 @@ func (e *Engine) startRound(n int) {
 	e.problem = e.questions.AttackQuestion(n)
 	now := e.clock.Now()
 	e.roundStart = now
-	e.deadline = now.Add(RoundMs)
+	e.deadline = now.Add(RoundMs * time.Millisecond)
 	e.solved = map[Player]int64{}
 	e.solveSeq = map[Player]int64{}
 	e.solveCnt = 0
@@ -239,7 +239,7 @@ func (e *Engine) startRound(n int) {
 
 func (e *Engine) armTimer() {
 	e.stopTimer()
-	t := e.clock.NewTimer(RoundMs)
+	t := e.clock.NewTimer(RoundMs * time.Millisecond)
 	e.timer = t
 	e.timerC = t.C()
 }

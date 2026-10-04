@@ -12,7 +12,8 @@ import EndOverlay from "./components/EndOverlay.vue";
 
 const store = useMatchStore();
 const disconnected = ref(false);
-let viewer = "";
+// viewer 必须是响应式的（模板 v-if 依赖它）；URL 在 setup 时即确定
+const viewer = ref(playerFromUrl());
 
 function playerFromUrl(): string {
   const p = new URLSearchParams(location.search).get("player");
@@ -20,10 +21,10 @@ function playerFromUrl(): string {
 }
 
 function connect() {
-  socket.connect(viewer, {
+  socket.connect(viewer.value, {
     onMessage: (data) => {
       disconnected.value = false;
-      store.applyServerMessage(data, viewer);
+      store.applyServerMessage(data, viewer.value);
     },
     onClose: () => {
       disconnected.value = true;
@@ -33,8 +34,7 @@ function connect() {
 }
 
 onMounted(() => {
-  viewer = playerFromUrl();
-  if (viewer) connect();
+  if (viewer.value) connect();
 });
 
 onBeforeUnmount(() => socket.close());
