@@ -34,6 +34,7 @@ type Engine struct {
 	solveCnt   int64
 	timer      Timer
 	timerC     <-chan time.Time
+	resetC     chan struct{} // armTimer 替换 timer 时 close+重建，唤醒阻塞在旧 timerC 上的泵
 	done       chan struct{} // 结束时关闭，停掉计时泵
 }
 
@@ -48,6 +49,7 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 		lockUntil: map[Player]time.Time{},
 		solved:    map[Player]int64{},
 		solveSeq:  map[Player]int64{},
+		resetC:    make(chan struct{}),
 		done:      make(chan struct{}),
 	}
 }
@@ -63,11 +65,15 @@ func (e *Engine) StartMatch() {
 }
 
 // Run：计时泵。生产由 hub 用 goroutine 启动；测试直接调 HandleRoundTimeout，不启动泵。
+// resetC：armTimer 每次替换 timer 都会 close+重建——泵在 select 上阻塞期间绑定了
+// 旧 timerC，若无此信号，提前结算（Submit 路径）后的新回合超时将永远无人消费。
 func (e *Engine) Run() {
 	for {
 		select {
 		case <-e.done:
 			return
+		case <-e.resetC: // timer 被替换，重新取最新 timerC
+			continue
 		case <-e.currentTimerC():
 			e.HandleRoundTimeout()
 		}
@@ -148,6 +154,11 @@ func (e *Engine) HandleRoundTimeout() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.phase != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
+		return
+	}
+	// 陈旧触发的残响防护：提前结算换新 timer 后，旧 timer 可能留下已入缓冲的
+	// tick（Stop 不清缓冲）；未到 deadline 的触发一律忽略。
+	if e.clock.Now().Before(e.deadline) {
 		return
 	}
 	e.resolveRound()
@@ -239,6 +250,8 @@ func (e *Engine) startRound(n int) {
 
 func (e *Engine) armTimer() {
 	e.stopTimer()
+	close(e.resetC) // 广播"timer 已更换"：唤醒阻塞在旧 timerC 上的泵
+	e.resetC = make(chan struct{})
 	t := e.clock.NewTimer(RoundDuration)
 	e.timer = t
 	e.timerC = t.C()
