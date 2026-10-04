@@ -15,20 +15,20 @@ export class MatchSocket {
   private player: string = "";
   private handlers: SocketHandlers | null = null;
 
-  connect(player: string, handlers: SocketHandlers): void {
+  connect(player: string, handlers: SocketHandlers, token?: string): void {
     this.player = player;
     this.handlers = handlers;
     (window as unknown as Record<string, unknown>).__cw = this; // 调试暴露（移除于 02 号票前）
     const proto = location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
-    this.ws.onopen = () => this.sendJoin();
+    this.ws.onopen = () => this.sendJoin(token ?? "");
     this.ws.onmessage = (m) => this.handlers?.onMessage(JSON.parse(m.data as string));
     this.ws.onclose = () => this.handlers?.onClose();
   }
 
-  private sendJoin(): void {
+  private sendJoin(token: string): void {
     const msg: ClientMessage = {
-      join: JoinRequest.fromJSON({ player: this.player }),
+      join: JoinRequest.fromJSON({ player: this.player, token }),
     };
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));
   }

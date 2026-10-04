@@ -11,8 +11,11 @@ services:
       ADDR: ":3001"
       JUDGE_ADDR: "judge:50051"
       STATIC_DIR: "/srv/dist"
+      # 07 号票：账号与战绩存储（app 启动时自动执行内嵌迁移；为空则退化为匿名热座）
+      DATABASE_URL: "postgres://codewar:codewar-dev@postgres:5432/codewar?sslmode=disable"
     depends_on:
       - judge
+      - postgres
 
   judge:
     build:
@@ -33,7 +36,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 迁移脚手架（01 号票只落 schema，07 号票接入持久化）
+      # 迁移权威源只读挂载（供排查对照；app 实际执行的是内嵌进二进制的副本）
       - ../db/migrations:/migrations:ro
 
 volumes:

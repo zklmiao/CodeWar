@@ -17,6 +17,11 @@ const reasonText = computed(
       "rounds-cap": "10 回合打满，按剩余 HP 裁决",
     })[store.result?.reason ?? ""] ?? store.result?.reason,
 );
+// ELO 变化行：before → after（+delta）；匿名对局 elo 为空，不显示本区块。
+function deltaText(before: number, after: number): string {
+  const d = after - before;
+  return d > 0 ? `+${d}` : `${d}`;
+}
 </script>
 
 <template>
@@ -24,6 +29,13 @@ const reasonText = computed(
     <div class="card">
       <h2>{{ title }}</h2>
       <p>{{ reasonText }}</p>
+      <div v-if="store.result?.elo?.length" class="elo">
+        <div v-for="e in store.result.elo" :key="e.player" class="elorow">
+          <span class="who">{{ e.player }}</span>
+          <span>{{ e.eloBefore }} → {{ e.eloAfter }}</span>
+          <span class="delta">（{{ deltaText(e.eloBefore, e.eloAfter) }}）</span>
+        </div>
+      </div>
       <p class="hint">刷新两个窗口可再来一局（本票单机热座，07/08 号票引入账号与在线匹配）</p>
     </div>
   </div>
@@ -39,5 +51,9 @@ const reasonText = computed(
   text-align: center; color: #dfe4ee;
 }
 .card h2 { font-size: 26px; margin: 0 0 10px; }
+.elo { margin: 12px 0 4px; font-size: 15px; }
+.elorow { display: flex; gap: 10px; justify-content: center; padding: 3px 0; }
+.who { color: #8a93a8; }
+.delta { color: #7fd1a8; }
 .hint { color: #56607a; font-size: 12px; }
 </style>
