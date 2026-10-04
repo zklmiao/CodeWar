@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -46,6 +47,12 @@ func checkCredentials(username, password string) error {
 		return ErrInvalidUsername
 	}
 	return validate.Struct(credentials{Username: username, Password: password})
+}
+
+// isUniqueViolation：postgres 唯一冲突（23505），只做错误归类，不掩其它错误。
+func isUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }
 
 // newToken：32 字节随机不透明令牌（base64url 明文下发给客户端），
@@ -87,6 +94,10 @@ func (s *Store) Register(ctx context.Context, username, password string) (User, 
 		PasswordHash:  string(pwHash),
 		Elo:           int32(elo.Initial),
 	})
+	if isUniqueViolation(err) {
+		// 并发重名：检查时都不存在，插入时撞唯一约束——与串行重名同错。
+		return User{}, "", ErrUsernameTaken
+	}
 	if err != nil {
 		return User{}, "", err
 	}

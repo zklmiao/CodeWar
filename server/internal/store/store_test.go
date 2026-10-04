@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"os"
 	"strings"
@@ -141,6 +142,42 @@ func TestAuthFlow(t *testing.T) {
 	}
 	if _, err := s.Authenticate(ctx, tok2); err != ErrUnauthorized {
 		t.Fatalf("过期令牌应被拒绝，实际 %v", err)
+	}
+}
+
+// 并发重名注册：恰一成一冲突（H4：撞唯一约束的输家也应报 ErrUsernameTaken，
+// 而非裸 pq 错误。bcrypt 耗时在检查之后，天然放大竞态窗口，复现稳定）。
+func TestConcurrentDuplicateRegister(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	type res struct {
+		err error
+	}
+	outs := make([]res, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _, err := s.Register(ctx, "racer", "password1")
+			outs[i] = res{err}
+		}(i)
+	}
+	wg.Wait()
+	ok, taken := 0, 0
+	for _, o := range outs {
+		switch {
+		case o.err == nil:
+			ok++
+		case errors.Is(o.err, ErrUsernameTaken):
+			taken++
+		default:
+			t.Fatalf("并发重名注册出现非预期错误：%v", o.err)
+		}
+	}
+	if ok != 1 || taken != 1 {
+		t.Fatalf("并发重名注册应一成一冲突，实际 ok=%d taken=%d", ok, taken)
 	}
 }
 
