@@ -5,10 +5,11 @@
 容器内 harness（_HARNESS）为每个用例 fork 一个 worker 子进程并施加
 每用例超时，首败即停；容器整体另有墙钟上限（第二道保险）。
 
-隔离（容器级，见 ADR-0003 与 Dockerfile.judge / compose 挂载）：
---network=none 断网；--memory=256m + --pids-limit=64 + --cpus=0.5 配额；
---cap-drop=ALL；--read-only 只读根文件系统 + PYTHONDONTWRITEBYTECODE=1；
-玩家代码经只读挂载注入（用例文件名随机化，防玩家代码窥探用例文件）。
+ 隔离（容器级，见 ADR-0003 与 Dockerfile.judge / compose 挂载）：
+ --network=none 断网；--memory=256m + --pids-limit=64 + --cpus=0.5 配额；
+ --cap-drop=ALL；--read-only 只读根文件系统 + PYTHONDONTWRITEBYTECODE=1；
+ 玩家代码经只读挂载注入；测试用例经 stdin 管道注入、全程不落盘
+ （防玩家代码枚举 /sandbox 或 /proc 窥探隐藏用例）。
 
 失败反馈契约（设计 002 §3）：verdict 只含 {passed, category, duration_ms}，
 detail 仅 syntax 携带行号；其余类别一律空字符串，绝不回传隐藏用例信息。
@@ -22,7 +23,6 @@ import shutil
 import subprocess
 import tempfile
 import time
-import uuid
 
 # judge 侧每用例超时常量（ADR-0003）：调用方传更小值时兼容采用，默认 3 秒
 PER_TEST_TIMEOUT_MS = 3000
@@ -63,19 +63,18 @@ def ensure_sandbox_image() -> bool:
         return True
     pull = subprocess.run(
         ["docker", "pull", SANDBOX_IMAGE],
-        capture_output=True, timeout=300,
+        capture_output=True, timeout=120,
     )
     return pull.returncode == 0
 
 
 # ---- 容器内 harness：父进程（逐用例 fork worker，首败即停） ----
+# 用例从 stdin 读入（宿主 `docker run -i` 管道注入），全程不落盘。
 _HARNESS = r'''
 import json, subprocess, sys, time
 
 per_test_ms = int(sys.argv[1])
-cases_path = sys.argv[2]
-with open(cases_path, encoding="utf-8") as f:
-    cases = json.load(f)
+cases = json.load(sys.stdin)
 
 def emit(passed, cat, detail, t0):
     print(json.dumps({"passed": passed, "category": cat,
@@ -101,7 +100,8 @@ per_test_s = per_test_ms / 1000.0
 for i in range(len(cases)):
     try:
         proc = subprocess.run(
-            [sys.executable, "/sandbox/_worker.py", cases_path, str(i)],
+            [sys.executable, "/sandbox/_worker.py"],
+            input=json.dumps(cases[i]),
             capture_output=True, text=True, timeout=per_test_s,
         )
     except subprocess.TimeoutExpired:
@@ -138,12 +138,12 @@ emit(True, "ok", "", t0)
 '''
 
 # ---- 容器内 worker：单用例执行者（每个用例全新进程，全新 import） ----
+# 单个用例从 stdin 读入（harness 管道注入，worker 启动即读完；玩家代码运行后
+# 管道已耗尽，/proc 下也无用例内容——worker 只能见到自己的这一道题）。
 _WORKER = r'''
 import io, json, sys
 
-cases_path, idx = sys.argv[1], int(sys.argv[2])
-with open(cases_path, encoding="utf-8") as f:
-    case = json.load(f)[idx]
+case = json.load(sys.stdin)
 
 class _ImportFailed(Exception):
     def __init__(self, cause):
@@ -160,10 +160,11 @@ def emit(ok, phase="", err="", errno=None):
                                  "err": err, "errno": errno}) + "\n")
     sys.stdout.flush()
 
-# 纵深配额（best-effort）：大内存分配转 MemoryError；NPROC 尝试禁建进程
-# （注：容器内为 root 时内核豁免 NPROC 检查，真正生效的是容器级 --pids-limit；
-# 此处保留设置以覆盖将来 --user 运行；fork 炸弹在任一层都会转 EAGAIN/errno 11）
-# 注：沙箱内玩家代码禁建进程/线程（解题不需要），误伤一律 fail-closed。
+# 纵深配额（best-effort）：大内存分配转 MemoryError。
+# NPROC 注：容器内为 root 时内核豁免 NPROC 检查（此设置对当前运行形态无效，
+# 保留以覆盖将来 --user 运行）；进程/线程创建实际受容器级 --pids-limit 约束，
+# fork 炸弹在该层转 EAGAIN/errno 11，由 harness 按 errno 归因。
+# 注：解题不需要建进程/线程，配额误伤一律 fail-closed。
 try:
     import resource
     resource.setrlimit(resource.RLIMIT_AS, (256 << 20, 256 << 20))
@@ -223,19 +224,17 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
     outer_s = len(test_cases) * (per_test_ms / 1000.0) + WALL_CLOCK_SLACK_S
 
     with tempfile.TemporaryDirectory(prefix="codewar-judge-") as tmp:
-        # 用例文件名随机化：玩家代码即使枚举 /sandbox 也猜不到用例路径
-        cases_name = "cases-{}.json".format(uuid.uuid4().hex)
+        # 挂载目录只含 solution.py 与 harness/worker 脚本；测试用例经 stdin
+        # 管道注入、全程不落盘（玩家代码枚举 /sandbox 也见不到用例）。
         with open(os.path.join(tmp, "solution.py"), "w", encoding="utf-8") as f:
             f.write(code or "")
-        with open(os.path.join(tmp, cases_name), "w", encoding="utf-8") as f:
-            json.dump(test_cases, f)
         with open(os.path.join(tmp, "_harness.py"), "w", encoding="utf-8") as f:
             f.write(_HARNESS)
         with open(os.path.join(tmp, "_worker.py"), "w", encoding="utf-8") as f:
             f.write(_WORKER)
 
         cmd = [
-            "docker", "run", "--rm",
+            "docker", "run", "--rm", "-i",
             "--network=none",
             "--memory=256m",
             "--pids-limit=64",
@@ -247,12 +246,12 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
             "-e", "PYTHONDONTWRITEBYTECODE=1",
             SANDBOX_IMAGE,
             "python", "/sandbox/_harness.py", str(per_test_ms),
-            "/sandbox/" + cases_name,
         ]
         started = time.monotonic()
         try:
             proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=outer_s,
+                cmd, input=json.dumps(test_cases),
+                capture_output=True, text=True, timeout=outer_s,
             )
         except subprocess.TimeoutExpired:
             # 整体墙钟熔断（第二道保险）：按时钟杀归因

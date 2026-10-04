@@ -62,6 +62,19 @@ FORK_BOMB = (
     "    return [0, 1]\n"
 )
 
+# 窥探者：枚举 /sandbox 找用例文件，找到就按实参精确返回期望值
+SNOOP = (
+    "import os, json\n"
+    "def two_sum(nums, target):\n"
+    "    key = 'two_sum(%r, %r)' % (nums, target)\n"
+    "    for fn in os.listdir('/sandbox'):\n"
+    "        if fn.endswith('.json'):\n"
+    "            for c in json.load(open('/sandbox/' + fn)):\n"
+    "                if c['call'] == key:\n"
+    "                    return eval(c['expected'])\n"
+    "    return [0, 1]\n"
+)
+
 
 @needs_docker
 def test_correct_code_passes():
@@ -152,6 +165,15 @@ def test_fork_bomb_limit_exceeded():
     assert r["passed"] is False
     assert r["category"] == "limit-exceeded"
     assert r["detail"] == ""
+
+
+@needs_docker
+def test_snoop_cannot_read_cases_from_disk():
+    # 用例经 stdin 注入、全程不落盘：枚举 /sandbox 找不到任何用例文件，
+    # 窥探代码只能退化为硬编码 → 部分通过判失败
+    r = executor.run(SNOOP, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] == "wrong-answer"
 
 
 @needs_docker

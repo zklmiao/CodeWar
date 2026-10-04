@@ -26,7 +26,7 @@ docker run --rm
   --tmpfs /tmp:size=16m,exec     # 唯一可写区（小而可执行，供解释器展开用）
   -v <代码目录>:/sandbox:ro       # 玩家代码经挂载注入，不经网络
   -e PYTHONDONTWRITEBYTECODE=1   # 配合只读根文件系统（禁 .pyc 落盘）
-  python:3.12-slim python /sandbox/_harness.py
+  python:3.12-slim python /sandbox/_harness.py   # 用例经 stdin 管道注入，全程不落盘
 ```
 
 - **容器粒度 = 每次提交一个容器**（不是每用例一个）：容器启动约 300–800ms，每用例一个容器会把 5–8 个隐藏用例的开销放大数倍；容器内 harness 用子进程逐用例执行，单个用例的超时/超限只杀子进程，不影响同容器内后续判定。worker 另设 `RLIMIT_AS=256m`（大分配转 MemoryError）纵深于容器级 `--memory` 之内；fork 炸弹由容器级 `--pids-limit` 转 EAGAIN（errno 11，worker 按 errno 归因——root 用户不受 NPROC 约束，NPROC 设置仅作将来 `--user` 运行的纵深）。worker 协议行以换行为界，防多进程写污染（fail-closed）。
