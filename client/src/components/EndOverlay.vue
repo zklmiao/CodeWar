@@ -36,7 +36,7 @@ function deltaText(before: number, after: number): string {
           <span class="delta">（{{ deltaText(e.eloBefore, e.eloAfter) }}）</span>
         </div>
       </div>
-      <p class="hint">刷新两个窗口可再来一局（本票单机热座，07/08 号票引入账号与在线匹配）</p>
+      <p class="hint">刷新两个窗口可再来一局（本票单机热座，在线匹配归 08 号票）</p>
     </div>
   </div>
 </template>
