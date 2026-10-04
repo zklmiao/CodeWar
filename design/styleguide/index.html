@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CodeWar 占位美术规范 · 风格页（票据 13）</title>
+<title>CodeWar 占位美术规范 · 风格页（票据 13+14）</title>
 <!-- 零构建、零依赖：直接以 design/ 为根起静态服务即可
      cd design && python -m http.server 3013  →  http://localhost:3013/styleguide/ -->
 <link rel="stylesheet" href="../tokens.css">
@@ -89,20 +89,41 @@
   .sg-radii code { font-family: var(--cw-font-mono); font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted); }
 
   /* HP 条定宽演示 */
-  .demo-hp { width: var(--cw-space-24); display: flex; flex-direction: column; gap: var(--cw-space-1); }
+  .demo-hp { width: 120px; display: flex; flex-direction: column; gap: var(--cw-space-1); }
   .demo-card-row { display: flex; flex-wrap: wrap; gap: var(--cw-space-5); align-items: stretch; }
   .demo-card-row .cw-card { width: 340px; }
   .sg-footer { color: var(--cw-color-text-muted); font-size: var(--cw-font-size-xs); border-top: 1px solid var(--cw-color-border); padding-top: var(--cw-space-4); }
+
+  /* 终端页头装饰（霓虹终端风格语言的一部分） */
+  .sg-terminal {
+    font-family: var(--cw-font-mono);
+    font-size: var(--cw-font-size-sm);
+    color: var(--cw-color-accent);
+    margin-bottom: var(--cw-space-2);
+  }
+  .sg-cursor {
+    display: inline-block;
+    width: var(--cw-space-2);
+    height: var(--cw-font-size-md);
+    background: var(--cw-color-accent);
+    vertical-align: text-bottom;
+    animation: sg-blink 1.2s steps(2) infinite;
+  }
+  @keyframes sg-blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sg-cursor { animation: none; }
+  }
 </style>
 </head>
 <body>
 
 <!-- ===================== 头部 ===================== -->
 <header class="sg-header">
+  <div class="sg-terminal">~$ codewar --styleguide<span class="sg-cursor"></span></div>
   <h1>CodeWar 占位美术规范 · 风格页</h1>
-  <p>票据 13 交付物。设计 token 单一来源：<code>design/tokens.css</code>；占位组件：<code>design/components/placeholder.css</code> + 手写 SVG。
-     命名约定与占位→正式美术的整包替换映射见 <code>docs/design/004-placeholder-art-standard.md</code>。</p>
-  <p>查看方式：<code>cd design &amp;&amp; python -m http.server 3013</code>，浏览器打开 <code>http://localhost:3013/styleguide/</code>。</p>
+  <p>票据 13（占位系统）+ 14（霓虹质感精修）交付物。设计 token 单一来源：<code>design/tokens.css</code>；占位组件：<code>design/components/placeholder.css</code> + 手写 SVG（经 CSS mask 引用，零内联复制）。
+     命名约定、霓虹质感规范与占位→正式美术的整包替换映射见 <code>docs/design/004-placeholder-art-standard.md</code>。</p>
+  <p>查看方式：<code>cd design &amp;&amp; python -m http.server 3014</code>，浏览器打开 <code>http://localhost:3014/styleguide/</code>。</p>
 </header>
 
 <!-- ===================== Token 对照区 ===================== -->
@@ -179,8 +200,7 @@
       <div class="cw-grid__cell cw-grid__cell--textured"></div>
       <div class="cw-grid__cell cw-grid__cell--hero-warrior">
         <span class="cw-avatar cw-avatar--warrior">
-          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><rect x="22.5" y="2" width="3" height="6" rx="1"/><circle cx="24" cy="13" r="6.5"/><circle cx="12" cy="26" r="6"/><circle cx="36" cy="26" r="6"/><path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/><rect x="13" y="42" width="22" height="4" opacity="0.35"/><rect x="15" y="52" width="8" height="9" rx="1"/><rect x="25" y="52" width="8" height="9" rx="1"/><path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/><rect x="46" y="33" width="13" height="4" rx="1"/><rect x="50.5" y="37" width="4" height="9"/><circle cx="52.5" cy="49" r="3"/></g></svg>
-        </span>
+                  </span>
       </div>
       <div class="cw-grid__cell cw-grid__cell--coverage"></div>
       <div class="cw-grid__cell cw-grid__cell--textured"></div>
@@ -189,14 +209,12 @@
       <div class="cw-grid__cell cw-grid__cell--textured"></div>
       <div class="cw-grid__cell cw-grid__cell--hero-mage">
         <span class="cw-avatar cw-avatar--mage">
-          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="M26 3 Q35 5 34 17 Q26 21 18 17 Q17 5 26 3 Z"/><path d="M18 18 L12 54 Q26 62 40 54 L34 18 Q26 14 18 18 Z"/><rect x="17" y="32" width="18" height="3" opacity="0.35"/><rect x="49" y="12" width="3" height="46" rx="1.5"/><circle cx="50.5" cy="8" r="8" opacity="0.25"/><circle cx="50.5" cy="8" r="5"/></g></svg>
-        </span>
+                  </span>
       </div>
       <div class="cw-grid__cell cw-grid__cell--textured"></div>
       <div class="cw-grid__cell cw-grid__cell--hero-ranger">
         <span class="cw-avatar cw-avatar--ranger">
-          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><circle cx="24" cy="12" r="6"/><path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/><path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/><rect x="17" y="34" width="14" height="3" opacity="0.35"/><rect x="18" y="48" width="6" height="12" rx="1"/><rect x="26" y="48" width="6" height="12" rx="1"/><path d="M60 28 L53 25 L53 31 Z"/><path d="M36 28 L31 24.5 L31 27 Z"/><path d="M36 28 L31 31.5 L31 29 Z"/></g><g stroke="currentColor" fill="none"><path d="M47 6 Q61 28 47 50" stroke-width="3" stroke-linecap="round"/><path d="M47 6 L47 50" stroke-width="1.5" opacity="0.5"/><path d="M36 28 L58 28" stroke-width="2"/></g></svg>
-        </span>
+                  </span>
       </div>
 
       <div class="cw-grid__cell cw-grid__cell--textured"></div>
@@ -219,27 +237,24 @@
   <div class="demo-row">
     <div class="demo-block">
       <span class="cw-avatar cw-avatar--warrior">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><rect x="22.5" y="2" width="3" height="6" rx="1"/><circle cx="24" cy="13" r="6.5"/><circle cx="12" cy="26" r="6"/><circle cx="36" cy="26" r="6"/><path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/><rect x="13" y="42" width="22" height="4" opacity="0.35"/><rect x="15" y="52" width="8" height="9" rx="1"/><rect x="25" y="52" width="8" height="9" rx="1"/><path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/><rect x="46" y="33" width="13" height="4" rx="1"/><rect x="50.5" y="37" width="4" height="9"/><circle cx="52.5" cy="49" r="3"/></g></svg>
-      </span>
+              </span>
       <span class="demo-label">剑士 · 重甲巨剑（赭红）</span>
     </div>
     <div class="demo-block">
       <span class="cw-avatar cw-avatar--mage">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="M26 3 Q35 5 34 17 Q26 21 18 17 Q17 5 26 3 Z"/><path d="M18 18 L12 54 Q26 62 40 54 L34 18 Q26 14 18 18 Z"/><rect x="17" y="32" width="18" height="3" opacity="0.35"/><rect x="49" y="12" width="3" height="46" rx="1.5"/><circle cx="50.5" cy="8" r="8" opacity="0.25"/><circle cx="50.5" cy="8" r="5"/></g></svg>
-      </span>
+              </span>
       <span class="demo-label">法师 · 长袍法杖（紫）</span>
     </div>
     <div class="demo-block">
       <span class="cw-avatar cw-avatar--ranger">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><circle cx="24" cy="12" r="6"/><path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/><path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/><rect x="17" y="34" width="14" height="3" opacity="0.35"/><rect x="18" y="48" width="6" height="12" rx="1"/><rect x="26" y="48" width="6" height="12" rx="1"/><path d="M60 28 L53 25 L53 31 Z"/><path d="M36 28 L31 24.5 L31 27 Z"/><path d="M36 28 L31 31.5 L31 29 Z"/></g><g stroke="currentColor" fill="none"><path d="M47 6 Q61 28 47 50" stroke-width="3" stroke-linecap="round"/><path d="M47 6 L47 50" stroke-width="1.5" opacity="0.5"/><path d="M36 28 L58 28" stroke-width="2"/></g></svg>
-      </span>
+              </span>
       <span class="demo-label">游侠 · 轻甲短弓（绿）</span>
     </div>
     <div class="demo-block">
       <div class="demo-row">
-        <span class="cw-avatar cw-avatar--warrior"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><rect x="22.5" y="2" width="3" height="6" rx="1"/><circle cx="24" cy="13" r="6.5"/><circle cx="12" cy="26" r="6"/><circle cx="36" cy="26" r="6"/><path d="M10 52 L11 30 Q12 23 20 22 L28 22 Q36 23 37 30 L38 52 Z"/><rect x="13" y="42" width="22" height="4" opacity="0.35"/><rect x="15" y="52" width="8" height="9" rx="1"/><rect x="25" y="52" width="8" height="9" rx="1"/><path d="M50 2 L55 10 L55 33 L52.5 36 L50 33 Z"/><rect x="46" y="33" width="13" height="4" rx="1"/><rect x="50.5" y="37" width="4" height="9"/><circle cx="52.5" cy="49" r="3"/></g></svg></span>
-        <span class="cw-avatar cw-avatar--mage"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="M26 3 Q35 5 34 17 Q26 21 18 17 Q17 5 26 3 Z"/><path d="M18 18 L12 54 Q26 62 40 54 L34 18 Q26 14 18 18 Z"/><rect x="17" y="32" width="18" height="3" opacity="0.35"/><rect x="49" y="12" width="3" height="46" rx="1.5"/><circle cx="50.5" cy="8" r="8" opacity="0.25"/><circle cx="50.5" cy="8" r="5"/></g></svg></span>
-        <span class="cw-avatar cw-avatar--ranger"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><circle cx="24" cy="12" r="6"/><path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/><path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/><rect x="17" y="34" width="14" height="3" opacity="0.35"/><rect x="18" y="48" width="6" height="12" rx="1"/><rect x="26" y="48" width="6" height="12" rx="1"/><path d="M60 28 L53 25 L53 31 Z"/><path d="M36 28 L31 24.5 L31 27 Z"/><path d="M36 28 L31 31.5 L31 29 Z"/></g><g stroke="currentColor" fill="none"><path d="M47 6 Q61 28 47 50" stroke-width="3" stroke-linecap="round"/><path d="M47 6 L47 50" stroke-width="1.5" opacity="0.5"/><path d="M36 28 L58 28" stroke-width="2"/></g></svg></span>
+        <span class="cw-avatar cw-avatar--warrior"></span>
+        <span class="cw-avatar cw-avatar--mage"></span>
+        <span class="cw-avatar cw-avatar--ranger"></span>
       </div>
       <span class="demo-label">1 格实际尺寸并排（格内观感）</span>
     </div>
@@ -276,7 +291,7 @@
     </div>
   </div>
   <div class="demo-note">
-    <b>Token 依赖：</b><code>--cw-color-state-success/danger</code>、<code>--cw-color-class-*</code>、<code>--cw-color-bg-inset</code>、<code>--cw-color-border-strong</code>、<code>--cw-font-mono</code>。<br>
+    <b>Token 依赖：</b><code>--cw-color-state-success/danger</code>、<code>--cw-color-class-*</code>、<code>--cw-color-bg-inset</code>、<code>--cw-color-border-strong</code>、<code>--cw-font-mono</code>、<code>--cw-motion-pulse</code>（低血脉动）。<br>
     <b>替换槽位：</b><code>art.slots.theme</code> —— 纯 CSS 组件，无独立图形资产；正式美术升级为描边/流光时仍引用同一组 token。
   </div>
 </section>
@@ -287,7 +302,7 @@
   <div class="demo-card-row">
     <div class="cw-card cw-card--action-attack">
       <div class="cw-card__head">
-        <svg class="cw-card__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 4 L18 18"/><path d="M20 4 L6 18"/><path d="M15 19 L19 15"/><path d="M9 19 L5 15"/><path d="M18 18 L21 21"/><path d="M6 18 L3 21"/></g></svg>
+        <i class="cw-card__icon cw-card__icon--attack"></i>
         <span class="cw-badge">哈希与计数</span>
         <span class="cw-card__spacer"></span>
         <span class="cw-stars">
@@ -311,7 +326,7 @@
 
     <div class="cw-card cw-card--action-attack">
       <div class="cw-card__head">
-        <svg class="cw-card__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 4 L18 18"/><path d="M20 4 L6 18"/><path d="M15 19 L19 15"/><path d="M9 19 L5 15"/><path d="M18 18 L21 21"/><path d="M6 18 L3 21"/></g></svg>
+        <i class="cw-card__icon cw-card__icon--attack"></i>
         <span class="cw-badge">哈希与计数 · 填空</span>
         <span class="cw-card__spacer"></span>
         <span class="cw-stars">
@@ -332,7 +347,7 @@ for w in text.split():
 
     <div class="cw-card cw-card--action-move">
       <div class="cw-card__head">
-        <svg class="cw-card__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M12 3 L12 21"/><path d="M3 12 L21 12"/></g><g fill="currentColor"><path d="M12 1 L9 5 L15 5 Z"/><path d="M12 23 L9 19 L15 19 Z"/><path d="M1 12 L5 9 L5 15 Z"/><path d="M23 12 L19 9 L19 15 Z"/></g></svg>
+        <i class="cw-card__icon cw-card__icon--move"></i>
         <span class="cw-badge">走位</span>
         <span class="cw-card__spacer"></span>
         <span class="cw-stars">
@@ -351,7 +366,7 @@ for w in text.split():
 
     <div class="cw-card cw-card--action-defend">
       <div class="cw-card__head">
-        <svg class="cw-card__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2 L20 5 L20 11 C20 16.5 16.8 20.4 12 22 C7.2 20.4 4 16.5 4 11 L4 5 Z"/></svg>
+        <i class="cw-card__icon cw-card__icon--defend"></i>
         <span class="cw-badge">通用</span>
         <span class="cw-card__spacer"></span>
         <span class="cw-stars">
@@ -384,25 +399,25 @@ for w in text.split():
     </div>
     <div class="demo-block">
       <div class="cw-skill-slot cw-skill-slot--warrior">
-        <svg class="cw-skill-slot__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"/></svg>
+        <i class="cw-skill-slot__icon"></i>
       </div>
       <span class="demo-label">剑士 · 巨力斩（冷却 4）</span>
     </div>
     <div class="demo-block">
       <div class="cw-skill-slot cw-skill-slot--mage cw-skill-slot--cooldown" data-cd="2">
-        <svg class="cw-skill-slot__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"/></svg>
+        <i class="cw-skill-slot__icon"></i>
       </div>
       <span class="demo-label">法师 · 冷却中（剩 2 回合）</span>
     </div>
     <div class="demo-block">
       <div class="cw-skill-slot cw-skill-slot--ranger">
-        <svg class="cw-skill-slot__icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"/></svg>
+        <i class="cw-skill-slot__icon"></i>
       </div>
       <span class="demo-label">游侠 · 穿云箭（冷却 4）</span>
     </div>
   </div>
   <div class="demo-note">
-    <b>Token 依赖：</b><code>--cw-color-class-*</code>、<code>--cw-color-state-warning</code>（冷却数字）、<code>--cw-color-bg-base/raised</code>、<code>--cw-font-mono</code>。<br>
+    <b>Token 依赖：</b><code>--cw-color-class-*</code>、<code>--cw-color-state-warning</code>（冷却数字）、<code>--cw-color-bg-base/raised</code>、<code>--cw-font-mono</code>、<code>--cw-motion-pulse</code>（径向扫描）。<br>
     <b>替换槽位：</b><code>art.slots.icon.action.skill</code>；冷却遮罩为 CSS 语义态。技能名与冷却数值随 06 号票的职业表接入。
   </div>
 </section>
@@ -450,7 +465,7 @@ for w in text.split():
 </section>
 
 <footer class="sg-footer">
-  CodeWar 票据 13 交付物 · 占位视觉系统 v1 · 零构建零依赖 · 命名约定与替换映射：docs/design/004-placeholder-art-standard.md
+  CodeWar 票据 13（占位系统）+ 14（霓虹质感）交付物 · 零构建零依赖 · 资产经 CSS mask 引用（单一来源） · 命名约定与替换映射：docs/design/004-placeholder-art-standard.md
 </footer>
 
 </body>

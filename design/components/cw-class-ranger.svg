@@ -1,28 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="游侠占位剪影：轻甲与短弓">
-  <!-- 游侠：轻甲窄身 + 短弓箭（1 格占位，颜色经 currentColor 由宿主的 ranger 修饰类注入） -->
-  <g fill="currentColor">
-    <!-- 头部与兜帽 -->
-    <circle cx="24" cy="12" r="6"/>
-    <path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/>
-    <!-- 窄身轻甲躯干 -->
-    <path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/>
-    <!-- 腰带（透明度分层） -->
-    <rect x="17" y="34" width="14" height="3" opacity="0.35"/>
-    <!-- 双腿（窄） -->
-    <rect x="18" y="48" width="6" height="12" rx="1"/>
-    <rect x="26" y="48" width="6" height="12" rx="1"/>
-  </g>
-  <!-- 短弓：弓臂弧线 / 弓弦 / 搭箭 -->
+  <!-- 游侠：轻甲窄身 + 短弓箭（霓虹质感：辉光晕 + 垂直渐变 + 弓臂副线细节；
+       颜色经 currentColor 由宿主的 ranger 修饰类注入，结构约定见 004 §5） -->
+  <defs>
+    <g id="cwRangerBody">
+      <circle cx="24" cy="12" r="6"/>
+      <path d="M17 13 Q16 4 25 2 Q26 7 25 12 Z"/>
+      <path d="M17 22 L15 44 Q24 49 33 44 L31 22 Q24 18 17 22 Z"/>
+      <rect x="18" y="48" width="6" height="12" rx="1"/>
+      <rect x="26" y="48" width="6" height="12" rx="1"/>
+      <path d="M60 28 L53 25 L53 31 Z"/>
+      <path d="M36 28 L31 24.5 L31 27 Z"/>
+      <path d="M36 28 L31 31.5 L31 29 Z"/>
+    </g>
+    <linearGradient id="cwRangerGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="currentColor" stop-opacity="1"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0.55"/>
+    </linearGradient>
+    <filter id="cwRangerGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+  <!-- 辉光晕：同形体模糊层 -->
+  <use href="#cwRangerBody" fill="currentColor" opacity="0.55" filter="url(#cwRangerGlow)"/>
+  <!-- 主体：垂直渐变（顶亮底暗） -->
+  <use href="#cwRangerBody" fill="url(#cwRangerGrad)"/>
+  <!-- 轮廓描边 -->
+  <use href="#cwRangerBody" fill="none" stroke="currentColor" stroke-opacity="0.9" stroke-width="1"/>
+  <!-- 腰带（半透明覆盖层） -->
+  <rect x="17" y="34" width="14" height="3" fill="currentColor" opacity="0.35"/>
+  <!-- 弓臂副线细节 -->
+  <path d="M44 8 Q57 28 44 48" stroke="currentColor" stroke-width="1" fill="none" opacity="0.4"/>
+  <!-- 短弓主弧 / 弓弦 / 搭箭 -->
   <g stroke="currentColor" fill="none">
     <path d="M47 6 Q61 28 47 50" stroke-width="3" stroke-linecap="round"/>
     <path d="M47 6 L47 50" stroke-width="1.5" opacity="0.5"/>
     <path d="M36 28 L58 28" stroke-width="2"/>
-  </g>
-  <g fill="currentColor">
-    <!-- 箭头 -->
-    <path d="M60 28 L53 25 L53 31 Z"/>
-    <!-- 尾羽 -->
-    <path d="M36 28 L31 24.5 L31 27 Z"/>
-    <path d="M36 28 L31 31.5 L31 29 Z"/>
   </g>
 </svg>
