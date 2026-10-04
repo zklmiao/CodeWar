@@ -7,8 +7,8 @@
 - Spec 存放于 `docs/specs/<NNN>-<slug>.md`（三位编号递增；设计与数值的真相源）
 - 实现票据一票一文件：`.scratch/<feature-slug>/issues/<NN>-<slug>.md`，从 `01` 起按依赖序编号，禁止单一合并大文件
 - 当前活跃 feature：`codewar-mvp`
-- Triage 状态记录在每个票据文件头部的 `Status:` 行（角色字符串见 `triage-labels.md`）
-- 评审意见与会话结论追加到文件底部 `## Comments` 标题下
+- Triage 状态记录在每个票据文件头部的 `Status:` 行（角色字符串见 `triage-labels.md`；被阻塞的票同样标 `ready-for-agent`，是否可开工以 `Blocked by` 图为准）
+- 评审意见与会话结论直接记入票据正文相关小节（如 01 票尾部"已知偏差记录"），不设 `## Comments` 固定栏
 
 ## When a skill says "publish to the issue tracker"
 
@@ -19,13 +19,11 @@
 
 读取被引用路径的文件。用户通常直接给出路径或票号。
 
-## Wayfinding operations
+## Frontier / Claim / Resolve（本仓库实际用法）
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+上游 `/wayfinder` 的 map 流程（`map.md`、`Type:` 行、`claimed` 中间态、`## Answer`）在本仓库未采用；skill 提到时以本节为准。
 
-- **Map**: `.scratch/<effort>/map.md` (the Notes / Decisions-so-far / Fog body).
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Blocking**：票据头部 `Blocked by:` 行列出前置票号；当前置票均为 `resolved` 时阻塞清零。
+- **Frontier**：`Status` 非 `resolved`/`wontfix` 且阻塞清零的票。注意 `Status` 不区分阻塞与否，选票必须解 `Blocked by` 图。
+- **Claim**：进入对应 worktree（`.worktrees/<NN>-<slug>`，分支 `ticket/<NN>-<slug>`）开工；本仓库不使用 `claimed` 中间态。
+- **Resolve**：验收清单逐条可验证后，由人确认并将 `Status:` 置为 `resolved`（合入 main 后；终态定义见 `triage-labels.md`）。

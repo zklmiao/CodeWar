@@ -5,7 +5,7 @@
 ## 文档地图
 
 - **Spec**: [docs/specs/001-codewar-mvp.md](docs/specs/001-codewar-mvp.md) —— MVP 全量规格（用户故事 / 实现决策 / 测试决策 / 数值初稿 / 开放问题）
-- **票据**: `.scratch/codewar-mvp/issues/` —— 13 张 tracer-bullet 票，每张含阻塞关系与验收清单
+- **票据**: `.scratch/codewar-mvp/issues/` —— 14 张 tracer-bullet 票，每张含阻塞关系与验收清单
 - `ref_resources/` —— 参考资料（CodeCombat 源码、The Farmer Was Replaced 拆解），仅本地存在，不入库
 
 ## 并行开发约定（git worktree）
@@ -18,4 +18,6 @@
 
 ## 当前波次
 
-Wave 1 进行中：`01 Tracer（热座最小对局）` + `13 美术占位规范`（两者均无阻塞，可并行）。
+Wave 1 已交付：`01 Tracer（热座最小对局）` + `13 美术占位规范` + `14 霓虹质感精修`（均已合入 main，`Status: resolved`）。
+
+当前 frontier（阻塞已清零，可开工）：`02 判题沙箱硬化` + `03 移动防御攻击形状` + `04 出题工厂管线` + `07 账号战绩与 ELO`（四者均只被已关闭的 01 阻塞）。其余未开工票均有阻塞：`05←04`、`06←03/04`、`08←06/07`、`09←06`、`10←09`、`11←08/02`、`12←04`；选票时以票据 `Blocked by` 图为准。
