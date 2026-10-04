@@ -34,11 +34,6 @@ WALL_CLOCK_SLACK_S = 30
 # 沙箱镜像（固定版本，compose/Dockerfile 预拉取；环境变量仅供测试覆盖）
 SANDBOX_IMAGE = os.environ.get("CODEWAR_SANDBOX_IMAGE", "python:3.12-slim")
 
-_ALLOWED_CATEGORIES = frozenset({
-    "ok", "wrong-answer", "runtime-error", "timeout",
-    "limit-exceeded", "syntax", "judge-error",
-})
-
 # syntax detail 白名单：只接受 harness 按格式拼出的行号摘要
 _SYNTAX_DETAIL_RE = re.compile(r"^line \d+: .{1,200}$")
 
@@ -257,12 +252,16 @@ def _assemble_verdict(lines: list[dict], test_cases: list[dict],
         return {"passed": category == "ok", "category": category,
                 "duration_ms": duration_ms, "detail": detail}
 
-    syn = by_i.get(-1)
-    if isinstance(syn, dict) and syn.get("status") == "syntax":
-        detail = syn.get("detail", "")
+    neg = by_i.get(-1)
+    if isinstance(neg, dict) and neg.get("status") == "syntax":
+        detail = neg.get("detail", "")
         if not isinstance(detail, str) or not _SYNTAX_DETAIL_RE.match(detail):
             detail = ""
         return verdict("syntax", detail)
+    if isinstance(neg, dict) and neg.get("status") == "runtime-error":
+        # harness 前置故障（宿主读 solution.py 失败）：玩家代码未被执行，
+        # 不是超时，归 runtime-error
+        return verdict("runtime-error")
 
     for idx, tc in enumerate(test_cases):
         r = by_i.get(idx)
@@ -335,13 +334,16 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
             "python", "/sandbox/_harness.py", str(per_test_ms),
         ]
         started = time.monotonic()
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
+        try:
+            proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+        except OSError:
+            # docker 二进制在可用性检查后消失等竞态：infra 故障，不裸抛
+            return _judge_error(0)
         try:
             out, _ = proc.communicate(input=calls_json, timeout=outer_s)
-            returncode = proc.returncode
         except subprocess.TimeoutExpired:
             # 整体墙钟熔断（第二道保险）：kill 后收已 flush 的行，已完成的
             # 用例按其结论计入，未完成的在汇总时判 timeout。
@@ -350,16 +352,13 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
                 out, _ = proc.communicate(timeout=_DRAIN_TIMEOUT_S)
             except subprocess.TimeoutExpired:
                 out = ""
-            returncode = proc.returncode
         except OSError:
             # docker 调用失败（无 daemon 等 infra 故障）
             return _judge_error(int((time.monotonic() - started) * 1000))
 
         elapsed_ms = int((time.monotonic() - started) * 1000)
-        if returncode != 0:
-            return _judge_error(elapsed_ms)
-
         lines = _parse_json_lines(out)
         if not lines:
+            # 空输出 = 容器未产出任何结论行（daemon 故障/镜像缺失等）→ infra 故障计
             return _judge_error(elapsed_ms)
         return _assemble_verdict(lines, test_cases, elapsed_ms)

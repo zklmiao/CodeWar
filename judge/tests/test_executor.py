@@ -5,6 +5,7 @@
 无 docker 环境时容器化测试 skip（fail-closed，不伪装通过）。
 """
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -198,6 +199,15 @@ def test_calls_payload_has_no_expected():
     assert all(set(c) == {"name", "call"} for c in json.loads(payload))
 
 
+def test_harness_prefailure_maps_to_runtime_error():
+    # harness 前置故障行（宿主读 solution.py 失败，玩家代码未被执行）：
+    # 纯函数单测，无需容器；归因 runtime-error 而非 timeout
+    r = executor._assemble_verdict(
+        [{"i": -1, "status": "runtime-error"}], CASES, 5)
+    assert r == {"passed": False, "category": "runtime-error",
+                 "duration_ms": 5, "detail": ""}
+
+
 @needs_docker
 def test_worker_cannot_steal_expected_in_process():
     # 期望值不进容器：__main__ 命名空间里就没有，进程内扫描拿不到任何
@@ -236,3 +246,40 @@ def test_no_docker_is_fail_closed(monkeypatch):
     r = executor.run(GOOD, CASES, timeout_ms=5000)
     assert r == {"passed": False, "category": "judge-error",
                  "duration_ms": 0, "detail": ""}
+
+
+def test_popen_failure_is_judge_error(monkeypatch):
+    # docker 二进制在可用性检查后消失：Popen 抛 OSError → judge-error，不裸抛
+    def _gone(*a, **k):
+        raise OSError("docker binary vanished")
+
+    monkeypatch.setattr(subprocess, "Popen", _gone)
+    r = executor.run(GOOD, CASES, timeout_ms=5000)
+    assert r == {"passed": False, "category": "judge-error",
+                 "duration_ms": 0, "detail": ""}
+
+
+@needs_docker
+def test_outer_timeout_drains_completed_lines(monkeypatch):
+    # 熔断路径（mock，不依赖真实竞态）：容器超时被 kill 后，已 flush 的行
+    # （case0 值对）按行结论计入汇总，未完成的 case1 判 timeout。
+    flushed = '{"i": 0, "status": "ok", "repr": "[0, 1]"}\n'
+    state = {"calls": 0}
+
+    class _HungContainer:
+        def communicate(self, input=None, timeout=None):
+            state["calls"] += 1
+            if state["calls"] == 1:
+                raise subprocess.TimeoutExpired(cmd="docker", timeout=1)
+            return (flushed, "")
+
+        def kill(self):
+            return None
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _HungContainer())
+    r = executor.run(GOOD, CASES, timeout_ms=5000)
+    assert state["calls"] == 2  # 熔断 + drain 各一次 communicate
+    assert r["passed"] is False
+    assert r["category"] == "timeout"
+    assert set(r.keys()) == {"passed", "category", "duration_ms", "detail"}
+    assert r["detail"] == ""
