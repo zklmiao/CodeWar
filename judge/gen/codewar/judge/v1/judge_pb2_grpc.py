@@ -27,7 +27,7 @@ if _version_not_supported:
 
 class JudgeServiceStub:
     """JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-    本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+    02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
     """
 
     def __init__(self, channel):
@@ -45,7 +45,7 @@ class JudgeServiceStub:
 
 class JudgeServiceServicer:
     """JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-    本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+    02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
     """
 
     def Judge(self, request, context):
@@ -72,7 +72,7 @@ def add_JudgeServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class JudgeService:
     """JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-    本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+    02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
     """
 
     @staticmethod
