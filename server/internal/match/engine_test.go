@@ -67,6 +67,13 @@ func (h *harness) latest() *matchpb.Envelope {
 	return envs[len(envs)-1]
 }
 
+// timeoutRound：推进假钟越过本回合 deadline 再触发超时——与生产语义一致
+// （HandleRoundTimeout 对未到期的陈旧触发会忽略，见 pump_test 的残响防护）。
+func (h *harness) timeoutRound() {
+	h.clk.Advance(RoundDuration + time.Second)
+	h.eng.HandleRoundTimeout()
+}
+
 // ===== 事件类型收集器 =====
 
 func roundsStarted(envs []*matchpb.Envelope) []*matchpb.RoundStarted {
@@ -134,7 +141,7 @@ func checkSeq(t *testing.T, envs []*matchpb.Envelope) {
 // 空回合：双方都未解出 → 回合照常翻页，无出手、无掉血。
 func TestEmptyRound(t *testing.T) {
 	h := newHarness(t)
-	h.eng.HandleRoundTimeout()
+	h.timeoutRound()
 
 	if got := len(roundsStarted(h.events())); got != 2 {
 		t.Fatalf("空回合后应进入第 2 回合，实际 RoundStarted 事件数=%d", got)
@@ -254,7 +261,7 @@ func TestEarlyResolution(t *testing.T) {
 func TestRoundTimeoutSingleSolve(t *testing.T) {
 	h := newHarness(t, passOK())
 	h.eng.Submit(P1, "good")
-	h.eng.HandleRoundTimeout()
+	h.timeoutRound()
 
 	acts := actions(h.events())
 	if len(acts) != 1 || acts[0].Attacker != P1 || acts[0].Damage != 22 {
@@ -337,7 +344,7 @@ func TestFirstStrikeKO(t *testing.T) {
 		h.eng.Submit(P1, "good") // 秒解，伤害 22
 		h.clk.Advance(LockDuration + time.Millisecond)
 		h.eng.Submit(P2, "bad") // P2 自损 3（错答后不再交）
-		h.eng.HandleRoundTimeout()
+		h.timeoutRound()
 	}
 	ends := endings(h.events())
 	if len(ends) != 1 {
@@ -352,7 +359,7 @@ func TestFirstStrikeKO(t *testing.T) {
 func TestRoundsCapDraw(t *testing.T) {
 	h := newHarness(t)
 	for i := 0; i < MaxRounds; i++ {
-		h.eng.HandleRoundTimeout()
+		h.timeoutRound()
 	}
 	ends := endings(h.events())
 	if len(ends) != 1 {
@@ -368,7 +375,7 @@ func TestRoundsCapWinner(t *testing.T) {
 	h := newHarness(t, passOK())
 	h.eng.Submit(P1, "good")
 	for i := 0; i < MaxRounds; i++ {
-		h.eng.HandleRoundTimeout()
+		h.timeoutRound()
 	}
 	ends := endings(h.events())
 	if len(ends) != 1 || ends[0].Winner != P1 || ends[0].Reason != ReasonRoundsCap {
