@@ -10,7 +10,7 @@ import (
 // 语法 L1：两数相加（单语法点，参考解 1 行）。
 func syntaxAddL1() question.Template {
 	meta := question.Meta{ID: "syntax-add-L1-attack", Topic: question.TopicSyntax,
-		Difficulty: question.L1, Action: question.ActionAttack, Form: question.FormBoth, Golden: true}
+		Difficulty: question.L1, Action: question.ActionAttack, Form: question.FormBoth}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		a, b := rng.Int(-20, 50), rng.Int(-20, 50)
 		scene := rng.Scenario("words")
@@ -37,7 +37,7 @@ func syntaxAddL1() question.Template {
 func syntaxSumEvensL2() question.Template {
 	meta := question.Meta{ID: "syntax-sum-evens-L2-attack", Topic: question.TopicSyntax,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input"}, Golden: true}
+		Traps: []string{"empty-input"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(3, 6), -9, 9, question.ListOpts{})
 		sc := rng.Scenario("words")
@@ -71,13 +71,13 @@ func syntaxSumEvensL2() question.Template {
 func syntaxCountDivL3() question.Template {
 	meta := question.Meta{ID: "syntax-count-div-L3-attack", Topic: question.TopicSyntax,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "no-match"}, Golden: true}
+		Traps: []string{"empty-input", "no-match"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		k := rng.Int(2, 9)
 		nums := rng.IntList(rng.Int(4, 7), -15, 15, question.ListOpts{})
 		sig := "def count_divisible(nums: list, k: int) -> int:"
-		answer := "def count_divisible(nums: list, k: int) -> int:\n    count = 0\n    for x in nums:\n        if x % k != 0:\n            continue\n        count += 1\n    if len(nums) == 0:\n        return 0\n    return count\n"
-		body := []string{"    count = 0", "    for x in nums:", "        if x % k != 0:", "            continue", "        count += 1", "    if len(nums) == 0:", "        return 0", "    return count"}
+		answer := "def count_divisible(nums: list, k: int) -> int:\n    count = 0\n    for x in nums:\n        if x % k != 0:\n            continue\n        count += 1\n    return count\n"
+		body := []string{"    count = 0", "    for x in nums:", "        if x % k != 0:", "            continue", "        count += 1", "    return count"}
 		c := 0
 		for _, v := range nums {
 			if v%k == 0 {

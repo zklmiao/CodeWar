@@ -13,7 +13,7 @@ import (
 // 移动 L1：曼哈顿距离（参考解 3 行）。
 func moveManhattanL1() question.Template {
 	meta := question.Meta{ID: "move-manhattan-L1-move", Topic: question.TopicSyntax,
-		Difficulty: question.L1, Action: question.ActionMove, Form: question.FormComplete, Golden: true}
+		Difficulty: question.L1, Action: question.ActionMove, Form: question.FormComplete}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		x1, y1 := rng.Int(0, 4), rng.Int(0, 4)
 		x2, y2 := rng.Int(0, 4), rng.Int(0, 4)
@@ -40,7 +40,7 @@ func moveManhattanL1() question.Template {
 func moveStepL2() question.Template {
 	meta := question.Meta{ID: "move-step-L2-move", Topic: question.TopicArray,
 		Difficulty: question.L2, Action: question.ActionMove, Form: question.FormComplete,
-		Traps: []string{"already-there"}, Golden: false}
+		Traps: []string{"already-there"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		px, py := rng.Int(0, 4), rng.Int(0, 4)
 		tx, ty := rng.Int(0, 4), rng.Int(0, 4)
@@ -66,7 +66,7 @@ func moveStepL2() question.Template {
 func moveFollowL3() question.Template {
 	meta := question.Meta{ID: "move-follow-L3-move", Topic: question.TopicString,
 		Difficulty: question.L3, Action: question.ActionMove, Form: question.FormComplete,
-		Traps: []string{"empty-input", "invalid-char"}, Golden: false}
+		Traps: []string{"empty-input", "invalid-char"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		moves := rng.Str(rng.Int(2, 5), "moves")
 		if moves == "" {
@@ -95,7 +95,7 @@ func moveFollowL3() question.Template {
 // 防御 L1：减伤承伤（参考解 3 行）。
 func defendReduceL1() question.Template {
 	meta := question.Meta{ID: "defend-reduce-L1-defend", Topic: question.TopicSyntax,
-		Difficulty: question.L1, Action: question.ActionDefend, Form: question.FormComplete, Golden: true}
+		Difficulty: question.L1, Action: question.ActionDefend, Form: question.FormComplete}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		raw := rng.Int(5, 40)
 		sig := "def reduced_damage(raw: int) -> int:"
@@ -120,7 +120,7 @@ func defendReduceL1() question.Template {
 func defendShieldL2() question.Template {
 	meta := question.Meta{ID: "defend-shield-L2-defend", Topic: question.TopicArray,
 		Difficulty: question.L2, Action: question.ActionDefend, Form: question.FormComplete,
-		Traps: []string{"empty-input", "overkill"}, Golden: false}
+		Traps: []string{"empty-input", "overkill"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		cap := rng.Int(10, 30)
 		n := rng.Int(1, 3)
@@ -147,7 +147,7 @@ func defendShieldL2() question.Template {
 func defendSurviveL3() question.Template {
 	meta := question.Meta{ID: "defend-survive-L3-defend", Topic: question.TopicHash,
 		Difficulty: question.L3, Action: question.ActionDefend, Form: question.FormComplete,
-		Traps: []string{"empty-input", "lethal", "full-block"}, Golden: false}
+		Traps: []string{"empty-input", "lethal", "full-block"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		hp := rng.Int(10, 30)
 		n := rng.Int(1, 3)
@@ -176,7 +176,7 @@ func defendSurviveL3() question.Template {
 // 技能 L3：蓄力爆伤（上限 60，参考解 7 行）。
 func skillBlastL3() question.Template {
 	meta := question.Meta{ID: "skill-blast-L3-skill", Topic: question.TopicSyntax,
-		Difficulty: question.L3, Action: question.ActionSkill, Form: question.FormComplete, Golden: false}
+		Difficulty: question.L3, Action: question.ActionSkill, Form: question.FormComplete}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		base, charge := rng.Int(10, 40), rng.Int(0, 20)
 		sig := "def blast_damage(base: int, charge: int) -> int:"
@@ -201,7 +201,7 @@ func skillBlastL3() question.Template {
 func skillHealL3() question.Template {
 	meta := question.Meta{ID: "skill-heal-L3-skill", Topic: question.TopicHash,
 		Difficulty: question.L3, Action: question.ActionSkill, Form: question.FormComplete,
-		Traps: []string{"no-missing", "over-heal"}, Golden: false}
+		Traps: []string{"no-missing", "over-heal"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		missing, power := rng.Int(0, 40), rng.Int(5, 35)
 		sig := "def heal_amount(missing: int, power: int) -> int:"

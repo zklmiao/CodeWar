@@ -11,7 +11,7 @@ import (
 func recursionFactorialL2() question.Template {
 	meta := question.Meta{ID: "recursion-factorial-L2-attack", Topic: question.TopicRecursion,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"base-zero", "base-one"}, Golden: true}
+		Traps: []string{"base-zero", "base-one"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(2, 7)
 		sig := "def factorial(n: int) -> int:"
@@ -37,7 +37,7 @@ func recursionFactorialL2() question.Template {
 func recursionBinarySearchL3() question.Template {
 	meta := question.Meta{ID: "recursion-binary-search-L3-attack", Topic: question.TopicRecursion,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "single-element", "not-found"}, Golden: true}
+		Traps: []string{"empty-input", "single-element", "not-found"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(3, 6)
 		nums := rng.IntList(n, 0, 30, question.ListOpts{Distinct: true, Sorted: true})
@@ -67,7 +67,7 @@ func recursionBinarySearchL3() question.Template {
 func recursionPascalL4() question.Template {
 	meta := question.Meta{ID: "recursion-pascal-L4-attack", Topic: question.TopicRecursion,
 		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"row-zero", "row-one"}, Golden: true}
+		Traps: []string{"row-zero", "row-one"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(2, 6)
 		sig := "def pascal_row(n: int) -> list:"

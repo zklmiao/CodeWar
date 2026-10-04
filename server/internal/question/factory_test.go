@@ -102,6 +102,8 @@ func TestCreateNoMatchError(t *testing.T) {
 	}
 }
 
+// 白盒直调为 review 认可的已知例外：抽题策略的统计性质（300 抽分布、单调性）
+// 难以经公共边界断言；12 号票重构抽题策略时收敛到公共边界。
 // 均匀策略：难度 ∈ [L1, 上限]。
 func TestUniformDifficultyInRange(t *testing.T) {
 	for round := 1; round <= 20; round++ {

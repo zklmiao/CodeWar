@@ -11,7 +11,7 @@ import (
 func hashCountL2() question.Template {
 	meta := question.Meta{ID: "hash-count-L2-attack", Topic: question.TopicHash,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "absent"}, Golden: true}
+		Traps: []string{"empty-input", "absent"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(3, 6), 1, 5, question.ListOpts{})
 		target := rng.Int(1, 5)
@@ -38,7 +38,7 @@ func hashCountL2() question.Template {
 func hashWordFreqL3() question.Template {
 	meta := question.Meta{ID: "hash-word-frequency-L3-attack", Topic: question.TopicHash,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"repeated-max", "single-distinct"}, Golden: true}
+		Traps: []string{"repeated-max", "single-distinct"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		pool := []string{"arena", "blade", "code", "storm", "quest"}
 		n := rng.Int(4, 7)
@@ -67,7 +67,7 @@ func hashWordFreqL3() question.Template {
 func hashTopKL4() question.Template {
 	meta := question.Meta{ID: "hash-top-k-L4-attack", Topic: question.TopicHash,
 		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"tie-order", "single-distinct", "k-equals-distinct"}, Golden: true}
+		Traps: []string{"tie-order", "single-distinct", "k-equals-distinct"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(5, 8), 1, 5, question.ListOpts{})
 		d := distinctCount(nums)

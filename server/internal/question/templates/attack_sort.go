@@ -11,7 +11,7 @@ import (
 func sortParityL2() question.Template {
 	meta := question.Meta{ID: "sort-parity-L2-attack", Topic: question.TopicSort,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input"}, Golden: true}
+		Traps: []string{"empty-input"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(3, 6), 0, 9, question.ListOpts{})
 		sig := "def sort_by_parity(nums: list) -> list:"
@@ -39,7 +39,7 @@ func sortParityL2() question.Template {
 func sortKthL3() question.Template {
 	meta := question.Meta{ID: "sort-kth-L3-attack", Topic: question.TopicSort,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"single-element", "duplicates"}, Golden: true}
+		Traps: []string{"single-element", "duplicates"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(3, 6)
 		nums := rng.IntList(n, 0, 20, question.ListOpts{})
@@ -68,7 +68,7 @@ func sortKthL3() question.Template {
 func sortInsertionL4() question.Template {
 	meta := question.Meta{ID: "sort-insertion-L4-attack", Topic: question.TopicSort,
 		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "single-element", "already-sorted", "reverse-sorted"}, Golden: true}
+		Traps: []string{"empty-input", "single-element", "already-sorted", "reverse-sorted"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(3, 6), 0, 20, question.ListOpts{})
 		sig := "def insertion_sort(nums: list) -> list:"

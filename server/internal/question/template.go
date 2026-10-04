@@ -85,7 +85,6 @@ type Meta struct {
 	Action     Action
 	Form       Form
 	Traps      []string // 边界陷阱声明，必须与隐藏用例一一对应（checks 强制）
-	Golden     bool     // 是否黄金样板（MANIFEST 登记）
 }
 
 // Instance：工厂产物（MatchEngine 与 Judge 的消费单元，设计 002 §1）。

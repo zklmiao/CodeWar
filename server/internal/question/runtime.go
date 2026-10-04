@@ -1,4 +1,4 @@
-// 槽位原语运行库（设计 002 §1）：种子化 RNG、命名池、数据构造器、
+// 槽位原语运行库（设计 002 §1）：种子化 RNG、数据构造器、
 // 情境池、双形式渲染、不变量校验。全库唯一随机来源是 RNG 流。
 package question
 
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// RNG：种子化随机流（原语 rng.int / pick / sample / shuffle 的唯一载体）。
+// RNG：种子化随机流（原语 rng.int / pick 的唯一载体）。
 type RNG struct {
 	r *rand.Rand
 }
@@ -41,58 +41,10 @@ func (g *RNG) PickN(cands []string, n int) []string {
 	return out
 }
 
-// Sample：从候选中不放回取 n 个（n 超限则全取后打乱）。
-func (g *RNG) Sample(cands []string, n int) []string {
-	cp := append([]string(nil), cands...)
-	g.Shuffle(cp)
-	if n > len(cp) {
-		n = len(cp)
-	}
-	return cp[:n]
-}
-
-// Shuffle：原地打乱字符串切片。
-func (g *RNG) Shuffle(s []string) {
-	g.r.Shuffle(len(s), func(i, j int) { s[i], s[j] = s[j], s[i] })
-}
-
-// ShuffleInts：原地打乱整数切片。
-func (g *RNG) ShuffleInts(s []int) {
-	g.r.Shuffle(len(s), func(i, j int) { s[i], s[j] = s[j], s[i] })
-}
-
 // Bool：按概率返回 true。
 func (g *RNG) Bool(p float64) bool { return g.r.Float64() < p }
 
-// ---- 命名池（names.variable / names.function，防实例趋同） ----
-
-var varPools = map[string][]string{
-	"int":    {"n", "x", "k", "total", "count", "num", "val", "m"},
-	"list":   {"nums", "arr", "items", "data", "vals", "seq"},
-	"string": {"s", "text", "word", "line", "msg", "code"},
-	"dict":   {"freq", "counts", "table", "mapping", "seen", "bag"},
-}
-
-var funcPool = []string{"solve", "calc", "compute", "process", "evaluate", "transform"}
-
-// Variable：按品类取随机变量名。
-func (g *RNG) Variable(kind string) string {
-	pool, ok := varPools[kind]
-	if !ok || len(pool) == 0 {
-		pool = varPools["int"]
-	}
-	name := g.Pick(pool)
-	// 约 1/3 概率加数字后缀，扩大实例差异。
-	if g.Bool(0.33) {
-		name = fmt.Sprintf("%s%d", name, g.Int(2, 9))
-	}
-	return name
-}
-
-// Function：取随机函数名（模板一般固定签名，本原语供仿写变体用）。
-func (g *RNG) Function() string { return g.Pick(funcPool) }
-
-// ---- 数据构造器（data.list / matrix / string） ----
+// ---- 数据构造器（data.list / string） ----
 
 // ListOpts：data.list 选项（distinct / sorted / mustContain）。
 type ListOpts struct {
@@ -124,15 +76,6 @@ func (g *RNG) IntList(size, min, max int, opts ListOpts) []int {
 	return out
 }
 
-// Matrix：构造 rows×cols 二维整数矩阵。
-func (g *RNG) Matrix(rows, cols, min, max int) [][]int {
-	m := make([][]int, rows)
-	for i := range m {
-		m[i] = g.IntList(cols, min, max, ListOpts{})
-	}
-	return m
-}
-
 var strAlphabets = map[string]string{
 	"lower":  "abcdefghijklmnopqrstuvwxyz",
 	"alpha":  "abcde",
@@ -158,7 +101,6 @@ func (g *RNG) Str(length int, alphabet string) string {
 
 var scenarioPools = map[string][]string{
 	"words": {"arena", "battle", "code", "spell", "quest", "tower", "blade", "storm"},
-	"names": {"Aria", "Bolt", "Cinder", "Dusk", "Ember", "Frost"},
 }
 
 // Scenario：取随机情境词。

@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"codewar/server/internal/match"
 )
@@ -20,7 +19,9 @@ const (
 	StrategyClimb   = "climb"
 )
 
-// MaxRoundsFallback：爬坡映射的分母（与 match.MaxRounds 一致，避免循环 import 常量亦可）。
+// MaxRoundsFallback：爬坡映射的分母。
+// 与 match.MaxRounds 语义同步：question 包不得反向依赖 match 包
+// （依赖方向 match→question，由 hub 桥接），改动 MaxRounds 时必须同步此值。
 const climbRounds = 10
 
 // Config：对局级出题配置（05 号票后续从 UI 喂真实值，本票默认即可）。
@@ -108,7 +109,7 @@ func (f *Factory) Create(spec Spec, seed string) (Instance, error) {
 	if spec.Action == "" {
 		return Instance{}, fmt.Errorf("spec 缺少动作类型")
 	}
-	cands := filterTemplates(f.registry, spec, f.cfg.Topics)
+	cands := filterTemplates(f.registry, spec)
 	if len(cands) == 0 {
 		return Instance{}, fmt.Errorf("无匹配模板：action=%s topic=%s difficulty=%v form=%s",
 			spec.Action, spec.Topic, spec.Difficulty, spec.Form)
@@ -232,7 +233,9 @@ func pickForm(rng *RNG, declared Form) Form {
 }
 
 // filterTemplates：按 spec 精确过滤（Topic 空 = 不限；Form both 兼容任一请求）。
-func filterTemplates(all []Template, spec Spec, cfgTopics []Topic) []Template {
+// 注：Config.Topics 的题型过滤不在此生效——实际过滤在 pickTopic 经 f.cfg.Topics
+// 选定本题回合题型后，由上层以 Spec.Topic 传入。
+func filterTemplates(all []Template, spec Spec) []Template {
 	var out []Template
 	for _, t := range all {
 		m := t.Meta()
@@ -257,8 +260,8 @@ func specKey(s Spec) string {
 	return fmt.Sprintf("%s-%d-%s-%s", s.Topic, int(s.Difficulty), s.Action, s.Form)
 }
 
-// 实例深度相等（测试用，不暴露：反射比较剔除 Seed 仍应相等，见 factory_test）。
+// 实例深度相等（测试用：剔除 Seed 后比较）。
 func instancesEqual(a, b Instance) bool {
 	a.Seed, b.Seed = "", ""
-	return reflect.DeepEqual(a, b) && strings.TrimSpace(a.AnswerKey) == strings.TrimSpace(b.AnswerKey)
+	return reflect.DeepEqual(a, b)
 }

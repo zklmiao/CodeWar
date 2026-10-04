@@ -11,7 +11,7 @@ import (
 func arrayDedupL2() question.Template {
 	meta := question.Meta{ID: "array-dedup-L2-attack", Topic: question.TopicArray,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "all-same"}, Golden: true}
+		Traps: []string{"empty-input", "all-same"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums := rng.IntList(rng.Int(3, 6), 1, 5, question.ListOpts{})
 		sig := "def dedup(nums: list) -> list:"
@@ -37,7 +37,7 @@ func arrayDedupL2() question.Template {
 func arrayTwoSumL3() question.Template {
 	meta := question.Meta{ID: "array-two-sum-L3-attack", Topic: question.TopicArray,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"duplicates", "negative"}, Golden: true}
+		Traps: []string{"duplicates", "negative"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		nums, target := genTwoSum(rng)
 		sol := solveTwoSum(nums, target)
@@ -65,7 +65,7 @@ func arrayTwoSumL3() question.Template {
 func arrayWindowSumL4() question.Template {
 	meta := question.Meta{ID: "array-window-sum-L4-attack", Topic: question.TopicArray,
 		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "single-element", "all-negative", "full-window"}, Golden: true}
+		Traps: []string{"empty-input", "single-element", "all-negative", "full-window"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(4, 7)
 		nums := rng.IntList(n, -9, 9, question.ListOpts{})

@@ -12,7 +12,7 @@ import (
 func stringPalindromeL2() question.Template {
 	meta := question.Meta{ID: "string-palindrome-L2-attack", Topic: question.TopicString,
 		Difficulty: question.L2, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "case-sensitive"}, Golden: true}
+		Traps: []string{"empty-input", "case-sensitive"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		word := rng.Pick([]string{"level", "abba", "racecar", "hello", "Abba", "a"})
 		sig := "def is_palindrome(s: str) -> bool:"
@@ -38,7 +38,7 @@ func stringPalindromeL2() question.Template {
 func stringVowelCountL3() question.Template {
 	meta := question.Meta{ID: "string-vowel-count-L3-attack", Topic: question.TopicString,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "no-vowel"}, Golden: true}
+		Traps: []string{"empty-input", "no-vowel"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(4, 8)
 		s := rng.Str(n, "lower")
@@ -65,7 +65,7 @@ func stringVowelCountL3() question.Template {
 func stringRunLengthL4() question.Template {
 	meta := question.Meta{ID: "string-run-length-L4-attack", Topic: question.TopicString,
 		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"empty-input", "single-char", "long-run"}, Golden: true}
+		Traps: []string{"empty-input", "single-char", "long-run"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		alpha := rng.Pick([]string{"alpha", "binary"})
 		n := rng.Int(3, 6)
