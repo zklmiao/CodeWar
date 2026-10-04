@@ -53,5 +53,5 @@ docker run --rm -i
 
 - **(+)** 四类作弊向量全部在真实隔离下被拒：死循环→timeout、联网→Network is unreachable、内存/进程炸弹→limit-exceeded、部分通过→失败且不泄漏计数；恶意提交后服务存活（容器 `--rm` 即抛）。
 - **(+)** 主服务零改动：verdict 仍是字符串 category，引擎对非 `judge-error` 失败一律自损+锁（含新增 `limit-exceeded`，fail-closed 到惩罚路径）。
-- **(−)** 判题依赖宿主 docker.sock（compose 挂载；特权面扩大但仅限 judge 服务），Windows 开发机路径挂载需经 Docker Desktop 转换（executor 内统一规范化）。
+- **(−)** 判题依赖宿主 docker.sock（compose 挂载；特权面扩大但仅限 judge 服务），Windows 开发机上挂载路径为 `os.path.abspath` 后的字面 Windows 路径（仅相对转绝对，不做盘符/分隔符转换），由 Docker Desktop 直接接受（本票已实测可用）。
 - **(−)** 每个容器化测试增加 1–3 秒开销，容器化测试数量克制；CI 可跑（ubuntu 自带 docker），无 docker 环境下容器化测试 skip（`judge-error` 不伪装成通过）。
