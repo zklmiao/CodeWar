@@ -6,10 +6,10 @@ import "testing"
 // 平局严格 +0（spec 附注硬规则：即使分差巨大也不摆动）。
 func TestSettle(t *testing.T) {
 	cases := []struct {
-		name             string
-		p1, p2           int
-		winner           string
-		wantP1, wantP2   int
+		name           string
+		p1, p2         int
+		winner         string
+		wantP1, wantP2 int
 	}{
 		{"同分-p1胜", 1000, 1000, "p1", 1016, 984},
 		{"同分-p2胜", 1000, 1000, "p2", 984, 1016},

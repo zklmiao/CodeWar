@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/url"
 	"os"
@@ -83,9 +84,12 @@ func TestAuthFlow(t *testing.T) {
 	if _, _, err := s.Register(ctx, "alice", "other-pw"); err != ErrUsernameTaken {
 		t.Fatalf("重名注册应报 ErrUsernameTaken，实际 %v", err)
 	}
-	// 参数校验
+	// 参数校验（store  seam 断言哨兵，HTTP 400 断言在 accounts 侧）
 	if _, _, err := s.Register(ctx, "a", "s3cret-pw"); err == nil {
 		t.Fatal("过短用户名应被拒绝")
+	}
+	if _, _, err := s.Register(ctx, "bad name", "s3cret-pw"); !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("含空白用户名应报 ErrInvalidUsername，实际 %v", err)
 	}
 	if _, _, err := s.Register(ctx, "Bob", "123"); err == nil {
 		t.Fatal("过短密码应被拒绝")
@@ -94,6 +98,10 @@ func TestAuthFlow(t *testing.T) {
 	// 同错：未知用户 vs 错误密码
 	if _, _, err := s.Login(ctx, "Nobody", "s3cret-pw"); err != ErrInvalidCredentials {
 		t.Fatalf("未知用户应报统一凭证错误，实际 %v", err)
+	}
+	// 形态非法直接 401，不到库（Login 参数分支）
+	if _, _, err := s.Login(ctx, "a", "b"); err != ErrInvalidCredentials {
+		t.Fatalf("非法形态登录应报统一凭证错误，实际 %v", err)
 	}
 	if _, _, err := s.Login(ctx, "alice", "wrong-pw"); err != ErrInvalidCredentials {
 		t.Fatalf("错误密码应报统一凭证错误，实际 %v", err)
@@ -185,6 +193,92 @@ func TestConcurrentDuplicateRegister(t *testing.T) {
 	}
 }
 
+// 坏 DSN/连不上：Open 直接报错（启动 fail-fast 的地基；无 DB 可跑）。
+func TestOpenBadDSN(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := Open(ctx, "postgres://u:p@127.0.0.1:1/nope?sslmode=disable"); err == nil {
+		t.Fatal("坏 DSN 应 Open 失败")
+	}
+	// 驱动层直接拒收的非法 DSN（sql.Open 错误分支）
+	if _, err := Open(ctx, "://"); err == nil {
+		t.Fatal("非法 DSN 应 Open 失败")
+	}
+}
+
+// 已关闭的库：各操作返回错误而非 panic（DB 宕机时的 fail-closed）。
+func TestOpsOnClosedStore(t *testing.T) {
+	s := openTestStore(t)
+	id := uuid.New()
+	s.Close()
+	if _, err := s.Authenticate(context.Background(), "tok"); err == nil {
+		t.Fatal("关库后鉴权应报错")
+	}
+	if err := s.Logout(context.Background(), "tok"); err == nil {
+		t.Fatal("关库后注销应报错")
+	}
+	if _, _, err := s.RecordMatch(context.Background(), MatchResult{MatchID: uuid.New(), P1UserID: id, P2UserID: id}); err == nil {
+		t.Fatal("关库后结算应报错")
+	}
+	if _, _, err := s.Register(context.Background(), "closeduser", "pw-1234"); err == nil {
+		t.Fatal("关库后注册应报错")
+	}
+	if _, _, err := s.Login(context.Background(), "closeduser", "pw-1234"); err == nil {
+		t.Fatal("关库后登录应报错")
+	}
+	if _, err := s.GetProfile(context.Background(), id, 20); err == nil {
+		t.Fatal("关库后个人页应报错")
+	}
+}
+
+// 关库上跑迁移：fail-fast（main 的退出分支依赖此语义）。
+func TestApplyMigrationsClosedDB(t *testing.T) {
+	db, err := sql.Open("postgres", "postgres://u:p@127.0.0.1:1/nope?sslmode=disable")
+	if err != nil {
+		t.Fatalf("sql.Open 意外失败：%v", err)
+	}
+	db.Close()
+	if err := ApplyMigrations(db); err == nil {
+		t.Fatal("关库上迁移应报错")
+	}
+}
+
+// 未知用户结算：fail-closed（hub 只传已认证用户，此处锁死契约）。
+func TestRecordMatchUnknownUsers(t *testing.T) {
+	s := openTestStore(t)
+	if _, _, err := s.RecordMatch(context.Background(), MatchResult{
+		MatchID: uuid.New(), Winner: "p1", Reason: "ko", P1UserID: uuid.New(), P2UserID: uuid.New(),
+	}); err == nil {
+		t.Fatal("未知用户结算应报错")
+	}
+	// 一真一假：第二行加锁失败同样报错（覆盖第二查询分支）
+	a, _, err := s.Register(context.Background(), "halfuser", "password1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.RecordMatch(context.Background(), MatchResult{
+		MatchID: uuid.New(), Winner: "p1", Reason: "ko", P1UserID: a.ID, P2UserID: uuid.New(),
+	}); err == nil {
+		t.Fatal("半未知用户结算应报错")
+	}
+}
+
+// 会话签发撞外键：CreateSession 错误上浮（newSession 错误分支）。
+func TestNewSessionUnknownUser(t *testing.T) {
+	s := openTestStore(t)
+	if _, _, err := s.newSession(context.Background(), uuid.New()); err == nil {
+		t.Fatal("未知用户签发会话应报错")
+	}
+}
+
+// 空令牌注销：幂等 nil（handler 依赖此语义报 204）。
+func TestLogoutEmptyToken(t *testing.T) {
+	s := openTestStore(t)
+	if err := s.Logout(context.Background(), ""); err != nil {
+		t.Fatalf("空令牌注销应为 nil：%v", err)
+	}
+}
+
 // 落库 → 查询战绩 → ELO 历史一致性；平局 +0 且照样记行。
 func TestRecordAndProfile(t *testing.T) {
 	s := openTestStore(t)
@@ -263,6 +357,13 @@ func TestRecordAndProfile(t *testing.T) {
 	prof2, _ := s.GetProfile(ctx, a.ID, 20)
 	if prof2.Total != 2 || prof2.Draws != 1 || len(prof2.Recent) != 2 {
 		t.Fatalf("平局后聚合不符：%+v", prof2)
+	}
+	// 条数钳制：0 与超限都回落默认（不断言具体默认，只断言可用）
+	if p0, err := s.GetProfile(ctx, a.ID, 0); err != nil || p0.Total != 2 {
+		t.Fatalf("limit=0 应回落可用：%v %+v", err, p0)
+	}
+	if pBig, err := s.GetProfile(ctx, a.ID, 9999); err != nil || len(pBig.Recent) > DefaultRecentLimit {
+		t.Fatalf("超限 limit 应钳制：%v %+v", err, pBig)
 	}
 	if prof2.Recent[0].Outcome != "draw" {
 		t.Fatalf("最新一条应为平局：%+v", prof2.Recent[0])

@@ -111,6 +111,17 @@ func TestHTTPFlow(t *testing.T) {
 	if rec := call("POST", "/api/register", `{"username":"bad name","password":"pw-1234"}`, ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("含空白用户名应 400，实际 %d：%s", rec.Code, rec.Body.String())
 	}
+	// 非法 JSON 体 → 400（解码分支覆盖）
+	if rec := call("POST", "/api/register", `{"username":`, ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("非法 JSON 注册应 400，实际 %d", rec.Code)
+	}
+	if rec := call("POST", "/api/login", `not-json`, ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("非法 JSON 登录应 400，实际 %d", rec.Code)
+	}
+	// 注销不带令牌 → 401
+	if rec := call("POST", "/api/logout", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("无令牌 logout 应 401，实际 %d", rec.Code)
+	}
 	// 错误密码 401（与用户不存在同错，响应体同文）
 	rec = call("POST", "/api/login", `{"username":"HttpUser","password":"nope-nope"}`, "")
 	if rec.Code != http.StatusUnauthorized {
@@ -132,10 +143,10 @@ func TestHTTPFlow(t *testing.T) {
 		t.Fatalf("profile 应 200，实际 %d：%s", rec.Code, rec.Body.String())
 	}
 	var prof struct {
-		Username       string
-		Total          int32
-		WinRate        float64
-		Recent         []any
+		Username string
+		Total    int32
+		WinRate  float64
+		Recent   []any
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &prof); err != nil || prof.Username != "HttpUser" || prof.Total != 0 || prof.WinRate != 0 {
 		t.Fatalf("profile 聚合异常：%s err=%v", rec.Body.String(), err)
@@ -151,4 +162,61 @@ func TestHTTPFlow(t *testing.T) {
 	if rec := call("GET", "/api/me", "", sess.Token); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("登出后 me 应 401，实际 %d", rec.Code)
 	}
+}
+
+// 关库后的 handler：DB 错误映射 500 而非 panic（500 分支覆盖）。
+func TestClosedStoreMaps500(t *testing.T) {
+	dsn := strings.TrimSpace(os.Getenv("CODEWAR_TEST_DSN"))
+	if dsn == "" || !strings.Contains(strings.ToLower(dsn), "test") {
+		t.Skip("需 CODEWAR_TEST_DSN（测试库）")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	st, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("测试库连接失败：%v", err)
+	}
+	st.Close()
+	h := New(st, slog.Default())
+	r := chi.NewRouter()
+	h.Mount(r)
+	call := func(method, target, token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+	// token 形态合法但库已关：鉴权查库失败 → 401（current 统一口径，不 500 不 panic）
+	if rec := call("GET", "/api/me", "tok"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("关库后 me 应 401，实际 %d", rec.Code)
+	}
+	// 注册/登录的库错误 → 500（default 分支覆盖；注意用合法长度参数，
+	// 否则先倒在参数校验 400，到不了存储层）
+	body := strings.NewReader(`{"username":"closeduser","password":"pw-1234"}`)
+	req := httptest.NewRequest("POST", "/api/register", body)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("关库后 register 应 500，实际 %d", rec.Code)
+	}
+	body = strings.NewReader(`{"username":"closeduser","password":"pw-1234"}`)
+	req = httptest.NewRequest("POST", "/api/login", body)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("关库后 login 应 500，实际 %d", rec.Code)
+	}
+	// 注销直调存储层 → 500（logout 的 err 分支覆盖）
+	req = httptest.NewRequest("POST", "/api/logout", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("关库后 logout 应 500，实际 %d", rec.Code)
+	}
+	// 注：profile 的 500 需"鉴权成功但聚合失败"的瞬间库故障，常规手段
+	// 无法稳定构造（关库会先倒在鉴权），该 2 行分支留作已知缺口，见报告。
 }

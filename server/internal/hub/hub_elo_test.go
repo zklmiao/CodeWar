@@ -194,6 +194,113 @@ func TestBroadcastSkipsSelfPlay(t *testing.T) {
 	}
 }
 
+// passJudge：全过桩。双方秒解 → 每回合互扣 22 → 5 回合双双归零平局，数秒打满。
+type passJudge struct{}
+
+func (passJudge) Judge(_ context.Context, _ string, _ []match.TestCase) match.JudgeResult {
+	return match.JudgeResult{Passed: true, Category: match.CategoryOK}
+}
+
+// 完整回路：双认证接入 → 打满 → 终局附 ELO（07 号票主干，CI 可跑，无需真 DB/judge）。
+func TestAuthenticatedMatchSettlesEloEndToEnd(t *testing.T) {
+	a, b := testUsers()
+	st := &stubStore{
+		userByToken: map[string]store.User{"tok-a": a, "tok-b": b},
+		d1:          store.EloDelta{Player: "p1", UserID: a.ID, Before: 1000, After: 1000},
+		d2:          store.EloDelta{Player: "p2", UserID: b.ID, Before: 1000, After: 1000},
+	}
+	h := New(passJudge{}, slog.Default(), nil)
+	h.st = st
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ends := make(chan *matchpb.MatchEnded, 2)
+	for _, tc := range []struct{ player, token string }{{"p1", "tok-a"}, {"p2", "tok-b"}} {
+		ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+		if err != nil {
+			t.Fatalf("拨号失败：%v", err)
+		}
+		defer ws.Close()
+		join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+			Join: &matchpb.JoinRequest{Player: tc.player, Token: tc.token},
+		}})
+		if err := ws.WriteMessage(websocket.TextMessage, join); err != nil {
+			t.Fatalf("发送 join 失败：%v", err)
+		}
+		go playLoop(t, ws, tc.player, ends)
+	}
+
+	collected := make([]*matchpb.MatchEnded, 0, 2)
+	timeout := time.After(30 * time.Second)
+	for len(collected) < 2 {
+		select {
+		case me := <-ends:
+			if me == nil {
+				t.Fatal("对局中连接断裂（playLoop 已报明细）")
+			}
+			collected = append(collected, me)
+		case <-timeout:
+			t.Fatal("30s 内对局未终局")
+		}
+	}
+	for _, me := range collected {
+		if me.GetWinner() != "" {
+			t.Fatalf("对称秒解应判平局，实际 winner=%q reason=%q", me.GetWinner(), me.GetReason())
+		}
+		if len(me.GetElo()) != 2 || me.GetElo()[0].GetPlayer() != "p1" || me.GetElo()[1].GetPlayer() != "p2" {
+			t.Fatalf("终局应附双方 ELO：%v", me.GetElo())
+		}
+		if me.GetElo()[0].GetUserId() != a.ID.String() || me.GetElo()[1].GetUserId() != b.ID.String() {
+			t.Fatalf("ELO 应绑定双方用户：%v", me.GetElo())
+		}
+	}
+	if st.lastRes == nil || st.lastRes.Winner != "" || st.lastRes.P1UserID != a.ID || st.lastRes.P2UserID != b.ID {
+		t.Fatalf("落库参数不符：%+v", st.lastRes)
+	}
+	if d := st.lastRes.DurationMs; d < 0 || d > 30000 {
+		t.Fatalf("真实对局时长应合理，实际 %d", d)
+	}
+}
+
+// playLoop：测试客户端——见面板即秒交，全程只为把对局推向终局。
+// 出错只 E（不断言），调用方以 ends==nil 或超时判 fail，保证快速失败。
+func playLoop(t *testing.T, ws *websocket.Conn, player string, ends chan<- *matchpb.MatchEnded) {
+	t.Helper()
+	_ = ws.SetReadDeadline(time.Now().Add(30 * time.Second))
+	for {
+		_, data, err := ws.ReadMessage()
+		if err != nil {
+			t.Errorf("[%s] 读事件失败: %v", player, err)
+			ends <- nil
+			return
+		}
+		var msg matchpb.ServerMessage
+		if err := (protojson.UnmarshalOptions{}).Unmarshal(data, &msg); err != nil {
+			t.Errorf("[%s] 解析失败: %v", player, err)
+			ends <- nil
+			return
+		}
+		env := msg.GetEvent()
+		if env == nil {
+			continue // 快照
+		}
+		if env.GetPanelReady() != nil {
+			sub, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Submit{
+				Submit: &matchpb.SubmitRequest{Code: "code"},
+			}})
+			if err := ws.WriteMessage(websocket.TextMessage, sub); err != nil {
+				t.Errorf("[%s] 提交失败: %v", player, err)
+				ends <- nil
+				return
+			}
+		}
+		if me := env.GetMatchEnded(); me != nil {
+			ends <- me
+			return
+		}
+	}
+}
+
 // 有效 token 建连绑定席位；断开后连接与席位一并清除（H1：
 // 否则同席位换身份重连会沿用旧身份结算）。
 func TestJoinBindsUserAndCleansUpOnDisconnect(t *testing.T) {
@@ -274,6 +381,110 @@ func TestJoinWithTokenButNoStoreIsRejected(t *testing.T) {
 		t.Fatal("被拒的连接不得创建引擎")
 	}
 }
+
+// 首条消息非法 → 关连接，不建引擎（readJoin 错误分支）。
+func TestJoinRejectsMalformedMessage(t *testing.T) {
+	h := New(nil, slog.Default(), nil)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("拨号失败：%v", err)
+	}
+	defer ws.Close()
+	if err := ws.WriteMessage(websocket.TextMessage, []byte("not-json{{{")); err != nil {
+		t.Fatalf("发送失败：%v", err)
+	}
+	if _, _, err := ws.ReadMessage(); err == nil {
+		t.Fatal("非法首条消息应被拒连")
+	}
+	if h.engine != nil {
+		t.Fatal("被拒的连接不得创建引擎")
+	}
+}
+
+// 同席位重复接入 → 后者被拒，前者不受影响（taken 分支）。
+func TestJoinRejectsDuplicateSeat(t *testing.T) {
+	h := New(nil, slog.Default(), nil)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+	dial := func() *websocket.Conn {
+		t.Helper()
+		ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+		if err != nil {
+			t.Fatalf("拨号失败：%v", err)
+		}
+		return ws
+	}
+	joinOf := func(player string) []byte {
+		b, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+			Join: &matchpb.JoinRequest{Player: player},
+		}})
+		return b
+	}
+
+	first := dial()
+	defer first.Close()
+	if err := first.WriteMessage(websocket.TextMessage, joinOf("p1")); err != nil {
+		t.Fatal(err)
+	}
+	_ = first.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, _, err := first.ReadMessage(); err != nil {
+		t.Fatalf("首个 p1 应建连成功：%v", err)
+	}
+
+	second := dial()
+	defer second.Close()
+	if err := second.WriteMessage(websocket.TextMessage, joinOf("p1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := second.ReadMessage(); err == nil {
+		t.Fatal("重复席位应被拒连")
+	}
+	h.mu.Lock()
+	n := len(h.conns)
+	h.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("前者连接应不受影响，conns=%d", n)
+	}
+}
+
+// 回合外非法消息不断连（readLoop 继续服务，而非退出）。
+func TestLoopSurvivesGarbageMessage(t *testing.T) {
+	h := New(nil, slog.Default(), nil)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatalf("拨号失败：%v", err)
+	}
+	defer ws.Close()
+	join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
+		Join: &matchpb.JoinRequest{Player: "p1"},
+	}})
+	if err := ws.WriteMessage(websocket.TextMessage, join); err != nil {
+		t.Fatal(err)
+	}
+	_ = ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, _, err := ws.ReadMessage(); err != nil {
+		t.Fatalf("建连应成功：%v", err)
+	}
+	if err := ws.WriteMessage(websocket.TextMessage, []byte("garbage{{{")); err != nil {
+		t.Fatal(err)
+	}
+	// 给服务端一个处理时间片；若 readLoop 退出，conns 会被清空
+	time.Sleep(200 * time.Millisecond)
+	h.mu.Lock()
+	n := len(h.conns)
+	h.mu.Unlock()
+	if n != 1 {
+		t.Fatal("非法后续消息不应断开连接")
+	}
+}
+
+// 无效 token 建连被拒（客户端应重登后重试，不静默降级为匿名）。
 func TestJoinRejectsInvalidToken(t *testing.T) {
 	st := &stubStore{authErr: store.ErrUnauthorized}
 	h := New(nil, slog.Default(), nil)
