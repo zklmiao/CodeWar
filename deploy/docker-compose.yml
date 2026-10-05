@@ -34,7 +34,11 @@ services:
       POSTGRES_PASSWORD: codewar-dev
       POSTGRES_DB: codewar
     ports:
-      - "5432:5432"
+      # 宿主 5432 落在 Windows 保留端口区间（bind 被拒），15432 又被 07 号票的
+      # 集成测试库 codewar-test-pg 占用，故映射到 25432。两个库分工：
+      #   - 本容器（app 持久化，compose 内部走 postgres:5432）：localhost:25432
+      #   - codewar-test-pg（store 集成测试，CODEWAR_TEST_DSN 门控）：localhost:15432
+      - "25432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # 迁移脚手架（01 号票只落 schema，07 号票接入持久化）
