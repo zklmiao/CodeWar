@@ -93,8 +93,8 @@ describe("对局状态机（事件流驱动）", () => {
     const s = useMatchStore();
     s.applyEnvelope(Envelope.fromJSON(envelope(1, "roundStarted", { round: 1, deadlineUnixMs: "999" })));
     s.applyEnvelope(Envelope.fromJSON(envelope(2, "panelReady", panelBody())));
-    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: "0", moveTo: { row: 3, col: 0 } })));
-    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "defend", solveMs: "5" })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: 0, moveTo: { row: 3, col: 0 } })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "defend", solveMs: 5 })));
     expect(s.positions.p1).toEqual({ row: 3, col: 0 });
     expect(s.shield.p2).toBe(true);
 
@@ -111,16 +111,16 @@ describe("对局状态机（事件流驱动）", () => {
     s.applyEnvelope(Envelope.fromJSON(envelope(1, "roundStarted", { round: 1, deadlineUnixMs: "999" })));
     s.applyEnvelope(Envelope.fromJSON(envelope(2, "panelReady", panelBody())));
 
-    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: "0", moveTo: { row: 3, col: 0 } })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: 0, moveTo: { row: 3, col: 0 } })));
     expect(s.positions.p1).toEqual({ row: 3, col: 0 });
 
-    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "attack", solveMs: "10", dodged: true })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "attack", solveMs: 10, dodged: true })));
     expect(s.log.some((l) => l.text.includes("落空"))).toBe(true);
 
-    s.applyEnvelope(Envelope.fromJSON(envelope(5, "actionResolved", { attacker: "p2", action: "attack", solveMs: "10", damage: 9, shielded: true })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(5, "actionResolved", { attacker: "p2", action: "attack", solveMs: 10, damage: 9, shielded: true })));
     expect(s.log.some((l) => l.text.includes("护盾折减"))).toBe(true);
 
-    s.applyEnvelope(Envelope.fromJSON(envelope(6, "submissionJudged", { player: "p1", passed: true, category: "ok", solveMs: "0", action: "move" })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(6, "submissionJudged", { player: "p1", passed: true, category: "ok", solveMs: 0, action: "move" })));
     expect(s.viewerActed).toBe(true);
     expect(s.actedKind).toBe("move");
   });

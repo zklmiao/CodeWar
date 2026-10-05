@@ -471,7 +471,10 @@ func TestMirrorProblemRotation(t *testing.T) {
 	}
 }
 
-// 判题用对题：移动提交必须用提交者自己的移动题测试用例判（探针用例甄别）。
+// 判题用对题（行动类型甄别）：移动提交用移动题用例判、防御提交用防御题用例判
+// ——专属探针出现在判题入参当且仅当用了对应行动题（桩的攻击用例不含探针）。
+// 注：探针只甄别行动类型，不甄别私有题"归属"（P1/P2 移动题用例集相同）；
+// 归属由 TestSnapshotMidRound / TestMirrorProblemRotation 的面板 ID 断言另行覆盖。
 func TestJudgeUsesSelectedPanelQuestion(t *testing.T) {
 	h := newHarness(t, passOK())
 	h.moveTo(P1, "good", Pos{Row: 3, Col: 0})
@@ -590,6 +593,8 @@ func TestDefendReducesDamage(t *testing.T) {
 }
 
 // 护盾覆盖整回合：先手攻击也吃后手防御的减伤（验收 4"该回合所受伤害"语义）。
+// 时序假设钉住：双方 solveMs 均为 0，"先手"依赖引擎的同毫秒按提交序 tie-break
+// （solveSeq）；spec 未定义同耗时平局语义，若 tie-break 语义变更，本测试须随之复核。
 func TestShieldCoversFasterAttack(t *testing.T) {
 	h := newHarness(t, passOK())
 	h.attack(P1, "good") // 先手攻击（solveMs=0）
@@ -607,6 +612,7 @@ func TestShieldCoversFasterAttack(t *testing.T) {
 }
 
 // 移入覆盖格仍被命中（验收 5 前半）：接近者进相邻格后被攻击命中。
+// 时序假设钉住：双方 solveMs 均为 0，行动顺序依赖提交序 tie-break（同上）。
 func TestApproachIntoRangeStillHit(t *testing.T) {
 	h := newHarness(t, passOK())
 	// R1：P1 拉开距离，P2 防御（不追击）→ 攻击闪避
@@ -632,6 +638,7 @@ func TestApproachIntoRangeStillHit(t *testing.T) {
 }
 
 // 闪避优先于护盾（验收 5 后半）：有盾但不在射程内 → 只算闪避，无伤害。
+// 时序假设钉住：双方 solveMs 均为 0，行动顺序依赖提交序 tie-break（同上）。
 func TestDodgeCheckedBeforeShield(t *testing.T) {
 	h := newHarness(t, passOK())
 	// R1：P1 拉开距离，P2 挂盾

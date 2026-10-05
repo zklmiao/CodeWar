@@ -22,15 +22,16 @@ function isShielded(row: number, col: number): boolean {
   const o = occupant(row, col);
   return !!o && !!store.shield[o];
 }
-// 点选：回合活跃且自己未行动时可设置目标格；点击自己所在格 = 清除选择
+// 点选：回合活跃且自己未行动时可设置目标格；点击自己所在格 = 清除选择，
+// 对方占用的格子不可作为目标（合法性最终由服务端校验）
 function pick(row: number, col: number) {
   if (!store.isRoundActive || store.viewerActed) return;
-  if (occupant(row, col)) return;
   const cur = store.positions[store.viewerId];
   if (cur && cur.row === row && cur.col === col) {
     store.setMoveTo(null);
     return;
   }
+  if (occupant(row, col)) return;
   store.setMoveTo({ row, col });
 }
 </script>
