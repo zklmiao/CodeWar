@@ -77,8 +77,8 @@ func TestPumpSurvivesEarlyResolution(t *testing.T) {
 	t1 := clk.current()
 
 	// R1 双方解出 → 提前结算 → R2 armed（旧泵在此刻卡死）
-	eng.Submit(P1, "good")
-	eng.Submit(P2, "good")
+	eng.Submit(P1, ActionAttack, "good", Pos{})
+	eng.Submit(P2, ActionAttack, "good", Pos{})
 	if maxRound(col.all()) != 2 {
 		t.Fatalf("双方解出后应提前结算进入回合 2")
 	}

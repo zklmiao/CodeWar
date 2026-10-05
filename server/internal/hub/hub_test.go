@@ -32,6 +32,6 @@ func TestSubmitAfterEngineResetIsDropped(t *testing.T) {
 	eng := h.engine
 	h.mu.Unlock()
 	if eng != nil {
-		eng.Submit(match.P1, "code")
+		eng.Submit(match.P1, match.ActionAttack, "code", match.Pos{})
 	}
 }

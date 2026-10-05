@@ -155,7 +155,7 @@ func selfDestructLoop(t *testing.T, ws *websocket.Conn, player string, ends chan
 			if (env.GetPanelReady() != nil || env.GetSubmissionJudged() != nil) &&
 				lastHP > 22 && wrongs < 60 { // 上限兜底：防对局异常时的死循环
 				sub, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Submit{
-					Submit: &matchpb.SubmitRequest{Code: "poison"},
+					Submit: &matchpb.SubmitRequest{Code: "poison", Action: "attack"},
 				}})
 				if err := ws.WriteMessage(websocket.TextMessage, sub); err == nil {
 					wrongs++

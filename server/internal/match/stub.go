@@ -56,8 +56,9 @@ var DemoQuestions = []Question{
 }
 
 // StubQuestions：测试桩——按回合轮换（ruling #5）。
-// 04 号票后生产流量走出题工厂（hub 装配）；本桩保留供 match 包测试作 fake，
-// 新增的移动/防御方法为薄委托（03 号票消费前仅保证编译与接口完整）。
+// 04 号票后生产流量走出题工厂（hub 装配）；本桩保留供 match 包测试作 fake。
+// 03 号票：移动/防御题带玩家维度 ID（证明面板私有性），判题用例与攻击桩一致
+// （引擎行为测试只关心判定结果，不关心题面语义）。
 type StubQuestions struct{}
 
 func (StubQuestions) AttackQuestion(round int) Question {
@@ -65,12 +66,21 @@ func (StubQuestions) AttackQuestion(round int) Question {
 	return DemoQuestions[i]
 }
 
-// MoveQuestion：薄委托（与攻击桩同轮换；03 号票接入真实行动题后可移除）。
-func (StubQuestions) MoveQuestion(round int, _ Player) Question {
-	return StubQuestions{}.AttackQuestion(round)
+// MoveQuestion：私有移动题（ID 含玩家维度，供面板私有性断言；额外探针用例
+// 供"判题用对题"断言——spy 判题器看到 move-only-probe 即说明用的是移动题）。
+func (StubQuestions) MoveQuestion(round int, player Player) Question {
+	q := StubQuestions{}.AttackQuestion(round)
+	q.ID = "move-stub-" + player
+	q.Tests = append(append([]TestCase{}, q.Tests...),
+		TestCase{Name: "move-only-probe", Call: "1", Expected: "1"})
+	return q
 }
 
-// DefendQuestion：薄委托（同上）。
-func (StubQuestions) DefendQuestion(round int, _ Player) Question {
-	return StubQuestions{}.AttackQuestion(round)
+// DefendQuestion：私有防御题（同上，探针名不同）。
+func (StubQuestions) DefendQuestion(round int, player Player) Question {
+	q := StubQuestions{}.AttackQuestion(round)
+	q.ID = "defend-stub-" + player
+	q.Tests = append(append([]TestCase{}, q.Tests...),
+		TestCase{Name: "defend-only-probe", Call: "1", Expected: "1"})
+	return q
 }

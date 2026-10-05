@@ -286,7 +286,7 @@ func playLoop(t *testing.T, ws *websocket.Conn, player string, ends chan<- *matc
 		}
 		if env.GetPanelReady() != nil {
 			sub, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Submit{
-				Submit: &matchpb.SubmitRequest{Code: "code"},
+				Submit: &matchpb.SubmitRequest{Code: "code", Action: "attack"},
 			}})
 			if err := ws.WriteMessage(websocket.TextMessage, sub); err != nil {
 				t.Errorf("[%s] 提交失败: %v", player, err)

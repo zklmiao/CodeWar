@@ -9,10 +9,24 @@ function envelope(seq: number, key: string, body: Record<string, unknown>) {
   return { seq, unixMs: String(Date.now()), [key]: body };
 }
 
+function panelBody() {
+  return {
+    attack: { id: "attack@seed:complete", statement: "攻击题", signature: "sig", starterCode: "c" },
+    p1: {
+      move: { id: "move@seed:p1", statement: "P1 移动题", signature: "sig", starterCode: "c" },
+      defend: { id: "defend@seed:p1", statement: "P1 防御题", signature: "sig", starterCode: "c" },
+    },
+    p2: {
+      move: { id: "move@seed:p2", statement: "P2 移动题", signature: "sig", starterCode: "c" },
+      defend: { id: "defend@seed:p2", statement: "P2 防御题", signature: "sig", starterCode: "c" },
+    },
+  };
+}
+
 beforeEach(() => setActivePinia(createPinia()));
 
 describe("对局状态机（事件流驱动）", () => {
-  it("快照建立初始视图（含查看者私有锁）", () => {
+  it("快照建立初始视图（位置/护盾/查看者过滤的三题面板/私有锁）", () => {
     const s = useMatchStore();
     s.applyServerMessage(
       {
@@ -22,14 +36,13 @@ describe("对局状态机（事件流驱动）", () => {
           round: 1,
           deadlineUnixMs: "1767225675000",
           players: [
-            { id: "p1", hp: 100 },
-            { id: "p2", hp: 97 },
+            { id: "p1", hp: 100, pos: { row: 3, col: 2 }, shielded: false },
+            { id: "p2", hp: 97, pos: { row: 2, col: 4 }, shielded: true },
           ],
-          problem: {
-            id: "palindrome-L2",
-            statement: "判断回文",
-            signature: "def is_palindrome(s: str) -> bool:",
-            starterCode: "def is_palindrome(s: str) -> bool:\n",
+          panel: {
+            attack: { id: "attack@seed", statement: "攻击题", signature: "sig", starterCode: "c" },
+            move: { id: "move@seed:p1", statement: "P1 移动题", signature: "sig", starterCode: "c" },
+            defend: { id: "defend@seed:p1", statement: "P1 防御题", signature: "sig", starterCode: "c" },
           },
           viewerLockUntilUnixMs: "0",
         },
@@ -40,7 +53,10 @@ describe("对局状态机（事件流驱动）", () => {
     expect(s.isRoundActive).toBe(true);
     expect(s.seq).toBe(3);
     expect(s.hp.p2).toBe(97);
-    expect(s.problem?.id).toBe("palindrome-L2");
+    expect(s.panel?.attack?.id).toBe("attack@seed");
+    expect(s.panel?.move?.id).toBe("move@seed:p1"); // 快照私有题按查看者过滤
+    expect(s.positions.p2).toEqual({ row: 2, col: 4 });
+    expect(s.shield.p2).toBe(true);
     expect(s.viewerLockUntil).toBe(0);
   });
 
@@ -58,14 +74,61 @@ describe("对局状态机（事件流驱动）", () => {
     expect(s.result).toEqual({ winner: "p1", reason: "ko", elo: [] });
   });
 
-  it("面板事件装载题目，回合切换时清空", () => {
+  it("三槽面板装载：攻击镜像共享，私有题按 viewerId 取本方", () => {
     const s = useMatchStore();
-    s.applyEnvelope(Envelope.fromJSON(envelope(1, "roundStarted", { round: 2, deadlineUnixMs: "999" })));
-    expect(s.problem).toBeNull(); // 新回合先清面板
-    s.applyEnvelope(
-      Envelope.fromJSON(envelope(2, "panelReady", { problem: { id: "two-sum-L3", statement: "s", signature: "sig", starterCode: "c" } })),
-    );
-    expect(s.problem?.id).toBe("two-sum-L3");
+    s.applyServerMessage({ snapshot: { seq: 0, phase: "MATCH_PHASE_ROUND_ACTIVE", round: 1, players: [] } }, "p1");
+    s.applyEnvelope(Envelope.fromJSON(envelope(1, "panelReady", panelBody())));
+    expect(s.panel?.attack?.id).toBe("attack@seed:complete");
+    expect(s.panel?.move?.id).toBe("move@seed:p1");
+    expect(s.panel?.defend?.id).toBe("defend@seed:p1");
+
+    const s2 = useMatchStore();
+    s2.applyServerMessage({ snapshot: { seq: 0, phase: "MATCH_PHASE_ROUND_ACTIVE", round: 1, players: [] } }, "p2");
+    s2.applyEnvelope(Envelope.fromJSON(envelope(1, "panelReady", panelBody())));
+    expect(s2.panel?.move?.id).toBe("move@seed:p2");
+    expect(s2.panel?.defend?.id).toBe("defend@seed:p2");
+  });
+
+  it("新回合清空面板/护盾/已行动标记，保留位置", () => {
+    const s = useMatchStore();
+    s.applyEnvelope(Envelope.fromJSON(envelope(1, "roundStarted", { round: 1, deadlineUnixMs: "999" })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(2, "panelReady", panelBody())));
+    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: 0, moveTo: { row: 3, col: 0 } })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "defend", solveMs: 5 })));
+    expect(s.positions.p1).toEqual({ row: 3, col: 0 });
+    expect(s.shield.p2).toBe(true);
+
+    s.applyEnvelope(Envelope.fromJSON(envelope(5, "roundStarted", { round: 2, deadlineUnixMs: "999" })));
+    expect(s.panel).toBeNull(); // 新回合先清面板
+    expect(s.shield).toEqual({}); // 护盾不跨回合
+    expect(s.viewerActed).toBe(false);
+    expect(s.positions.p1).toEqual({ row: 3, col: 0 }); // 位置跨回合持续
+  });
+
+  it("行动结算：移动改位置、防御挂盾、攻击渲染闪避/护盾折减", () => {
+    const s = useMatchStore();
+    s.viewerId = "p1";
+    s.applyEnvelope(Envelope.fromJSON(envelope(1, "roundStarted", { round: 1, deadlineUnixMs: "999" })));
+    s.applyEnvelope(Envelope.fromJSON(envelope(2, "panelReady", panelBody())));
+
+    s.applyEnvelope(Envelope.fromJSON(envelope(3, "actionResolved", { attacker: "p1", action: "move", solveMs: 0, moveTo: { row: 3, col: 0 } })));
+    expect(s.positions.p1).toEqual({ row: 3, col: 0 });
+
+    s.applyEnvelope(Envelope.fromJSON(envelope(4, "actionResolved", { attacker: "p2", action: "attack", solveMs: 10, dodged: true })));
+    expect(s.log.some((l) => l.text.includes("落空"))).toBe(true);
+
+    s.applyEnvelope(Envelope.fromJSON(envelope(5, "actionResolved", { attacker: "p2", action: "attack", solveMs: 10, damage: 9, shielded: true })));
+    expect(s.log.some((l) => l.text.includes("护盾折减"))).toBe(true);
+
+    s.applyEnvelope(Envelope.fromJSON(envelope(6, "submissionJudged", { player: "p1", passed: true, category: "ok", solveMs: 0, action: "move" })));
+    expect(s.viewerActed).toBe(true);
+    expect(s.actedKind).toBe("move");
+  });
+
+  it("移动参数被拒：日志提示可重交", () => {
+    const s = useMatchStore();
+    s.applyEnvelope(Envelope.fromJSON(envelope(1, "submissionRejected", { player: "p1", reason: "path-blocked" })));
+    expect(s.log.some((l) => l.text.includes("path-blocked") && l.text.includes("重交"))).toBe(true);
   });
 
   it("错误提交触发查看者锁定预览", () => {
@@ -85,14 +148,7 @@ describe("对局状态机（事件流驱动）", () => {
       ),
     );
     expect(s.viewerLockUntil).toBe(Number(lockUntil));
-    expect(s.viewerSolved).toBe(false);
-  });
-
-  it("查看者解出后本回合标记已解", () => {
-    const s = useMatchStore();
-    s.viewerId = "p1";
-    s.applyEnvelope(Envelope.fromJSON(envelope(1, "submissionJudged", { player: "p1", passed: true, category: "ok", solveMs: "12300" })));
-    expect(s.viewerSolved).toBe(true);
+    expect(s.viewerActed).toBe(false); // 错误提交不消耗本回合行动
   });
 
   it("序号断裂置 gapDetected，断裂事件不应用（ADR-0002）", () => {

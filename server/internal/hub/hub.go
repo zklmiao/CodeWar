@@ -209,7 +209,12 @@ func (h *Hub) readLoop(c *conn) {
 			eng := h.engine
 			h.mu.Unlock()
 			if eng != nil {
-				eng.Submit(c.player, sub.GetCode())
+				// 03 号票：透传行动选择与移动目标格（参数校验在引擎侧）。
+				moveTo := match.Pos{}
+				if mt := sub.GetMoveTo(); mt != nil {
+					moveTo = match.Pos{Row: int(mt.GetRow()), Col: int(mt.GetCol())}
+				}
+				eng.Submit(c.player, sub.GetAction(), sub.GetCode(), moveTo)
 			}
 		}
 	}
