@@ -26,6 +26,7 @@ bash 01-ok.sh            # 单项执行，人工判读 verdict
 | 05 | 05-partial-pass-no-leak.sh | 两用例一过一错（期望值故意错） | `passed: False, category: wrong-answer, detail: ""`（**不得出现通过计数或用例信息**） |
 | 06 | 06-syntax-detail.sh | `s === s` 语法错误 | `passed: False, category: syntax, detail: "line 2: ..."`（唯一允许带 detail 的类别） |
 | 07 | 07-service-alive.sh | 连发两轮死循环后立刻正常判题 | 第二段输出仍为 `ok`（服务不垮、判题无污染） |
+| 08 | 08-fork-bomb-limit.sh | 循环 `os.fork()` 10 万次（进程炸弹） | `passed: False, category: limit-exceeded`（容器级 `pids-limit=64` 配额杀，宿主受保护不垮） |
 
 ## 甄别要点
 

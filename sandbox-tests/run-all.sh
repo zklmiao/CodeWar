@@ -57,6 +57,9 @@ else
   fail=$((fail + 1))
 fi
 
+out=$(bash 08-fork-bomb-limit.sh)
+check "08-fork-bomb" "'category': 'limit-exceeded'" "$out"
+
 echo "----------------------------------------"
 echo "汇总: $pass PASS / $fail FAIL"
 [ "$fail" -eq 0 ]
