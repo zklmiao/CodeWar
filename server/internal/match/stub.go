@@ -55,10 +55,22 @@ var DemoQuestions = []Question{
 	},
 }
 
-// StubQuestions：镜像题桩——按回合轮换（ruling #5）。
+// StubQuestions：测试桩——按回合轮换（ruling #5）。
+// 04 号票后生产流量走出题工厂（hub 装配）；本桩保留供 match 包测试作 fake，
+// 新增的移动/防御方法为薄委托（03 号票消费前仅保证编译与接口完整）。
 type StubQuestions struct{}
 
 func (StubQuestions) AttackQuestion(round int) Question {
 	i := ((round - 1) % len(DemoQuestions) + len(DemoQuestions)) % len(DemoQuestions)
 	return DemoQuestions[i]
+}
+
+// MoveQuestion：薄委托（与攻击桩同轮换；03 号票接入真实行动题后可移除）。
+func (StubQuestions) MoveQuestion(round int, _ Player) Question {
+	return StubQuestions{}.AttackQuestion(round)
+}
+
+// DefendQuestion：薄委托（同上）。
+func (StubQuestions) DefendQuestion(round int, _ Player) Question {
+	return StubQuestions{}.AttackQuestion(round)
 }

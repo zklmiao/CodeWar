@@ -13,6 +13,8 @@ import (
 
 	"codewar/server/gen/matchpb"
 	"codewar/server/internal/match"
+	"codewar/server/internal/question"
+	"codewar/server/internal/question/templates"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -81,7 +83,14 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.engine == nil {
-		h.engine = match.NewEngine(match.RealClock{}, match.StubQuestions{}, h.judge, h.broadcast)
+		// 04 号票：出题工厂替换硬编码桩（默认配置：全题型、上限 L3、爬坡；
+		// 05 号票从 UI 喂真实 Config）。每局新 MatchSeed，连打两局题目不同。
+		questions := question.NewFactory(question.Config{
+			Strategy:  question.StrategyClimb,
+			MatchSeed: question.NewMatchSeed(),
+		})
+		questions.RegisterAll(templates.All()...)
+		h.engine = match.NewEngine(match.RealClock{}, questions, h.judge, h.broadcast)
 	}
 	c := &conn{player: player, ws: ws, outbox: make(chan []byte, 64), closed: make(chan struct{})}
 	h.conns[player] = c

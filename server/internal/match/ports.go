@@ -36,7 +36,8 @@ type TestCase struct {
 	Expected string
 }
 
-// Question：镜像题实例。本票由硬编码桩提供；04 号票换成 QuestionPort 背后的出题工厂。
+// Question：题实例。04 号票起由出题工厂按 (spec, seed) 生成；题面/用例格式
+// 与判题器对接契约：call 为 Python 表达式，expected 为期望 repr。
 type Question struct {
 	ID          string
 	Statement   string
@@ -45,9 +46,14 @@ type Question struct {
 	Tests       []TestCase
 }
 
-// QuestionPort：按回合取攻击镜像题（本票每轮轮换，双方同实例）。
+// QuestionPort：按回合取题（04 号票最小扩展）。
+//   - AttackQuestion：攻击镜像题（双方同实例，seed = f(matchSeed, round)）。
+//   - Move/DefendQuestion：私有行动题（双方独立，seed = f(matchSeed, player, round)）。
+// 引擎本期只消费 AttackQuestion；移动/防御的消费方是 03/06 号票。
 type QuestionPort interface {
 	AttackQuestion(round int) Question
+	MoveQuestion(round int, player Player) Question
+	DefendQuestion(round int, player Player) Question
 }
 
 // JudgeResult：判题结果。Category 取值见 proto judge.proto 注释。
