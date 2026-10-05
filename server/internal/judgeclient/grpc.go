@@ -14,7 +14,7 @@ type GRPCJudge struct {
 	timeoutMs int32
 }
 
-// NewGRPCJudge：defaultTimeoutMs 为单次判题的执行超时预算（02 号票硬化前简易值）。
+// NewGRPCJudge：defaultTimeoutMs 为单次判题的每用例执行超时预算（ADR-0003）。
 func NewGRPCJudge(client judgepb.JudgeServiceClient, defaultTimeoutMs int32) *GRPCJudge {
 	if defaultTimeoutMs <= 0 {
 		defaultTimeoutMs = 8000

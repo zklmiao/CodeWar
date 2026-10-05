@@ -18,7 +18,6 @@ export class MatchSocket {
   connect(player: string, handlers: SocketHandlers): void {
     this.player = player;
     this.handlers = handlers;
-    (window as unknown as Record<string, unknown>).__cw = this; // 调试暴露（移除于 02 号票前）
     const proto = location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws.onopen = () => this.sendJoin();

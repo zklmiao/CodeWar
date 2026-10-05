@@ -27,7 +27,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-// 本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+// 02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
 type JudgeServiceClient interface {
 	Judge(ctx context.Context, in *JudgeRequest, opts ...grpc.CallOption) (*JudgeVerdict, error)
 }
@@ -55,7 +55,7 @@ func (c *judgeServiceClient) Judge(ctx context.Context, in *JudgeRequest, opts .
 // for forward compatibility.
 //
 // JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-// 本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+// 02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
 type JudgeServiceServer interface {
 	Judge(context.Context, *JudgeRequest) (*JudgeVerdict, error)
 	mustEmbedUnimplementedJudgeServiceServer()

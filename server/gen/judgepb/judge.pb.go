@@ -27,7 +27,8 @@ type JudgeRequest struct {
 	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
 	// 该题全部隐藏测试；全部通过才判 passed
 	TestCases []*TestCase `protobuf:"bytes,2,rep,name=test_cases,json=testCases,proto3" json:"test_cases,omitempty"`
-	// 执行整体超时（毫秒），简易版按整次判题一次超时（02 号票改为 per-test）
+	// 每用例执行超时（毫秒）：harness 逐用例施加，首败即停；整体另有墙钟上限
+	// （用例数×每用例超时 + 30s）。<=0 时 judge 用服务端常量（默认 3000ms）。
 	TimeoutMs     int32 `protobuf:"varint,3,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -149,9 +150,11 @@ func (x *TestCase) GetExpected() string {
 type JudgeVerdict struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Passed bool                   `protobuf:"varint,1,opt,name=passed,proto3" json:"passed,omitempty"`
-	// ok | wrong-answer | runtime-error | syntax | timeout | judge-error
+	// ok | wrong-answer | runtime-error | syntax | timeout | limit-exceeded | judge-error
+	// （limit-exceeded = 内存/pids 配额杀，与时钟杀 timeout 区分；02 号票新增）
 	Category string `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
-	// 代码执行总耗时（wall clock，反作弊遥测用；与玩家解题耗时是两个量）
+	// 该次提交全部用例执行的总墙钟（容器内测量，反作弊遥测用；
+	// 与玩家解题耗时是两个量，沙箱侧不换算只上报）
 	DurationMs int32 `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	// 仅 syntax 类别携带玩家自身代码的报错摘要（其类别不回传任何隐藏用例信息——设计 002 §3）
 	Detail        string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`

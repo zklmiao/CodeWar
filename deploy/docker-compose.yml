@@ -22,6 +22,10 @@ services:
       - "50051:50051"
     environment:
       JUDGE_PORT: "50051"
+      CODEWAR_SANDBOX_IMAGE: "python:3.12-slim"
+    volumes:
+      # docker-out-of-docker（ADR-0003）：判题容器由 judge 服务创建
+      - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:
     image: postgres:16-alpine

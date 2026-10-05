@@ -5,7 +5,7 @@ package codewar.judge.v1;
 option go_package = "codewar/server/gen/judgepb;judgepb";
 
 // JudgeService：判题契约（纯函数 seam，spec「实现决策」）。
-// 本票为简易版：子进程执行 + 整体超时；沙箱硬化（资源限制/禁网）归 02 号票。
+// 02 号票：一次性容器沙箱（ADR-0003）+ 每用例超时 + 容器级断网/配额隔离。
 service JudgeService {
   rpc Judge(JudgeRequest) returns (JudgeVerdict);
 }
@@ -15,7 +15,8 @@ message JudgeRequest {
   string code = 1;
   // 该题全部隐藏测试；全部通过才判 passed
   repeated TestCase test_cases = 2;
-  // 执行整体超时（毫秒），简易版按整次判题一次超时（02 号票改为 per-test）
+  // 每用例执行超时（毫秒）：harness 逐用例施加，首败即停；整体另有墙钟上限
+  //（用例数×每用例超时 + 30s）。<=0 时 judge 用服务端常量（默认 3000ms）。
   int32 timeout_ms = 3;
 }
 
@@ -29,9 +30,11 @@ message TestCase {
 
 message JudgeVerdict {
   bool passed = 1;
-  // ok | wrong-answer | runtime-error | syntax | timeout | judge-error
+  // ok | wrong-answer | runtime-error | syntax | timeout | limit-exceeded | judge-error
+  // （limit-exceeded = 内存/pids 配额杀，与时钟杀 timeout 区分；02 号票新增）
   string category = 2;
-  // 代码执行总耗时（wall clock，反作弊遥测用；与玩家解题耗时是两个量）
+  // 该次提交全部用例执行的总墙钟（容器内测量，反作弊遥测用；
+  // 与玩家解题耗时是两个量，沙箱侧不换算只上报）
   int32 duration_ms = 3;
   // 仅 syntax 类别携带玩家自身代码的报错摘要（其类别不回传任何隐藏用例信息——设计 002 §3）
   string detail = 4;
