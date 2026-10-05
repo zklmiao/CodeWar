@@ -47,6 +47,8 @@ message PlayerView {
   int32 hp = 2;
   // 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位）
   Position pos = 3;
+  // 该玩家当前是否持有本回合护盾（重连快照渲染用）
+  bool shielded = 4;
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）

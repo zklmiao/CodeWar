@@ -444,8 +444,8 @@ func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 		Phase: e.phase,
 		Round: uint32(e.round),
 		Players: []*matchpb.PlayerView{
-			playerView(P1, e.hp[P1], e.pos[P1]),
-			playerView(P2, e.hp[P2], e.pos[P2]),
+			playerView(P1, e.hp[P1], e.pos[P1], e.shield[P1]),
+			playerView(P2, e.hp[P2], e.pos[P2], e.shield[P2]),
 		},
 	}
 	if e.phase == matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
@@ -497,9 +497,9 @@ func privatePanelToPb(move, defend Question) *matchpb.PrivatePanel {
 	return &matchpb.PrivatePanel{Move: problemToPb(move), Defend: problemToPb(defend)}
 }
 
-func playerView(p Player, hp int32, pos Pos) *matchpb.PlayerView {
+func playerView(p Player, hp int32, pos Pos, shielded bool) *matchpb.PlayerView {
 	return &matchpb.PlayerView{
-		Id: p, Hp: hp,
+		Id: p, Hp: hp, Shielded: shielded,
 		Pos: &matchpb.Position{Row: int32(pos.Row), Col: int32(pos.Col)},
 	}
 }

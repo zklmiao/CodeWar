@@ -265,7 +265,9 @@ type PlayerView struct {
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // "p1" | "p2"
 	Hp    int32                  `protobuf:"varint,2,opt,name=hp,proto3" json:"hp,omitempty"`
 	// 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位）
-	Pos           *Position `protobuf:"bytes,3,opt,name=pos,proto3" json:"pos,omitempty"`
+	Pos *Position `protobuf:"bytes,3,opt,name=pos,proto3" json:"pos,omitempty"`
+	// 该玩家当前是否持有本回合护盾（重连快照渲染用）
+	Shielded      bool `protobuf:"varint,4,opt,name=shielded,proto3" json:"shielded,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -319,6 +321,13 @@ func (x *PlayerView) GetPos() *Position {
 		return x.Pos
 	}
 	return nil
+}
+
+func (x *PlayerView) GetShielded() bool {
+	if x != nil {
+		return x.Shielded
+	}
+	return false
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）
@@ -1573,12 +1582,13 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x05 \x01(\x03R\x0edeadlineUnixMs\x128\n" +
 	"\x19viewer_lock_until_unix_ms\x18\a \x01(\x03R\x15viewerLockUntilUnixMs\x125\n" +
 	"\x06result\x18\b \x01(\v2\x1d.codewar.match.v1.MatchResultR\x06result\x12-\n" +
-	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panelJ\x04\b\x06\x10\a\"Z\n" +
+	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panelJ\x04\b\x06\x10\a\"v\n" +
 	"\n" +
 	"PlayerView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x0e\n" +
 	"\x02hp\x18\x02 \x01(\x05R\x02hp\x12,\n" +
-	"\x03pos\x18\x03 \x01(\v2\x1a.codewar.match.v1.PositionR\x03pos\".\n" +
+	"\x03pos\x18\x03 \x01(\v2\x1a.codewar.match.v1.PositionR\x03pos\x12\x1a\n" +
+	"\bshielded\x18\x04 \x01(\bR\bshielded\".\n" +
 	"\bPosition\x12\x10\n" +
 	"\x03row\x18\x01 \x01(\x05R\x03row\x12\x10\n" +
 	"\x03col\x18\x02 \x01(\x05R\x03col\"x\n" +

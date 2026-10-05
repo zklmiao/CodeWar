@@ -88,7 +88,11 @@ export interface PlayerView {
   id: string;
   hp: number;
   /** 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位） */
-  pos: Position | undefined;
+  pos:
+    | Position
+    | undefined;
+  /** 该玩家当前是否持有本回合护盾（重连快照渲染用） */
+  shielded: boolean;
 }
 
 /** 网格格子坐标（行列均从 0 计，5×5） */
@@ -566,7 +570,7 @@ export const Snapshot: MessageFns<Snapshot> = {
 };
 
 function createBasePlayerView(): PlayerView {
-  return { id: "", hp: 0, pos: undefined };
+  return { id: "", hp: 0, pos: undefined, shielded: false };
 }
 
 export const PlayerView: MessageFns<PlayerView> = {
@@ -579,6 +583,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     }
     if (message.pos !== undefined) {
       Position.encode(message.pos, writer.uint32(26).fork()).join();
+    }
+    if (message.shielded !== false) {
+      writer.uint32(32).bool(message.shielded);
     }
     return writer;
   },
@@ -620,6 +627,14 @@ export const PlayerView: MessageFns<PlayerView> = {
             message.pos = Position.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.shielded = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -637,6 +652,7 @@ export const PlayerView: MessageFns<PlayerView> = {
       id: isSet(object.id) ? globalThis.String(object.id) : "",
       hp: isSet(object.hp) ? globalThis.Number(object.hp) : 0,
       pos: isSet(object.pos) ? Position.fromJSON(object.pos) : undefined,
+      shielded: isSet(object.shielded) ? globalThis.Boolean(object.shielded) : false,
     };
   },
 
@@ -651,6 +667,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     if (message.pos !== undefined) {
       obj.pos = Position.toJSON(message.pos);
     }
+    if (message.shielded !== false) {
+      obj.shielded = message.shielded;
+    }
     return obj;
   },
 
@@ -662,6 +681,7 @@ export const PlayerView: MessageFns<PlayerView> = {
     message.id = object.id ?? "";
     message.hp = object.hp ?? 0;
     message.pos = (object.pos !== undefined && object.pos !== null) ? Position.fromPartial(object.pos) : undefined;
+    message.shielded = object.shielded ?? false;
     return message;
   },
 };
