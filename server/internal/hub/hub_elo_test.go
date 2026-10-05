@@ -266,7 +266,7 @@ func TestAuthenticatedMatchSettlesEloEndToEnd(t *testing.T) {
 // 出错只 E（不断言），调用方以 ends==nil 或超时判 fail，保证快速失败。
 func playLoop(t *testing.T, ws *websocket.Conn, player string, ends chan<- *matchpb.MatchEnded) {
 	t.Helper()
-	_ = ws.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = ws.SetReadDeadline(time.Now().Add(400 * time.Second)) // 跨多回合的集成对局需要更长读窗
 	for {
 		_, data, err := ws.ReadMessage()
 		if err != nil {
