@@ -23,6 +23,10 @@ describe("用户状态机", () => {
     mockFetchOnce(201, { id: "u1", username: "alice", elo: 1000, token: "tok-1" });
     const s = useUserStore();
     await s.register("alice", "s3cret-pw");
+    // 请求契约：路由与方法与服务端 accounts.Mount 一致（防两侧漂移）
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/register");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect(s.loggedIn).toBe(true);
     expect(s.user?.username).toBe("alice");
     expect(s.token).toBe("tok-1");
@@ -33,6 +37,9 @@ describe("用户状态机", () => {
     mockFetchOnce(401, { error: "用户名或密码错误" });
     const s = useUserStore();
     await expect(s.login("alice", "wrong")).rejects.toThrow("用户名或密码错误");
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/login");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect(s.loggedIn).toBe(false);
     expect(sessionStorage.getItem("cw_token")).toBeNull();
     expect(s.lastError).toBe("用户名或密码错误");

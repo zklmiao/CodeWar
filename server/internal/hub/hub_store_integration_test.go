@@ -359,3 +359,55 @@ func TestHubRealStoreDrawKeepsElo(t *testing.T) {
 		t.Fatalf("平局历史行应为 delta=0：before=%d after=%d base=%d", before, after, baseA)
 	}
 }
+
+// TestHubRealStoreAnonymousLeavesNoRows：B4 向后兼容对照——
+// 双方匿名（无 token）接入时，即使 hub 接了真实 store，
+// 也不落任何库行、MatchEnded 不带 elo（与 01 号票行为逐项等价）。
+func TestHubRealStoreAnonymousLeavesNoRows(t *testing.T) {
+	dsn := integrationDSN(t)
+	ctx := context.Background()
+	st, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("打开 store 失败：%v", err)
+	}
+	defer st.Close()
+
+	h := New(passJudge{}, slog.Default(), st)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ends := make(chan *matchpb.MatchEnded, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ws := dialWS(t, srv.URL, "p1", "") // 匿名：无 token
+		defer ws.Close()
+		playLoop(t, ws, "p1", ends)
+	}()
+	go func() {
+		defer wg.Done()
+		ws := dialWS(t, srv.URL, "p2", "") // 匿名：无 token
+		defer ws.Close()
+		playLoop(t, ws, "p2", ends)
+	}()
+	wg.Wait()
+	collected := collectEnds(t, ends, 2, 30*time.Second)
+	me := collected[0]
+	if len(me.GetElo()) != 0 {
+		t.Fatalf("匿名对局不得携带 elo 字段：%v", me.GetElo())
+	}
+	matchID := h.matchID
+	var matchRows, histRows int
+	if err := st.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM matches WHERE id = $1`, matchID).Scan(&matchRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM elo_history WHERE match_id = $1`, matchID).Scan(&histRows); err != nil {
+		t.Fatal(err)
+	}
+	if matchRows != 0 || histRows != 0 {
+		t.Fatalf("匿名对局不得落库：matches=%d elo_history=%d", matchRows, histRows)
+	}
+}
