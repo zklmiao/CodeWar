@@ -4,13 +4,13 @@
 
 **Blocked by:** 01 (Tracer——热座最小对局)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 正确代码全部通过时返回 passed；durationMs（代码执行耗时）正确上报，并与玩家解题耗时（ClockPort 计时、驱动时间系数）严格区分
-- [ ] 失败反馈只含类别（wrong-answer / runtime-error / timeout / limit-exceeded / syntax），不回传隐藏用例通过计数
-- [ ] 死循环在时限内被终止并判失败，服务不垮
-- [ ] 联网 / 资源超限尝试被安全拒绝
-- [ ] spec「测试决策」四类作弊向量全部有测试：死循环（01 已有）、部分通过（01 已有）、资源超限、联网尝试
-- [ ] 移除 client `ws.ts` 的 `window.__cw` 调试暴露（01 号票 review 遗留，落实为验收项）
-- [ ] 部分用例通过 = 判失败（不允许部分伤害）
-- [ ] 换用沙箱判题后，真实对局中上述行为可复现（事件流断言）
+- [x] 正确代码全部通过时返回 passed；durationMs（代码执行耗时）正确上报，并与玩家解题耗时（ClockPort 计时、驱动时间系数）严格区分
+- [x] 失败反馈只含类别（wrong-answer / runtime-error / timeout / limit-exceeded / syntax），不回传隐藏用例通过计数
+- [x] 死循环在时限内被终止并判失败，服务不垮
+- [x] 联网 / 资源超限尝试被安全拒绝
+- [x] spec「测试决策」四类作弊向量全部有测试：死循环（01 已有）、部分通过（01 已有）、资源超限、联网尝试
+- [x] 移除 client `ws.ts` 的 `window.__cw` 调试暴露（01 号票 review 遗留，落实为验收项）
+- [x] 部分用例通过 = 判失败（不允许部分伤害）
+- [x] 换用沙箱判题后，真实对局中上述行为可复现（事件流断言）
