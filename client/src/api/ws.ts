@@ -32,10 +32,15 @@ export class MatchSocket {
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));
   }
 
-  submit(code: string): void {
+  // 03 号票：提交带行动选择；移动题附带目标格（服务端校验参数合法性）
+  submit(action: string, code: string, moveTo?: { row: number; col: number }): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const msg: ClientMessage = {
-      submit: SubmitRequest.fromJSON({ code }),
+      submit: SubmitRequest.fromJSON({
+        code,
+        action,
+        moveTo: moveTo ? { row: moveTo.row, col: moveTo.col } : undefined,
+      }),
     };
     this.ws.send(JSON.stringify(ClientMessage.toJSON(msg)));
   }
