@@ -194,9 +194,12 @@ def test_snoop_cannot_read_cases_from_disk():
 
 
 def test_calls_payload_has_no_expected():
-    # 进容器的 stdin 载荷只含 name/call：键白名单断言（多一个键都算泄漏）
-    payload = executor.build_calls_payload(CASES)
-    assert all(set(c) == {"name", "call"} for c in json.loads(payload))
+    # 进容器的 stdin 载荷 = 解法源码 + worker 脚本 + calls（只含 name/call）：
+    # 键白名单断言（多一个键都算泄漏——尤其不允许出现 expected）
+    payload = json.loads(executor.build_stdin_payload(GOOD, CASES, ""))
+    assert set(payload) == {"solution", "worker", "calls"}
+    assert all(set(c) == {"name", "call"} for c in payload["calls"])
+    assert "expected" not in payload["solution"]  # 期望值一秒都不进容器
 
 
 def test_harness_prefailure_maps_to_judge_error():

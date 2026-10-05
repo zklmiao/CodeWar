@@ -2,15 +2,18 @@
 """沙箱判题执行器（02 号票：一次性容器，docker-out-of-docker）。
 
 执行模型（ADR-0003）：每次提交启动一个一次性容器执行全部用例；
-容器内 harness（_HARNESS）为每个用例 fork 一个 worker 子进程并施加
+容器内 harness（经 stdin 注入）为每个用例 fork 一个 worker 子进程并施加
 每用例超时，首败即停；容器整体另有墙钟上限（第二道保险）。
 
 隔离与防泄漏（容器级，见 ADR-0003）：
 --network=none 断网；--memory=256m + --pids-limit=64 + --cpus=0.5 配额；
 --cap-drop=ALL；--read-only 只读根文件系统 + PYTHONDONTWRITEBYTECODE=1。
-玩家代码经只读挂载注入；容器 stdin 只接收 call 表达式列表——期望值
-是秘密，一分钟都不进容器：repr 与 expected 的比对、category 汇总全部
-在宿主侧完成（worker 只能见到自己的输入，见不到任何期望值）。
+**零宿主路径挂载**：玩家代码、worker 脚本与 call 表达式清单全部经 stdin
+注入（docker-out-of-docker 下 -v 的路径由宿主 daemon 解析，judge 容器内
+的临时目录在宿主上不存在——挂载方案在嵌套形态下必然失败，浏览器验收
+发现）；期望值是秘密，一分钟都不进容器：repr 与 expected 的比对、
+category 汇总全部在宿主侧完成（worker 只能见到自己的输入，见不到任何
+期望值）。
 
 失败反馈契约（设计 002 §3）：verdict 只含 {passed, category, duration_ms}，
 detail 仅 syntax 携带行号；其余类别一律空字符串，绝不回传隐藏用例信息。
@@ -24,7 +27,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 
 # judge 侧每用例超时常量（ADR-0003）：调用方传更小值时兼容采用，默认 3 秒
@@ -92,19 +94,53 @@ def _parse_json_lines(text):
     return out
 
 
-def build_calls_payload(test_cases: list[dict]) -> str:
-    """构造进容器的 stdin 载荷：只含用例名与 call 表达式，不含期望值。"""
-    return json.dumps([{"name": t["name"], "call": t["call"]} for t in test_cases])
+def build_stdin_payload(code: str, test_cases: list[dict], worker_src: str) -> str:
+    """构造进容器的 stdin 载荷：解法源码 + worker 脚本 + 用例清单。
+
+    只含用例名与 call 表达式，不含期望值；worker 脚本经 stdin 注入而非
+    挂载（零宿主路径依赖，见模块 docstring）。
+    """
+    return json.dumps({
+        "solution": code or "",
+        "worker": worker_src,
+        "calls": [{"name": t["name"], "call": t["call"]} for t in test_cases],
+    })
+
+
+def build_sandbox_cmd(per_test_ms: int, harness_src: str) -> list[str]:
+    """构造沙箱容器命令（纯函数，供契约测试断言）。
+
+    禁止出现任何 -v/--mount：嵌套容器解析不了宿主路径（浏览器验收发现）；
+    解法与脚本经 stdin 注入，运行期文件全部写入 /tmp tmpfs。harness 本体
+    经 `python -c` 加载——stdin 必须完整留给 payload（`python -` 会把
+    stdin 当脚本吃掉）。
+    """
+    return [
+        "docker", "run", "--rm", "-i",
+        "--network=none",
+        "--memory=256m",
+        "--pids-limit=64",
+        "--cpus=0.5",
+        "--cap-drop=ALL",
+        "--read-only",
+        "--tmpfs", "/tmp:size=16m,exec",
+        "-e", "PYTHONDONTWRITEBYTECODE=1",
+        SANDBOX_IMAGE,
+        "python", "-c", harness_src, str(per_test_ms),
+    ]
 
 
 # ---- 容器内 harness：父进程（逐用例 fork worker，首败即停） ----
-# stdin 只收 call 列表（无期望值）；每行输出一个用例结论；正常结束（即使
-# 首败即停）必以 summary 行收尾；全程 exit 0（非零退出一律视为 infra 故障）。
+# 程序本体经 `python -c` 加载（stdin 完整留给 payload）；stdin JSON 携带
+# 解法源码 + worker 脚本 + call 清单（无期望值）；harness 把解法与 worker
+# 写入 /tmp tmpfs，每行输出一个用例结论；正常结束（即使首败即停）必以
+# summary 行收尾；
+# 全程 exit 0（非零退出一律视为 infra 故障）。
 _HARNESS = (
-    "import json, subprocess, sys, time\n"
+    "import json, os, subprocess, sys, time\n"
     + inspect.getsource(_parse_json_lines)
     + r'''
-calls = json.load(sys.stdin)
+payload = json.load(sys.stdin)
 per_test_ms = int(sys.argv[1])
 per_test_s = per_test_ms / 1000.0
 t0 = time.monotonic()
@@ -116,25 +152,30 @@ def emit(obj):
 def summary():
     emit({"i": "done", "duration_ms": int((time.monotonic() - t0) * 1000)})
 
+# 注入文件到 /tmp tmpfs（exec 开启）：解法 + worker 脚本，零挂载
+with open("/tmp/solution.py", "w", encoding="utf-8") as f:
+    f.write(payload["solution"])
+with open("/tmp/_worker.py", "w", encoding="utf-8") as f:
+    f.write(payload["worker"])
+
 # 静态语法预检：compile 不执行代码，安全；行号信息无害可回传
 try:
-    with open("/sandbox/solution.py", encoding="utf-8") as f:
-        src = f.read()
-    compile(src, "solution.py", "exec")
+    compile(payload["solution"], "solution.py", "exec")
 except SyntaxError as e:
     emit({"i": -1, "status": "syntax",
           "detail": "line {}: {}".format(e.lineno, e.msg)[:210]})
     summary()
     raise SystemExit(0)
-except OSError:
+except (OSError, ValueError):
     emit({"i": -1, "status": "runtime-error"})
     summary()
     raise SystemExit(0)
 
+calls = payload["calls"]
 for idx, c in enumerate(calls):
     try:
         proc = subprocess.run(
-            [sys.executable, "/sandbox/_worker.py"],
+            [sys.executable, "/tmp/_worker.py"],
             input=json.dumps({"i": idx, "call": c["call"]}),
             capture_output=True, text=True, timeout=per_test_s,
         )
@@ -175,7 +216,8 @@ summary()
 )
 
 # ---- 容器内 worker：单用例执行者（每个用例全新进程，全新 import） ----
-# stdin 只收自己的 {"i", "call"}；全程见不到期望值（__main__ 命名空间里就没有）。
+# 脚本源码由 harness 经 stdin 注入的 payload 落到 /tmp；stdin 只收自己的
+# {"i", "call"}；全程见不到期望值（__main__ 命名空间里就没有）。
 _WORKER = r'''
 import io, json, sys
 
@@ -203,7 +245,7 @@ except (ImportError, OSError):
 
 # 玩家代码的打印/报错截留在内存中，绝不进 worker 协议流（防协议污染与信息泄漏）
 buf_out, buf_err = io.StringIO(), io.StringIO()
-sys.path.insert(0, "/sandbox")
+sys.path.insert(0, "/tmp")
 old_out, old_err = sys.stdout, sys.stderr
 sys.stdout, sys.stderr = buf_out, buf_err
 try:
@@ -307,58 +349,38 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
     else:
         per_test_ms = PER_TEST_TIMEOUT_MS
     outer_s = len(test_cases) * (per_test_ms / 1000.0) + WALL_CLOCK_SLACK_S
-    calls_json = build_calls_payload(test_cases)
+    # 零挂载：解法源码 + worker 脚本 + 用例清单（仅 call，无期望值）全部经
+    # stdin 注入；运行期文件只落在容器内 /tmp tmpfs——嵌套容器解析不了
+    # 宿主路径，任何 -v 挂载都会静默拿到空目录（浏览器验收发现的 P1）。
+    payload = build_stdin_payload(code, test_cases, _WORKER)
+    cmd = build_sandbox_cmd(per_test_ms, _HARNESS)
 
-    with tempfile.TemporaryDirectory(prefix="codewar-judge-") as tmp:
-        # 挂载目录只含 solution.py 与 harness/worker 脚本；用例（仅 call）
-        # 经 stdin 管道注入、全程不落盘；期望值不出宿主进程。
-        with open(os.path.join(tmp, "solution.py"), "w", encoding="utf-8") as f:
-            f.write(code or "")
-        with open(os.path.join(tmp, "_harness.py"), "w", encoding="utf-8") as f:
-            f.write(_HARNESS)
-        with open(os.path.join(tmp, "_worker.py"), "w", encoding="utf-8") as f:
-            f.write(_WORKER)
-
-        cmd = [
-            "docker", "run", "--rm", "-i",
-            "--network=none",
-            "--memory=256m",
-            "--pids-limit=64",
-            "--cpus=0.5",
-            "--cap-drop=ALL",
-            "--read-only",
-            "--tmpfs", "/tmp:size=16m,exec",
-            "-v", "{}:/sandbox:ro".format(os.path.abspath(tmp)),
-            "-e", "PYTHONDONTWRITEBYTECODE=1",
-            SANDBOX_IMAGE,
-            "python", "/sandbox/_harness.py", str(per_test_ms),
-        ]
-        started = time.monotonic()
+    started = time.monotonic()
+    try:
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+    except OSError:
+        # docker 二进制在可用性检查后消失等竞态：infra 故障，不裸抛
+        return _judge_error(0)
+    try:
+        out, _ = proc.communicate(input=payload, timeout=outer_s)
+    except subprocess.TimeoutExpired:
+        # 整体墙钟熔断（第二道保险）：kill 后收已 flush 的行，已完成的
+        # 用例按其结论计入，未完成的在汇总时判 timeout。
+        proc.kill()
         try:
-            proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            )
-        except OSError:
-            # docker 二进制在可用性检查后消失等竞态：infra 故障，不裸抛
-            return _judge_error(0)
-        try:
-            out, _ = proc.communicate(input=calls_json, timeout=outer_s)
+            out, _ = proc.communicate(timeout=_DRAIN_TIMEOUT_S)
         except subprocess.TimeoutExpired:
-            # 整体墙钟熔断（第二道保险）：kill 后收已 flush 的行，已完成的
-            # 用例按其结论计入，未完成的在汇总时判 timeout。
-            proc.kill()
-            try:
-                out, _ = proc.communicate(timeout=_DRAIN_TIMEOUT_S)
-            except subprocess.TimeoutExpired:
-                out = ""
-        except OSError:
-            # docker 调用失败（无 daemon 等 infra 故障）
-            return _judge_error(int((time.monotonic() - started) * 1000))
+            out = ""
+    except OSError:
+        # docker 调用失败（无 daemon 等 infra 故障）
+        return _judge_error(int((time.monotonic() - started) * 1000))
 
-        elapsed_ms = int((time.monotonic() - started) * 1000)
-        lines = _parse_json_lines(out)
-        if not lines:
-            # 空输出 = 容器未产出任何结论行（daemon 故障/镜像缺失等）→ infra 故障计
-            return _judge_error(elapsed_ms)
-        return _assemble_verdict(lines, test_cases, elapsed_ms)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    lines = _parse_json_lines(out)
+    if not lines:
+        # 空输出 = 容器未产出任何结论行（daemon 故障/镜像缺失等）→ infra 故障计
+        return _judge_error(elapsed_ms)
+    return _assemble_verdict(lines, test_cases, elapsed_ms)
