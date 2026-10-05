@@ -55,7 +55,7 @@ describe("对局状态机（事件流驱动）", () => {
 
     s.applyEnvelope(Envelope.fromJSON(envelope(3, "matchEnded", { winner: "p1", reason: "ko" })));
     expect(s.isEnded).toBe(true);
-    expect(s.result).toEqual({ winner: "p1", reason: "ko" });
+    expect(s.result).toEqual({ winner: "p1", reason: "ko", elo: [] });
   });
 
   it("面板事件装载题目，回合切换时清空", () => {
@@ -108,6 +108,35 @@ describe("对局状态机（事件流驱动）", () => {
     const s = useMatchStore();
     s.applyEnvelope(Envelope.fromJSON(envelope(1, "matchEnded", { winner: "", reason: "rounds-cap" })));
     expect(s.isEnded).toBe(true);
-    expect(s.result).toEqual({ winner: "", reason: "rounds-cap" });
+    expect(s.result).toEqual({ winner: "", reason: "rounds-cap", elo: [] });
+  });
+
+  it("终局 ELO 随 MatchEnded 下发（已结算，含平局 +0）", () => {
+    const s = useMatchStore();
+    s.applyEnvelope(
+      Envelope.fromJSON(
+        envelope(1, "matchEnded", {
+          winner: "p1",
+          reason: "ko",
+          elo: [
+            { player: "p1", userId: "u1", eloBefore: 1000, eloAfter: 1016 },
+            { player: "p2", userId: "u2", eloBefore: 1000, eloAfter: 984 },
+          ],
+        }),
+      ),
+    );
+    expect(s.result?.elo).toEqual([
+      { player: "p1", userId: "u1", eloBefore: 1000, eloAfter: 1016 },
+      { player: "p2", userId: "u2", eloBefore: 1000, eloAfter: 984 },
+    ]);
+  });
+
+  it("快照 result 不带 ELO（重连快照路径归 08 号票）", () => {
+    const s = useMatchStore();
+    s.applyServerMessage(
+      { snapshot: { seq: 0, phase: "MATCH_PHASE_ENDED", round: 10, players: [], result: { winner: "p1", reason: "ko" } } },
+      "p1",
+    );
+    expect(s.result).toEqual({ winner: "p1", reason: "ko", elo: [] });
   });
 });

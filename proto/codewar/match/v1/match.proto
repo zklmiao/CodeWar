@@ -112,6 +112,18 @@ message MatchEnded {
   string winner = 1; // "p1"/"p2"；空 = 平局
   // ko | self-ko | rounds-cap
   string reason = 2;
+  // 已结算对局的双方 ELO 变化（07 号票：结果落库后附在同一条 MatchEnded 上发出）。
+  // 平局仍携带（elo_before == elo_after，delta=0），以便客户端区分"已结算平局（+0）"
+  // 与"匿名未结算（字段为空）"；任一方匿名的对局该字段为空，终局面板不显示 ELO 区块。
+  repeated PlayerElo elo = 3;
+}
+
+// 单名玩家在一次已结算对局中的 ELO 变化（MatchEnded.elo 的元素）。
+message PlayerElo {
+  string player = 1; // "p1" | "p2"
+  string user_id = 2; // 用户 UUID（字符串形态）
+  int32 elo_before = 3;
+  int32 elo_after = 4;
 }
 
 // ============ 客户端 → 服务端 ============
@@ -125,6 +137,11 @@ message ClientMessage {
 
 message JoinRequest {
   string player = 1; // "p1" | "p2"
+  // 可选认证令牌（07 号票）：注册/登录接口下发的服务端不透明会话令牌，
+  // 客户端存 sessionStorage（按标签页隔离，支持同机双账号热座），WS 建连时明文携带（与页面同源）。
+  // 为空 = 匿名热座，与 01 号票行为完全一致（向后兼容，不强制登录）；
+  // 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
+  string token = 2;
 }
 
 message SubmitRequest {

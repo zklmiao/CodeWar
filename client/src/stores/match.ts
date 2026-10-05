@@ -14,9 +14,19 @@ export interface LogEntry {
   text: string;
 }
 
+export interface PlayerEloView {
+  player: string; // "p1" | "p2"
+  userId: string;
+  eloBefore: number;
+  eloAfter: number;
+}
+
 export interface MatchResultView {
   winner: string; // "p1" | "p2" | ""（平局）
   reason: string; // ko | self-ko | rounds-cap
+  // 双方 ELO 变化（07 号票）：已结算对局（含平局，before==after）才有内容；
+  // 匿名对局为空数组，终局面板不显示 ELO 区块。
+  elo: PlayerEloView[];
 }
 
 export interface MatchState {
@@ -88,7 +98,9 @@ export const useMatchStore = defineStore("match", {
         : null;
       this.viewerLockUntil = Number(s.viewerLockUntilUnixMs);
       this.viewerSolved = false;
-      this.result = s.result ? { winner: s.result.winner, reason: s.result.reason } : null;
+      // 快照 result（MatchResult proto）不带 ELO：重连快照路径归 08 号票，
+      // ELO 只随终局事件下发。
+      this.result = s.result ? { winner: s.result.winner, reason: s.result.reason, elo: [] } : null;
     },
     // ===== 事件：逐条应用；序号断裂置 gapDetected（ADR-0002）=====
     applyEnvelope(env: Envelope) {
@@ -97,7 +109,7 @@ export const useMatchStore = defineStore("match", {
         return;
       }
       this.seq = env.seq;
-      if (env.unixMs > 0) this.serverOffsetMs = Number(env.unixMs) - Date.now();
+      if (Number(env.unixMs) > 0) this.serverOffsetMs = Number(env.unixMs) - Date.now();
 
       if (env.roundStarted) {
         this.round = env.roundStarted.round;
@@ -127,7 +139,16 @@ export const useMatchStore = defineStore("match", {
         );
       } else if (env.matchEnded) {
         this.phase = MatchPhase.MATCH_PHASE_ENDED;
-        this.result = { winner: env.matchEnded.winner, reason: env.matchEnded.reason };
+        this.result = {
+          winner: env.matchEnded.winner,
+          reason: env.matchEnded.reason,
+          elo: (env.matchEnded.elo ?? []).map((e) => ({
+            player: e.player,
+            userId: e.userId,
+            eloBefore: e.eloBefore,
+            eloAfter: e.eloAfter,
+          })),
+        };
         this.pushLog(
           env.matchEnded.winner
             ? `🏆 ${env.matchEnded.winner} 获胜（${env.matchEnded.reason}）`

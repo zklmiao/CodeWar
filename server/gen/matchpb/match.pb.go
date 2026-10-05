@@ -910,7 +910,11 @@ type MatchEnded struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Winner string                 `protobuf:"bytes,1,opt,name=winner,proto3" json:"winner,omitempty"` // "p1"/"p2"；空 = 平局
 	// ko | self-ko | rounds-cap
-	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// 已结算对局的双方 ELO 变化（07 号票：结果落库后附在同一条 MatchEnded 上发出）。
+	// 平局仍携带（elo_before == elo_after，delta=0），以便客户端区分"已结算平局（+0）"
+	// 与"匿名未结算（字段为空）"；任一方匿名的对局该字段为空，终局面板不显示 ELO 区块。
+	Elo           []*PlayerElo `protobuf:"bytes,3,rep,name=elo,proto3" json:"elo,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -959,6 +963,82 @@ func (x *MatchEnded) GetReason() string {
 	return ""
 }
 
+func (x *MatchEnded) GetElo() []*PlayerElo {
+	if x != nil {
+		return x.Elo
+	}
+	return nil
+}
+
+// 单名玩家在一次已结算对局中的 ELO 变化（MatchEnded.elo 的元素）。
+type PlayerElo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Player        string                 `protobuf:"bytes,1,opt,name=player,proto3" json:"player,omitempty"`               // "p1" | "p2"
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // 用户 UUID（字符串形态）
+	EloBefore     int32                  `protobuf:"varint,3,opt,name=elo_before,json=eloBefore,proto3" json:"elo_before,omitempty"`
+	EloAfter      int32                  `protobuf:"varint,4,opt,name=elo_after,json=eloAfter,proto3" json:"elo_after,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlayerElo) Reset() {
+	*x = PlayerElo{}
+	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerElo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerElo) ProtoMessage() {}
+
+func (x *PlayerElo) ProtoReflect() protoreflect.Message {
+	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerElo.ProtoReflect.Descriptor instead.
+func (*PlayerElo) Descriptor() ([]byte, []int) {
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *PlayerElo) GetPlayer() string {
+	if x != nil {
+		return x.Player
+	}
+	return ""
+}
+
+func (x *PlayerElo) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *PlayerElo) GetEloBefore() int32 {
+	if x != nil {
+		return x.EloBefore
+	}
+	return 0
+}
+
+func (x *PlayerElo) GetEloAfter() int32 {
+	if x != nil {
+		return x.EloAfter
+	}
+	return 0
+}
+
 type ClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -972,7 +1052,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -984,7 +1064,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -997,7 +1077,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{12}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClientMessage) GetPayload() isClientMessage_Payload {
@@ -1042,15 +1122,20 @@ func (*ClientMessage_Join) isClientMessage_Payload() {}
 func (*ClientMessage_Submit) isClientMessage_Payload() {}
 
 type JoinRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Player        string                 `protobuf:"bytes,1,opt,name=player,proto3" json:"player,omitempty"` // "p1" | "p2"
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Player string                 `protobuf:"bytes,1,opt,name=player,proto3" json:"player,omitempty"` // "p1" | "p2"
+	// 可选认证令牌（07 号票）：注册/登录接口下发的服务端不透明会话令牌，
+	// 客户端存 sessionStorage（按标签页隔离，支持同机双账号热座），WS 建连时明文携带（与页面同源）。
+	// 为空 = 匿名热座，与 01 号票行为完全一致（向后兼容，不强制登录）；
+	// 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
+	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1062,7 +1147,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1075,12 +1160,19 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{13}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JoinRequest) GetPlayer() string {
 	if x != nil {
 		return x.Player
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetToken() string {
+	if x != nil {
+		return x.Token
 	}
 	return ""
 }
@@ -1094,7 +1186,7 @@ type SubmitRequest struct {
 
 func (x *SubmitRequest) Reset() {
 	*x = SubmitRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1198,7 @@ func (x *SubmitRequest) String() string {
 func (*SubmitRequest) ProtoMessage() {}
 
 func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1211,7 @@ func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{14}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SubmitRequest) GetCode() string {
@@ -1193,17 +1285,25 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x0e\n" +
 	"\x02hp\x18\x02 \x01(\x05R\x02hp\x12\x14\n" +
 	"\x05delta\x18\x03 \x01(\x05R\x05delta\x12\x14\n" +
-	"\x05cause\x18\x04 \x01(\tR\x05cause\"<\n" +
+	"\x05cause\x18\x04 \x01(\tR\x05cause\"k\n" +
 	"\n" +
 	"MatchEnded\x12\x16\n" +
 	"\x06winner\x18\x01 \x01(\tR\x06winner\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x8a\x01\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12-\n" +
+	"\x03elo\x18\x03 \x03(\v2\x1b.codewar.match.v1.PlayerEloR\x03elo\"x\n" +
+	"\tPlayerElo\x12\x16\n" +
+	"\x06player\x18\x01 \x01(\tR\x06player\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"elo_before\x18\x03 \x01(\x05R\teloBefore\x12\x1b\n" +
+	"\telo_after\x18\x04 \x01(\x05R\beloAfter\"\x8a\x01\n" +
 	"\rClientMessage\x123\n" +
 	"\x04join\x18\x01 \x01(\v2\x1d.codewar.match.v1.JoinRequestH\x00R\x04join\x129\n" +
 	"\x06submit\x18\x02 \x01(\v2\x1f.codewar.match.v1.SubmitRequestH\x00R\x06submitB\t\n" +
-	"\apayload\"%\n" +
+	"\apayload\";\n" +
 	"\vJoinRequest\x12\x16\n" +
-	"\x06player\x18\x01 \x01(\tR\x06player\"#\n" +
+	"\x06player\x18\x01 \x01(\tR\x06player\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"#\n" +
 	"\rSubmitRequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code*w\n" +
 	"\n" +
@@ -1226,7 +1326,7 @@ func file_codewar_match_v1_match_proto_rawDescGZIP() []byte {
 }
 
 var file_codewar_match_v1_match_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_codewar_match_v1_match_proto_goTypes = []any{
 	(MatchPhase)(0),          // 0: codewar.match.v1.MatchPhase
 	(*ServerMessage)(nil),    // 1: codewar.match.v1.ServerMessage
@@ -1241,9 +1341,10 @@ var file_codewar_match_v1_match_proto_goTypes = []any{
 	(*ActionResolved)(nil),   // 10: codewar.match.v1.ActionResolved
 	(*HpChanged)(nil),        // 11: codewar.match.v1.HpChanged
 	(*MatchEnded)(nil),       // 12: codewar.match.v1.MatchEnded
-	(*ClientMessage)(nil),    // 13: codewar.match.v1.ClientMessage
-	(*JoinRequest)(nil),      // 14: codewar.match.v1.JoinRequest
-	(*SubmitRequest)(nil),    // 15: codewar.match.v1.SubmitRequest
+	(*PlayerElo)(nil),        // 13: codewar.match.v1.PlayerElo
+	(*ClientMessage)(nil),    // 14: codewar.match.v1.ClientMessage
+	(*JoinRequest)(nil),      // 15: codewar.match.v1.JoinRequest
+	(*SubmitRequest)(nil),    // 16: codewar.match.v1.SubmitRequest
 }
 var file_codewar_match_v1_match_proto_depIdxs = []int32{
 	2,  // 0: codewar.match.v1.ServerMessage.snapshot:type_name -> codewar.match.v1.Snapshot
@@ -1259,13 +1360,14 @@ var file_codewar_match_v1_match_proto_depIdxs = []int32{
 	11, // 10: codewar.match.v1.Envelope.hp_changed:type_name -> codewar.match.v1.HpChanged
 	12, // 11: codewar.match.v1.Envelope.match_ended:type_name -> codewar.match.v1.MatchEnded
 	4,  // 12: codewar.match.v1.PanelReady.problem:type_name -> codewar.match.v1.Problem
-	14, // 13: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
-	15, // 14: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	13, // 13: codewar.match.v1.MatchEnded.elo:type_name -> codewar.match.v1.PlayerElo
+	15, // 14: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
+	16, // 15: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_codewar_match_v1_match_proto_init() }
@@ -1285,7 +1387,7 @@ func file_codewar_match_v1_match_proto_init() {
 		(*Envelope_HpChanged)(nil),
 		(*Envelope_MatchEnded)(nil),
 	}
-	file_codewar_match_v1_match_proto_msgTypes[12].OneofWrappers = []any{
+	file_codewar_match_v1_match_proto_msgTypes[13].OneofWrappers = []any{
 		(*ClientMessage_Join)(nil),
 		(*ClientMessage_Submit)(nil),
 	}
@@ -1295,7 +1397,7 @@ func file_codewar_match_v1_match_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_codewar_match_v1_match_proto_rawDesc), len(file_codewar_match_v1_match_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

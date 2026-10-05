@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net/http"
@@ -10,8 +11,10 @@ import (
 	"strings"
 
 	"codewar/server/gen/judgepb"
+	"codewar/server/internal/accounts"
 	"codewar/server/internal/hub"
 	"codewar/server/internal/judgeclient"
+	"codewar/server/internal/store"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -34,11 +37,28 @@ func main() {
 	}
 	judge := judgeclient.NewGRPCJudge(judgepb.NewJudgeServiceClient(conn), 8000)
 
-	h := hub.New(judge, logger)
+	// 07 号票：DATABASE_URL 为空 = 无库模式（纯匿名热座，账号接口 503）；
+	// 配置了但连不上/迁不上 = 直接退出（运维意图明确，静默降级会掩盖故障）。
+	var st *store.Store
+	if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
+		s, err := store.Open(context.Background(), dsn)
+		if err != nil {
+			logger.Error("数据库连接/迁移失败", "err", err)
+			os.Exit(1)
+		}
+		defer s.Close()
+		st = s
+		logger.Info("账号与战绩存储已启用（迁移自动执行完毕）")
+	} else {
+		logger.Warn("DATABASE_URL 未配置：账号接口不可用，仅匿名热座")
+	}
+
+	h := hub.New(judge, logger, st)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	accounts.New(st, logger).Mount(r)
 	r.Get("/ws", h.ServeWS)
 	mountStatic(r, *staticDir)
 
