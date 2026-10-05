@@ -69,20 +69,32 @@ export interface Snapshot {
   round: number;
   /** 当前回合截止时间（phase=ROUND_ACTIVE 时有效）；int64 → JSON 字符串 */
   deadlineUnixMs: string;
-  /** 当前回合镜像题（就绪时） */
-  problem:
-    | Problem
-    | undefined;
   /** 查看者自己的提交锁截止（0 = 未锁定）；快照按连接下发，可含查看者私有视图 */
   viewerLockUntilUnixMs: string;
   /** phase=ENDED 时有效 */
-  result: MatchResult | undefined;
+  result:
+    | MatchResult
+    | undefined;
+  /**
+   * 三题面板（03 号票）：attack 镜像 + 查看者私有 move/defend。
+   * 快照按连接下发，私有题只带查看者自己的（与事件流的 PanelReady 不同——
+   * 共享事件流必须对所有连接一致以保序号单调，故 PanelReady 同时携带双方私有面板）。
+   */
+  panel: Panel | undefined;
 }
 
 export interface PlayerView {
   /** "p1" | "p2" */
   id: string;
   hp: number;
+  /** 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位） */
+  pos: Position | undefined;
+}
+
+/** 网格格子坐标（行列均从 0 计，5×5） */
+export interface Position {
+  row: number;
+  col: number;
 }
 
 export interface Problem {
@@ -93,6 +105,43 @@ export interface Problem {
   signature: string;
   /** 编辑器初始内容 */
   starterCode: string;
+}
+
+/** 单名玩家的私有行动题（移动 + 防御；双方实例独立，seed 含 player 维度） */
+export interface PrivatePanel {
+  move: Problem | undefined;
+  defend: Problem | undefined;
+}
+
+/**
+ * 三题面板（03 号票）：攻击镜像 + 双方私有行动题。
+ * 共享事件流对所有连接内容一致（保序号单调）：私有题的双方面板都在其中，
+ * 客户端按 viewerId 取用——题面是公开文本（判题用例永不下发），无泄漏风险。
+ */
+export interface PanelReady {
+  /** 镜像题：双方同实例（spec 用户故事 12） */
+  attack:
+    | Problem
+    | undefined;
+  /** P1 私有行动题 */
+  p1:
+    | PrivatePanel
+    | undefined;
+  /** P2 私有行动题 */
+  p2: PrivatePanel | undefined;
+}
+
+/** 查看者视角的三题面板（Snapshot.panel 用；私有题已按查看者过滤） */
+export interface Panel {
+  attack:
+    | Problem
+    | undefined;
+  /** 查看者私有 */
+  move:
+    | Problem
+    | undefined;
+  /** 查看者私有 */
+  defend: Problem | undefined;
 }
 
 export interface MatchResult {
@@ -112,18 +161,17 @@ export interface Envelope {
   submissionJudged?: SubmissionJudged | undefined;
   actionResolved?: ActionResolved | undefined;
   hpChanged?: HpChanged | undefined;
-  matchEnded?: MatchEnded | undefined;
+  matchEnded?:
+    | MatchEnded
+    | undefined;
+  /** 参数非法的提交被拒（03 号票：不判题不惩罚，玩家改参数可重交） */
+  submissionRejected?: SubmissionRejected | undefined;
 }
 
 export interface RoundStarted {
   /** 1 起 */
   round: number;
   deadlineUnixMs: string;
-}
-
-export interface PanelReady {
-  /** 镜像题：双方同实例（spec 用户故事 12） */
-  problem: Problem | undefined;
 }
 
 export interface SubmissionJudged {
@@ -137,13 +185,26 @@ export interface SubmissionJudged {
   selfDamageApplied: boolean;
   /** 提交者的锁定截止时间；仅本次判定触发锁定（自损路径）时携带，0 = 未触发锁定 */
   lockUntilUnixMs: string;
+  /** 本次提交对应的行动题（attack | move | defend；03 号票起携带） */
+  action: string;
 }
 
 export interface ActionResolved {
   attacker: string;
-  /** 基础 22 × 时间系数（0.6~1.0）取整；本票固定站位必然命中 */
+  /** 行动类型：attack | move | defend（03 号票起） */
+  action: string;
+  /**
+   * 攻击实际落地伤害 = 基础 22 × 时间系数（0.6~1.0）× 护盾折减（命中且有盾 ×0.4）取整；
+   * 闪避或非攻击行动为 0
+   */
   damage: number;
   solveMs: number;
+  /** 攻击未命中：目标不在攻击者相邻 4 格（结算时刻位置判定，走位闪避） */
+  dodged: boolean;
+  /** 命中且目标本回合有护盾（damage 已按 ×0.4 折减） */
+  shielded: boolean;
+  /** 移动终点（action=move 时有效） */
+  moveTo: Position | undefined;
 }
 
 export interface HpChanged {
@@ -179,6 +240,16 @@ export interface PlayerElo {
   eloAfter: number;
 }
 
+/**
+ * 参数非法的移动提交被拒（03 号票）：仅反馈原因，不判题不惩罚；
+ * 共享事件流携带（双方可见，无敏感信息），被拒方可改参数重交。
+ */
+export interface SubmissionRejected {
+  player: string;
+  /** out-of-bounds | diagonal | too-far | path-blocked | dest-occupied */
+  reason: string;
+}
+
 export interface ClientMessage {
   /** 首条消息必须 join */
   join?: JoinRequest | undefined;
@@ -199,6 +270,10 @@ export interface JoinRequest {
 
 export interface SubmitRequest {
   code: string;
+  /** 本次提交对应的行动题：attack | move | defend（03 号票；判题用该题的测试用例） */
+  action: string;
+  /** 移动目标格（仅 action=move 携带；直线正交距离 1-2，终点空格且路径不穿过对方） */
+  moveTo: Position | undefined;
 }
 
 function createBaseServerMessage(): ServerMessage {
@@ -297,9 +372,9 @@ function createBaseSnapshot(): Snapshot {
     players: [],
     round: 0,
     deadlineUnixMs: "0",
-    problem: undefined,
     viewerLockUntilUnixMs: "0",
     result: undefined,
+    panel: undefined,
   };
 }
 
@@ -320,14 +395,14 @@ export const Snapshot: MessageFns<Snapshot> = {
     if (message.deadlineUnixMs !== "0") {
       writer.uint32(40).int64(message.deadlineUnixMs);
     }
-    if (message.problem !== undefined) {
-      Problem.encode(message.problem, writer.uint32(50).fork()).join();
-    }
     if (message.viewerLockUntilUnixMs !== "0") {
       writer.uint32(56).int64(message.viewerLockUntilUnixMs);
     }
     if (message.result !== undefined) {
       MatchResult.encode(message.result, writer.uint32(66).fork()).join();
+    }
+    if (message.panel !== undefined) {
+      Panel.encode(message.panel, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -385,14 +460,6 @@ export const Snapshot: MessageFns<Snapshot> = {
             message.deadlineUnixMs = reader.int64().toString();
             continue;
           }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.problem = Problem.decode(reader, reader.uint32());
-            continue;
-          }
           case 7: {
             if (tag !== 56) {
               break;
@@ -407,6 +474,14 @@ export const Snapshot: MessageFns<Snapshot> = {
             }
 
             message.result = MatchResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.panel = Panel.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -432,13 +507,13 @@ export const Snapshot: MessageFns<Snapshot> = {
         : isSet(object.deadline_unix_ms)
         ? globalThis.String(object.deadline_unix_ms)
         : "0",
-      problem: isSet(object.problem) ? Problem.fromJSON(object.problem) : undefined,
       viewerLockUntilUnixMs: isSet(object.viewerLockUntilUnixMs)
         ? globalThis.String(object.viewerLockUntilUnixMs)
         : isSet(object.viewer_lock_until_unix_ms)
         ? globalThis.String(object.viewer_lock_until_unix_ms)
         : "0",
       result: isSet(object.result) ? MatchResult.fromJSON(object.result) : undefined,
+      panel: isSet(object.panel) ? Panel.fromJSON(object.panel) : undefined,
     };
   },
 
@@ -459,14 +534,14 @@ export const Snapshot: MessageFns<Snapshot> = {
     if (message.deadlineUnixMs !== "0") {
       obj.deadlineUnixMs = message.deadlineUnixMs;
     }
-    if (message.problem !== undefined) {
-      obj.problem = Problem.toJSON(message.problem);
-    }
     if (message.viewerLockUntilUnixMs !== "0") {
       obj.viewerLockUntilUnixMs = message.viewerLockUntilUnixMs;
     }
     if (message.result !== undefined) {
       obj.result = MatchResult.toJSON(message.result);
+    }
+    if (message.panel !== undefined) {
+      obj.panel = Panel.toJSON(message.panel);
     }
     return obj;
   },
@@ -481,19 +556,17 @@ export const Snapshot: MessageFns<Snapshot> = {
     message.players = object.players?.map((e) => PlayerView.fromPartial(e)) || [];
     message.round = object.round ?? 0;
     message.deadlineUnixMs = object.deadlineUnixMs ?? "0";
-    message.problem = (object.problem !== undefined && object.problem !== null)
-      ? Problem.fromPartial(object.problem)
-      : undefined;
     message.viewerLockUntilUnixMs = object.viewerLockUntilUnixMs ?? "0";
     message.result = (object.result !== undefined && object.result !== null)
       ? MatchResult.fromPartial(object.result)
       : undefined;
+    message.panel = (object.panel !== undefined && object.panel !== null) ? Panel.fromPartial(object.panel) : undefined;
     return message;
   },
 };
 
 function createBasePlayerView(): PlayerView {
-  return { id: "", hp: 0 };
+  return { id: "", hp: 0, pos: undefined };
 }
 
 export const PlayerView: MessageFns<PlayerView> = {
@@ -503,6 +576,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     }
     if (message.hp !== 0) {
       writer.uint32(16).int32(message.hp);
+    }
+    if (message.pos !== undefined) {
+      Position.encode(message.pos, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -536,6 +612,14 @@ export const PlayerView: MessageFns<PlayerView> = {
             message.hp = reader.int32();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.pos = Position.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -552,6 +636,7 @@ export const PlayerView: MessageFns<PlayerView> = {
     return {
       id: isSet(object.id) ? globalThis.String(object.id) : "",
       hp: isSet(object.hp) ? globalThis.Number(object.hp) : 0,
+      pos: isSet(object.pos) ? Position.fromJSON(object.pos) : undefined,
     };
   },
 
@@ -563,6 +648,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     if (message.hp !== 0) {
       obj.hp = Math.round(message.hp);
     }
+    if (message.pos !== undefined) {
+      obj.pos = Position.toJSON(message.pos);
+    }
     return obj;
   },
 
@@ -573,6 +661,92 @@ export const PlayerView: MessageFns<PlayerView> = {
     const message = createBasePlayerView();
     message.id = object.id ?? "";
     message.hp = object.hp ?? 0;
+    message.pos = (object.pos !== undefined && object.pos !== null) ? Position.fromPartial(object.pos) : undefined;
+    return message;
+  },
+};
+
+function createBasePosition(): Position {
+  return { row: 0, col: 0 };
+}
+
+export const Position: MessageFns<Position> = {
+  encode(message: Position, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.row !== 0) {
+      writer.uint32(8).int32(message.row);
+    }
+    if (message.col !== 0) {
+      writer.uint32(16).int32(message.col);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Position {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePosition();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.row = reader.int32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.col = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Position {
+    return {
+      row: isSet(object.row) ? globalThis.Number(object.row) : 0,
+      col: isSet(object.col) ? globalThis.Number(object.col) : 0,
+    };
+  },
+
+  toJSON(message: Position): unknown {
+    const obj: any = {};
+    if (message.row !== 0) {
+      obj.row = Math.round(message.row);
+    }
+    if (message.col !== 0) {
+      obj.col = Math.round(message.col);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Position>, I>>(base?: I): Position {
+    return Position.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Position>, I>>(object: I): Position {
+    const message = createBasePosition();
+    message.row = object.row ?? 0;
+    message.col = object.col ?? 0;
     return message;
   },
 };
@@ -698,6 +872,301 @@ export const Problem: MessageFns<Problem> = {
   },
 };
 
+function createBasePrivatePanel(): PrivatePanel {
+  return { move: undefined, defend: undefined };
+}
+
+export const PrivatePanel: MessageFns<PrivatePanel> = {
+  encode(message: PrivatePanel, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.move !== undefined) {
+      Problem.encode(message.move, writer.uint32(10).fork()).join();
+    }
+    if (message.defend !== undefined) {
+      Problem.encode(message.defend, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PrivatePanel {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePrivatePanel();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.move = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.defend = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): PrivatePanel {
+    return {
+      move: isSet(object.move) ? Problem.fromJSON(object.move) : undefined,
+      defend: isSet(object.defend) ? Problem.fromJSON(object.defend) : undefined,
+    };
+  },
+
+  toJSON(message: PrivatePanel): unknown {
+    const obj: any = {};
+    if (message.move !== undefined) {
+      obj.move = Problem.toJSON(message.move);
+    }
+    if (message.defend !== undefined) {
+      obj.defend = Problem.toJSON(message.defend);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PrivatePanel>, I>>(base?: I): PrivatePanel {
+    return PrivatePanel.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PrivatePanel>, I>>(object: I): PrivatePanel {
+    const message = createBasePrivatePanel();
+    message.move = (object.move !== undefined && object.move !== null) ? Problem.fromPartial(object.move) : undefined;
+    message.defend = (object.defend !== undefined && object.defend !== null)
+      ? Problem.fromPartial(object.defend)
+      : undefined;
+    return message;
+  },
+};
+
+function createBasePanelReady(): PanelReady {
+  return { attack: undefined, p1: undefined, p2: undefined };
+}
+
+export const PanelReady: MessageFns<PanelReady> = {
+  encode(message: PanelReady, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attack !== undefined) {
+      Problem.encode(message.attack, writer.uint32(10).fork()).join();
+    }
+    if (message.p1 !== undefined) {
+      PrivatePanel.encode(message.p1, writer.uint32(18).fork()).join();
+    }
+    if (message.p2 !== undefined) {
+      PrivatePanel.encode(message.p2, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PanelReady {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePanelReady();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attack = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.p1 = PrivatePanel.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.p2 = PrivatePanel.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): PanelReady {
+    return {
+      attack: isSet(object.attack) ? Problem.fromJSON(object.attack) : undefined,
+      p1: isSet(object.p1) ? PrivatePanel.fromJSON(object.p1) : undefined,
+      p2: isSet(object.p2) ? PrivatePanel.fromJSON(object.p2) : undefined,
+    };
+  },
+
+  toJSON(message: PanelReady): unknown {
+    const obj: any = {};
+    if (message.attack !== undefined) {
+      obj.attack = Problem.toJSON(message.attack);
+    }
+    if (message.p1 !== undefined) {
+      obj.p1 = PrivatePanel.toJSON(message.p1);
+    }
+    if (message.p2 !== undefined) {
+      obj.p2 = PrivatePanel.toJSON(message.p2);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<PanelReady>, I>>(base?: I): PanelReady {
+    return PanelReady.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PanelReady>, I>>(object: I): PanelReady {
+    const message = createBasePanelReady();
+    message.attack = (object.attack !== undefined && object.attack !== null)
+      ? Problem.fromPartial(object.attack)
+      : undefined;
+    message.p1 = (object.p1 !== undefined && object.p1 !== null) ? PrivatePanel.fromPartial(object.p1) : undefined;
+    message.p2 = (object.p2 !== undefined && object.p2 !== null) ? PrivatePanel.fromPartial(object.p2) : undefined;
+    return message;
+  },
+};
+
+function createBasePanel(): Panel {
+  return { attack: undefined, move: undefined, defend: undefined };
+}
+
+export const Panel: MessageFns<Panel> = {
+  encode(message: Panel, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attack !== undefined) {
+      Problem.encode(message.attack, writer.uint32(10).fork()).join();
+    }
+    if (message.move !== undefined) {
+      Problem.encode(message.move, writer.uint32(18).fork()).join();
+    }
+    if (message.defend !== undefined) {
+      Problem.encode(message.defend, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Panel {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePanel();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attack = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.move = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.defend = Problem.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Panel {
+    return {
+      attack: isSet(object.attack) ? Problem.fromJSON(object.attack) : undefined,
+      move: isSet(object.move) ? Problem.fromJSON(object.move) : undefined,
+      defend: isSet(object.defend) ? Problem.fromJSON(object.defend) : undefined,
+    };
+  },
+
+  toJSON(message: Panel): unknown {
+    const obj: any = {};
+    if (message.attack !== undefined) {
+      obj.attack = Problem.toJSON(message.attack);
+    }
+    if (message.move !== undefined) {
+      obj.move = Problem.toJSON(message.move);
+    }
+    if (message.defend !== undefined) {
+      obj.defend = Problem.toJSON(message.defend);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Panel>, I>>(base?: I): Panel {
+    return Panel.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Panel>, I>>(object: I): Panel {
+    const message = createBasePanel();
+    message.attack = (object.attack !== undefined && object.attack !== null)
+      ? Problem.fromPartial(object.attack)
+      : undefined;
+    message.move = (object.move !== undefined && object.move !== null) ? Problem.fromPartial(object.move) : undefined;
+    message.defend = (object.defend !== undefined && object.defend !== null)
+      ? Problem.fromPartial(object.defend)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseMatchResult(): MatchResult {
   return { winner: "", reason: "" };
 }
@@ -793,6 +1262,7 @@ function createBaseEnvelope(): Envelope {
     actionResolved: undefined,
     hpChanged: undefined,
     matchEnded: undefined,
+    submissionRejected: undefined,
   };
 }
 
@@ -821,6 +1291,9 @@ export const Envelope: MessageFns<Envelope> = {
     }
     if (message.matchEnded !== undefined) {
       MatchEnded.encode(message.matchEnded, writer.uint32(66).fork()).join();
+    }
+    if (message.submissionRejected !== undefined) {
+      SubmissionRejected.encode(message.submissionRejected, writer.uint32(74).fork()).join();
     }
     return writer;
   },
@@ -902,6 +1375,14 @@ export const Envelope: MessageFns<Envelope> = {
             message.matchEnded = MatchEnded.decode(reader, reader.uint32());
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.submissionRejected = SubmissionRejected.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -952,6 +1433,11 @@ export const Envelope: MessageFns<Envelope> = {
         : isSet(object.match_ended)
         ? MatchEnded.fromJSON(object.match_ended)
         : undefined,
+      submissionRejected: isSet(object.submissionRejected)
+        ? SubmissionRejected.fromJSON(object.submissionRejected)
+        : isSet(object.submission_rejected)
+        ? SubmissionRejected.fromJSON(object.submission_rejected)
+        : undefined,
     };
   },
 
@@ -981,6 +1467,9 @@ export const Envelope: MessageFns<Envelope> = {
     if (message.matchEnded !== undefined) {
       obj.matchEnded = MatchEnded.toJSON(message.matchEnded);
     }
+    if (message.submissionRejected !== undefined) {
+      obj.submissionRejected = SubmissionRejected.toJSON(message.submissionRejected);
+    }
     return obj;
   },
 
@@ -1008,6 +1497,9 @@ export const Envelope: MessageFns<Envelope> = {
       : undefined;
     message.matchEnded = (object.matchEnded !== undefined && object.matchEnded !== null)
       ? MatchEnded.fromPartial(object.matchEnded)
+      : undefined;
+    message.submissionRejected = (object.submissionRejected !== undefined && object.submissionRejected !== null)
+      ? SubmissionRejected.fromPartial(object.submissionRejected)
       : undefined;
     return message;
   },
@@ -1102,77 +1594,16 @@ export const RoundStarted: MessageFns<RoundStarted> = {
   },
 };
 
-function createBasePanelReady(): PanelReady {
-  return { problem: undefined };
-}
-
-export const PanelReady: MessageFns<PanelReady> = {
-  encode(message: PanelReady, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.problem !== undefined) {
-      Problem.encode(message.problem, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): PanelReady {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBasePanelReady();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.problem = Problem.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): PanelReady {
-    return { problem: isSet(object.problem) ? Problem.fromJSON(object.problem) : undefined };
-  },
-
-  toJSON(message: PanelReady): unknown {
-    const obj: any = {};
-    if (message.problem !== undefined) {
-      obj.problem = Problem.toJSON(message.problem);
-    }
-    return obj;
-  },
-
-  create<I extends Exact<DeepPartial<PanelReady>, I>>(base?: I): PanelReady {
-    return PanelReady.fromPartial(base ?? ({} as any));
-  },
-  fromPartial<I extends Exact<DeepPartial<PanelReady>, I>>(object: I): PanelReady {
-    const message = createBasePanelReady();
-    message.problem = (object.problem !== undefined && object.problem !== null)
-      ? Problem.fromPartial(object.problem)
-      : undefined;
-    return message;
-  },
-};
-
 function createBaseSubmissionJudged(): SubmissionJudged {
-  return { player: "", passed: false, category: "", solveMs: 0, selfDamageApplied: false, lockUntilUnixMs: "0" };
+  return {
+    player: "",
+    passed: false,
+    category: "",
+    solveMs: 0,
+    selfDamageApplied: false,
+    lockUntilUnixMs: "0",
+    action: "",
+  };
 }
 
 export const SubmissionJudged: MessageFns<SubmissionJudged> = {
@@ -1194,6 +1625,9 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     }
     if (message.lockUntilUnixMs !== "0") {
       writer.uint32(48).int64(message.lockUntilUnixMs);
+    }
+    if (message.action !== "") {
+      writer.uint32(58).string(message.action);
     }
     return writer;
   },
@@ -1259,6 +1693,14 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
             message.lockUntilUnixMs = reader.int64().toString();
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.action = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1291,6 +1733,7 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
         : isSet(object.lock_until_unix_ms)
         ? globalThis.String(object.lock_until_unix_ms)
         : "0",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
     };
   },
 
@@ -1314,6 +1757,9 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     if (message.lockUntilUnixMs !== "0") {
       obj.lockUntilUnixMs = message.lockUntilUnixMs;
     }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
     return obj;
   },
 
@@ -1328,12 +1774,13 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
     message.solveMs = object.solveMs ?? 0;
     message.selfDamageApplied = object.selfDamageApplied ?? false;
     message.lockUntilUnixMs = object.lockUntilUnixMs ?? "0";
+    message.action = object.action ?? "";
     return message;
   },
 };
 
 function createBaseActionResolved(): ActionResolved {
-  return { attacker: "", damage: 0, solveMs: 0 };
+  return { attacker: "", action: "", damage: 0, solveMs: 0, dodged: false, shielded: false, moveTo: undefined };
 }
 
 export const ActionResolved: MessageFns<ActionResolved> = {
@@ -1341,11 +1788,23 @@ export const ActionResolved: MessageFns<ActionResolved> = {
     if (message.attacker !== "") {
       writer.uint32(10).string(message.attacker);
     }
+    if (message.action !== "") {
+      writer.uint32(18).string(message.action);
+    }
     if (message.damage !== 0) {
-      writer.uint32(16).int32(message.damage);
+      writer.uint32(24).int32(message.damage);
     }
     if (message.solveMs !== 0) {
-      writer.uint32(24).int32(message.solveMs);
+      writer.uint32(32).int32(message.solveMs);
+    }
+    if (message.dodged !== false) {
+      writer.uint32(40).bool(message.dodged);
+    }
+    if (message.shielded !== false) {
+      writer.uint32(48).bool(message.shielded);
+    }
+    if (message.moveTo !== undefined) {
+      Position.encode(message.moveTo, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -1372,11 +1831,11 @@ export const ActionResolved: MessageFns<ActionResolved> = {
             continue;
           }
           case 2: {
-            if (tag !== 16) {
+            if (tag !== 18) {
               break;
             }
 
-            message.damage = reader.int32();
+            message.action = reader.string();
             continue;
           }
           case 3: {
@@ -1384,7 +1843,39 @@ export const ActionResolved: MessageFns<ActionResolved> = {
               break;
             }
 
+            message.damage = reader.int32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
             message.solveMs = reader.int32();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.dodged = reader.bool();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.shielded = reader.bool();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.moveTo = Position.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -1402,12 +1893,20 @@ export const ActionResolved: MessageFns<ActionResolved> = {
   fromJSON(object: any): ActionResolved {
     return {
       attacker: isSet(object.attacker) ? globalThis.String(object.attacker) : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
       damage: isSet(object.damage) ? globalThis.Number(object.damage) : 0,
       solveMs: isSet(object.solveMs)
         ? globalThis.Number(object.solveMs)
         : isSet(object.solve_ms)
         ? globalThis.Number(object.solve_ms)
         : 0,
+      dodged: isSet(object.dodged) ? globalThis.Boolean(object.dodged) : false,
+      shielded: isSet(object.shielded) ? globalThis.Boolean(object.shielded) : false,
+      moveTo: isSet(object.moveTo)
+        ? Position.fromJSON(object.moveTo)
+        : isSet(object.move_to)
+        ? Position.fromJSON(object.move_to)
+        : undefined,
     };
   },
 
@@ -1416,11 +1915,23 @@ export const ActionResolved: MessageFns<ActionResolved> = {
     if (message.attacker !== "") {
       obj.attacker = message.attacker;
     }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
     if (message.damage !== 0) {
       obj.damage = Math.round(message.damage);
     }
     if (message.solveMs !== 0) {
       obj.solveMs = Math.round(message.solveMs);
+    }
+    if (message.dodged !== false) {
+      obj.dodged = message.dodged;
+    }
+    if (message.shielded !== false) {
+      obj.shielded = message.shielded;
+    }
+    if (message.moveTo !== undefined) {
+      obj.moveTo = Position.toJSON(message.moveTo);
     }
     return obj;
   },
@@ -1431,8 +1942,14 @@ export const ActionResolved: MessageFns<ActionResolved> = {
   fromPartial<I extends Exact<DeepPartial<ActionResolved>, I>>(object: I): ActionResolved {
     const message = createBaseActionResolved();
     message.attacker = object.attacker ?? "";
+    message.action = object.action ?? "";
     message.damage = object.damage ?? 0;
     message.solveMs = object.solveMs ?? 0;
+    message.dodged = object.dodged ?? false;
+    message.shielded = object.shielded ?? false;
+    message.moveTo = (object.moveTo !== undefined && object.moveTo !== null)
+      ? Position.fromPartial(object.moveTo)
+      : undefined;
     return message;
   },
 };
@@ -1784,6 +2301,91 @@ export const PlayerElo: MessageFns<PlayerElo> = {
   },
 };
 
+function createBaseSubmissionRejected(): SubmissionRejected {
+  return { player: "", reason: "" };
+}
+
+export const SubmissionRejected: MessageFns<SubmissionRejected> = {
+  encode(message: SubmissionRejected, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.player !== "") {
+      writer.uint32(10).string(message.player);
+    }
+    if (message.reason !== "") {
+      writer.uint32(18).string(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SubmissionRejected {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSubmissionRejected();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.player = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.reason = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SubmissionRejected {
+    return {
+      player: isSet(object.player) ? globalThis.String(object.player) : "",
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+    };
+  },
+
+  toJSON(message: SubmissionRejected): unknown {
+    const obj: any = {};
+    if (message.player !== "") {
+      obj.player = message.player;
+    }
+    if (message.reason !== "") {
+      obj.reason = message.reason;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SubmissionRejected>, I>>(base?: I): SubmissionRejected {
+    return SubmissionRejected.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SubmissionRejected>, I>>(object: I): SubmissionRejected {
+    const message = createBaseSubmissionRejected();
+    message.player = object.player ?? "";
+    message.reason = object.reason ?? "";
+    return message;
+  },
+};
+
 function createBaseClientMessage(): ClientMessage {
   return { join: undefined, submit: undefined };
 }
@@ -1959,13 +2561,19 @@ export const JoinRequest: MessageFns<JoinRequest> = {
 };
 
 function createBaseSubmitRequest(): SubmitRequest {
-  return { code: "" };
+  return { code: "", action: "", moveTo: undefined };
 }
 
 export const SubmitRequest: MessageFns<SubmitRequest> = {
   encode(message: SubmitRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.code !== "") {
       writer.uint32(10).string(message.code);
+    }
+    if (message.action !== "") {
+      writer.uint32(18).string(message.action);
+    }
+    if (message.moveTo !== undefined) {
+      Position.encode(message.moveTo, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -1991,6 +2599,22 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
             message.code = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.action = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.moveTo = Position.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2004,13 +2628,27 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
   },
 
   fromJSON(object: any): SubmitRequest {
-    return { code: isSet(object.code) ? globalThis.String(object.code) : "" };
+    return {
+      code: isSet(object.code) ? globalThis.String(object.code) : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
+      moveTo: isSet(object.moveTo)
+        ? Position.fromJSON(object.moveTo)
+        : isSet(object.move_to)
+        ? Position.fromJSON(object.move_to)
+        : undefined,
+    };
   },
 
   toJSON(message: SubmitRequest): unknown {
     const obj: any = {};
     if (message.code !== "") {
       obj.code = message.code;
+    }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
+    if (message.moveTo !== undefined) {
+      obj.moveTo = Position.toJSON(message.moveTo);
     }
     return obj;
   },
@@ -2021,6 +2659,10 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
   fromPartial<I extends Exact<DeepPartial<SubmitRequest>, I>>(object: I): SubmitRequest {
     const message = createBaseSubmitRequest();
     message.code = object.code ?? "";
+    message.action = object.action ?? "";
+    message.moveTo = (object.moveTo !== undefined && object.moveTo !== null)
+      ? Position.fromPartial(object.moveTo)
+      : undefined;
     return message;
   },
 };

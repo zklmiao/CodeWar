@@ -1,6 +1,8 @@
 // Package match：MatchEngine——唯一集成 seam（spec「实现决策」）。
 // 引擎只发布对局事件流；提交经 Submit 进入（生产 = WS hub，测试 = 脚本回放），
 // 计时经 Clock（生产 = 真实时钟，测试 = 可拨动假钟）。
+// 03 号票起：三动作（攻击/移动/防御）+ 5×5 动态站位 + 结算位置命中判定
+// （相邻 4 格；走位闪避）+ 本回合护盾（−60%）。
 package match
 
 import (
@@ -12,6 +14,51 @@ import (
 
 	"codewar/server/gen/matchpb"
 )
+
+// 行动类型（proto SubmitRequest.action / ActionResolved.action 同值）
+const (
+	ActionAttack = "attack"
+	ActionMove   = "move"
+	ActionDefend = "defend"
+)
+
+// GridSize：竞技场边长（5×5，7×7 预留）
+const GridSize = 5
+
+// DefendFactor：护盾减伤系数（−60%；spec 用户故事 22）
+const DefendFactor = 0.4
+
+// Pos：网格坐标（行列从 0 计）
+type Pos struct{ Row, Col int }
+
+// pendingAction：一名玩家本回合已解出的行动（一回合至多一个）。
+type pendingAction struct {
+	kind    string // attack | move | defend
+	solveMs int64
+	moveTo  Pos // 仅 move
+}
+
+// panel：本回合三题面板（攻击镜像 + 双方私有行动题）。
+type panel struct {
+	attack Question
+	move   map[Player]Question
+	defend map[Player]Question
+}
+
+// questionFor：该玩家所选行动对应的判题用题。
+func (p *panel) questionFor(player Player, action string) (Question, bool) {
+	switch action {
+	case ActionAttack:
+		return p.attack, true
+	case ActionMove:
+		q, ok := p.move[player]
+		return q, ok
+	case ActionDefend:
+		q, ok := p.defend[player]
+		return q, ok
+	}
+	return Question{}, false
+}
 
 type Engine struct {
 	mu        sync.Mutex
@@ -28,10 +75,12 @@ type Engine struct {
 	lockUntil  map[Player]time.Time
 	deadline   time.Time
 	roundStart time.Time
-	problem    Question
-	solved     map[Player]int64 // solveMs
-	solveSeq   map[Player]int64 // 同毫秒 tie-break：先来后到
+	panel      panel
+	actions    map[Player]*pendingAction // 一回合一人一行动
+	solveSeq   map[Player]int64          // 同毫秒 tie-break：先来后到
 	solveCnt   int64
+	pos        map[Player]Pos  // 结算位置（跨回合持续，移动题改变）
+	shield     map[Player]bool // 本回合护盾（行动为 defend 即成立，回合结束消失）
 	timer      Timer
 	timerC     <-chan time.Time
 	resetC     chan struct{} // armTimer 替换 timer 时 close+重建，唤醒阻塞在旧 timerC 上的泵
@@ -47,10 +96,13 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 		phase:     matchpb.MatchPhase_MATCH_PHASE_WAITING,
 		hp:        map[Player]int32{P1: 100, P2: 100},
 		lockUntil: map[Player]time.Time{},
-		solved:    map[Player]int64{},
+		actions:   map[Player]*pendingAction{},
 		solveSeq:  map[Player]int64{},
-		resetC:    make(chan struct{}),
-		done:      make(chan struct{}),
+		// 初始站位：垂直相邻（ruling #7 的坐标实例；03 起随移动题动态变化）
+		pos:    map[Player]Pos{P1: {Row: 3, Col: 2}, P2: {Row: 2, Col: 2}},
+		shield: map[Player]bool{},
+		resetC: make(chan struct{}),
+		done:   make(chan struct{}),
 	}
 }
 
@@ -88,34 +140,49 @@ func (e *Engine) currentTimerC() <-chan time.Time {
 	return e.timerC
 }
 
-// Submit：玩家提交（spec 用户故事 13-18）。同步走判题；规则：
+// Submit：玩家提交（03 号票：带行动选择）。规则：
+//   - 非法 action / 回合外提交 / 已行动再交 / 对局已结束：静默丢弃（ADR-0002 迟到判无效）
+//   - 移动参数非法：拒绝反馈事件（不判题不惩罚，改参数可重交）
 //   - 锁定中提交：只回 locked 事件，不罚不续锁
 //   - 判题失败（wrong-answer/timeout/syntax/runtime-error）：自损 3 + 锁 5 秒
 //   - judge-error：基础设施故障，不罚不锁，可重交
-//   - 通过：记录解题耗时；双方都通过 → 立即提前结算
-//   - 已通过再交 / 回合外提交 / 对局已结束：静默丢弃（迟到提交判无效，ADR-0002）
-func (e *Engine) Submit(player Player, code string) {
+//   - 通过：记录行动与解题耗时；双方都已行动 → 立即提前结算
+func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.phase != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
 		return
 	}
-	if _, already := e.solved[player]; already {
+	if _, already := e.actions[player]; already {
 		return
 	}
+	if action != ActionAttack && action != ActionMove && action != ActionDefend {
+		return // 非法 action：静默丢弃（裁决 2）
+	}
+	// 移动参数先验（裁决 2：判题成本宝贵，参数先验；拒绝不判题不惩罚）
+	if action == ActionMove {
+		if reason := e.validateMove(player, moveTo); reason != "" {
+			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionRejected{SubmissionRejected: &matchpb.SubmissionRejected{
+				Player: player, Reason: reason,
+			}}})
+			return
+		}
+	}
+
 	now := e.clock.Now()
 	if now.Before(e.lockUntil[player]) {
 		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
-			Player: player, Passed: false, Category: CategoryLocked,
+			Player: player, Passed: false, Category: CategoryLocked, Action: action,
 		}}})
 		return
 	}
 
-	res := e.judge.Judge(context.Background(), code, e.problem.Tests)
+	q, _ := e.panel.questionFor(player, action)
+	res := e.judge.Judge(context.Background(), code, q.Tests)
 	if res.Category == CategoryJudgeError {
 		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
-			Player: player, Passed: false, Category: CategoryJudgeError,
+			Player: player, Passed: false, Category: CategoryJudgeError, Action: action,
 		}}})
 		return
 	}
@@ -125,13 +192,13 @@ func (e *Engine) Submit(player Player, code string) {
 		if solveMs < 0 {
 			solveMs = 0
 		}
-		e.solved[player] = solveMs
+		e.actions[player] = &pendingAction{kind: action, solveMs: solveMs, moveTo: moveTo}
 		e.solveCnt++
 		e.solveSeq[player] = e.solveCnt
 		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
-			Player: player, Passed: true, Category: CategoryOK, SolveMs: int32(solveMs),
+			Player: player, Passed: true, Category: CategoryOK, SolveMs: int32(solveMs), Action: action,
 		}}})
-		if len(e.solved) == 2 {
+		if len(e.actions) == 2 {
 			e.resolveRound()
 		}
 		return
@@ -142,14 +209,44 @@ func (e *Engine) Submit(player Player, code string) {
 	e.lockUntil[player] = now.Add(LockDuration)
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 		Player: player, Passed: false, Category: res.Category, SelfDamageApplied: true,
-		LockUntilUnixMs: e.lockUntil[player].UnixMilli(),
+		LockUntilUnixMs: e.lockUntil[player].UnixMilli(), Action: action,
 	}}})
 	e.emitHp(player, -SelfDamage, "self-damage")
 	e.checkSelfKO(player)
 }
 
+// validateMove：移动参数校验（直线正交距离 1-2，路径不穿对方，终点空格）。
+// 返回拒绝原因（proto SubmissionRejected.reason），空串 = 合法。
+// 直线约束说明：曼哈顿 1-2 允许 (1,1) 斜向，但"逐步正交走"的 L 形路径存在两种
+// 中间格、语义含糊（裁决 3 的"路径中间格"单数语义），故限定同行或同列。
+func (e *Engine) validateMove(p Player, to Pos) string {
+	if to.Row < 0 || to.Row >= GridSize || to.Col < 0 || to.Col >= GridSize {
+		return "out-of-bounds"
+	}
+	from := e.pos[p]
+	dr, dc := to.Row-from.Row, to.Col-from.Col
+	if dr != 0 && dc != 0 {
+		return "diagonal"
+	}
+	dist := abs(dr) + abs(dc)
+	if dist < 1 || dist > 2 {
+		return "too-far"
+	}
+	opp := e.pos[other(p)]
+	if dist == 2 {
+		mid := Pos{Row: from.Row + dr/2, Col: from.Col + dc/2}
+		if mid == opp {
+			return "path-blocked"
+		}
+	}
+	if to == opp {
+		return "dest-occupied"
+	}
+	return ""
+}
+
 // HandleRoundTimeout：回合倒计时归零（ADR-0002：计时权威在服务端）。
-// 结算仍会发生——已通过的提交照常出手，未通过的本回合无行动。
+// 结算仍会发生——已行动的提交照常结算，未行动的本回合无行动。
 func (e *Engine) HandleRoundTimeout() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -164,36 +261,72 @@ func (e *Engine) HandleRoundTimeout() {
 	e.resolveRound()
 }
 
-// resolveRound：结算当前回合（调用方持锁，phase=ROUND_ACTIVE）。
-// 伤害按解题耗时升序出手（用户故事 16：先解出者先手）；
-// 结算批次内伤害全部生效后统一判生死——同刻伤害才存在"双方同时归零"（spec 用户故事 25），
-// 本票无防御/闪避，先手只体现在事件顺序与平局判定的先后上。
+// resolveRound：逐动作即时结算当前回合（调用方持锁，phase=ROUND_ACTIVE）。
+// 按解题耗时升序（用户故事 16：先解出者先手）逐个落地：
+//   - 移动：立即改变结算位置——后手攻击按攻击结算时刻的位置判命中，
+//     先手移动出相邻 4 格即闪避（走位博弈核心语义，裁决 5）
+//   - 攻击：结算时刻位置判定（相邻 4 格）→ 命中则按目标本回合护盾折减；
+//     闪避不产生 HpChanged（验收 3）
+//   - 防御：护盾覆盖本回合结算批次（票据验收 4"该回合所受伤害乘 0.4"——
+//     与位置不同，护盾不是位置量，后手防御也保护先手受到的攻击）
+//
+// 批次内全部落地后统一判生死——同刻伤害才存在"双方同时归零"（spec 用户故事 25）。
 func (e *Engine) resolveRound() {
 	e.stopTimer()
 
-	order := make([]Player, 0, len(e.solved))
-	for p := range e.solved {
+	order := make([]Player, 0, len(e.actions))
+	for p := range e.actions {
 		order = append(order, p)
 	}
 	sort.Slice(order, func(i, j int) bool {
-		if e.solved[order[i]] != e.solved[order[j]] {
-			return e.solved[order[i]] < e.solved[order[j]]
+		if e.actions[order[i]].solveMs != e.actions[order[j]].solveMs {
+			return e.actions[order[i]].solveMs < e.actions[order[j]].solveMs
 		}
 		return e.solveSeq[order[i]] < e.solveSeq[order[j]]
 	})
 
-	damages := make(map[Player]int32, len(order))
+	// 护盾集合：本回合行动为防御的玩家（结算批次开始即生效——验收 4）
 	for _, p := range order {
-		damages[p] = damageFor(e.solved[p])
+		if e.actions[p].kind == ActionDefend {
+			e.shield[p] = true
+		}
 	}
+
 	for _, p := range order {
-		dmg := damages[p]
-		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
-			Attacker: p, Damage: dmg, SolveMs: int32(e.solved[p]),
-		}}})
-		target := other(p)
-		e.hp[target] -= dmg
-		e.emitHp(target, -dmg, "attack")
+		a := e.actions[p]
+		switch a.kind {
+		case ActionMove:
+			e.pos[p] = a.moveTo
+			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+				Attacker: p, Action: ActionMove, SolveMs: int32(a.solveMs),
+				MoveTo: &matchpb.Position{Row: int32(a.moveTo.Row), Col: int32(a.moveTo.Col)},
+			}}})
+		case ActionDefend:
+			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+				Attacker: p, Action: ActionDefend, SolveMs: int32(a.solveMs),
+			}}})
+		case ActionAttack:
+			target := other(p)
+			base := damageFor(a.solveMs)
+			if !isAdjacent(e.pos[p], e.pos[target]) {
+				// 走位闪避：无伤害、无 HpChanged（验收 3）
+				e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+					Attacker: p, Action: ActionAttack, SolveMs: int32(a.solveMs), Dodged: true,
+				}}})
+				continue
+			}
+			dmg := base
+			shielded := e.shield[target]
+			if shielded {
+				dmg = int32(math.Round(float64(base) * DefendFactor))
+			}
+			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+				Attacker: p, Action: ActionAttack, SolveMs: int32(a.solveMs),
+				Damage: dmg, Shielded: shielded,
+			}}})
+			e.hp[target] -= dmg
+			e.emitHp(target, -dmg, "attack")
+		}
 	}
 
 	e.roundNum++
@@ -231,19 +364,32 @@ func (e *Engine) checkSelfKO(dead Player) {
 func (e *Engine) startRound(n int) {
 	e.round = n
 	e.phase = matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE
-	e.problem = e.questions.AttackQuestion(n)
+	e.panel = panel{
+		attack: e.questions.AttackQuestion(n),
+		move: map[Player]Question{
+			P1: e.questions.MoveQuestion(n, P1),
+			P2: e.questions.MoveQuestion(n, P2),
+		},
+		defend: map[Player]Question{
+			P1: e.questions.DefendQuestion(n, P1),
+			P2: e.questions.DefendQuestion(n, P2),
+		},
+	}
 	now := e.clock.Now()
 	e.roundStart = now
 	e.deadline = now.Add(RoundDuration)
-	e.solved = map[Player]int64{}
+	e.actions = map[Player]*pendingAction{}
 	e.solveSeq = map[Player]int64{}
 	e.solveCnt = 0
+	e.shield = map[Player]bool{} // 护盾不跨回合；位置跨回合持续
 
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_RoundStarted{RoundStarted: &matchpb.RoundStarted{
 		Round: uint32(n), DeadlineUnixMs: e.deadline.UnixMilli(),
 	}}})
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_PanelReady{PanelReady: &matchpb.PanelReady{
-		Problem: problemToPb(e.problem),
+		Attack: problemToPb(e.panel.attack),
+		P1:     privatePanelToPb(e.panel.move[P1], e.panel.defend[P1]),
+		P2:     privatePanelToPb(e.panel.move[P2], e.panel.defend[P2]),
 	}}})
 	e.armTimer()
 }
@@ -289,7 +435,7 @@ func (e *Engine) emit(env *matchpb.Envelope) {
 	}
 }
 
-// Snapshot：按查看者出快照（含其私有锁定视图），接入/重连先发（ADR-0002）。
+// Snapshot：按查看者出快照（含其私有面板与锁定视图），接入/重连先发（ADR-0002）。
 func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -298,13 +444,17 @@ func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 		Phase: e.phase,
 		Round: uint32(e.round),
 		Players: []*matchpb.PlayerView{
-			{Id: P1, Hp: e.hp[P1]},
-			{Id: P2, Hp: e.hp[P2]},
+			playerView(P1, e.hp[P1], e.pos[P1]),
+			playerView(P2, e.hp[P2], e.pos[P2]),
 		},
 	}
 	if e.phase == matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
 		s.DeadlineUnixMs = e.deadline.UnixMilli()
-		s.Problem = problemToPb(e.problem)
+		s.Panel = &matchpb.Panel{
+			Attack: problemToPb(e.panel.attack),
+			Move:   problemToPb(e.panel.move[viewer]),
+			Defend: problemToPb(e.panel.defend[viewer]),
+		}
 	}
 	if lock, ok := e.lockUntil[viewer]; ok && e.clock.Now().Before(lock) {
 		s.ViewerLockUntilUnixMs = lock.UnixMilli()
@@ -325,9 +475,32 @@ func damageFor(solveMs int64) int32 {
 	return int32(math.Round(BaseDamage * coeff))
 }
 
+// isAdjacent：正交相邻（曼哈顿距离恰 1）——本票普攻形状（相邻 4 格）。
+func isAdjacent(a, b Pos) bool {
+	return abs(a.Row-b.Row)+abs(a.Col-b.Col) == 1
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 func problemToPb(q Question) *matchpb.Problem {
 	return &matchpb.Problem{
 		Id: q.ID, Statement: q.Statement, Signature: q.Signature, StarterCode: q.StarterCode,
+	}
+}
+
+func privatePanelToPb(move, defend Question) *matchpb.PrivatePanel {
+	return &matchpb.PrivatePanel{Move: problemToPb(move), Defend: problemToPb(defend)}
+}
+
+func playerView(p Player, hp int32, pos Pos) *matchpb.PlayerView {
+	return &matchpb.PlayerView{
+		Id: p, Hp: hp,
+		Pos: &matchpb.Position{Row: int32(pos.Row), Col: int32(pos.Col)},
 	}
 }
 

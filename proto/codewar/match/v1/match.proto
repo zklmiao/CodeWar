@@ -32,15 +32,27 @@ message Snapshot {
   uint32 round = 4;
   // 当前回合截止时间（phase=ROUND_ACTIVE 时有效）；int64 → JSON 字符串
   int64 deadline_unix_ms = 5;
-  Problem problem = 6; // 当前回合镜像题（就绪时）
+  reserved 6; // 03 号票前：单题 problem；03 起改用下方 panel（三题面板）
   // 查看者自己的提交锁截止（0 = 未锁定）；快照按连接下发，可含查看者私有视图
   int64 viewer_lock_until_unix_ms = 7;
   MatchResult result = 8; // phase=ENDED 时有效
+  // 三题面板（03 号票）：attack 镜像 + 查看者私有 move/defend。
+  // 快照按连接下发，私有题只带查看者自己的（与事件流的 PanelReady 不同——
+  // 共享事件流必须对所有连接一致以保序号单调，故 PanelReady 同时携带双方私有面板）。
+  Panel panel = 9;
 }
 
 message PlayerView {
   string id = 1; // "p1" | "p2"
   int32 hp = 2;
+  // 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位）
+  Position pos = 3;
+}
+
+// 网格格子坐标（行列均从 0 计，5×5）
+message Position {
+  int32 row = 1;
+  int32 col = 2;
 }
 
 message Problem {
@@ -50,6 +62,28 @@ message Problem {
   string starter_code = 4; // 编辑器初始内容
 }
 
+// 单名玩家的私有行动题（移动 + 防御；双方实例独立，seed 含 player 维度）
+message PrivatePanel {
+  Problem move = 1;
+  Problem defend = 2;
+}
+
+// 三题面板（03 号票）：攻击镜像 + 双方私有行动题。
+// 共享事件流对所有连接内容一致（保序号单调）：私有题的双方面板都在其中，
+// 客户端按 viewerId 取用——题面是公开文本（判题用例永不下发），无泄漏风险。
+message PanelReady {
+  Problem attack = 1; // 镜像题：双方同实例（spec 用户故事 12）
+  PrivatePanel p1 = 2; // P1 私有行动题
+  PrivatePanel p2 = 3; // P2 私有行动题
+}
+
+// 查看者视角的三题面板（Snapshot.panel 用；私有题已按查看者过滤）
+message Panel {
+  Problem attack = 1;
+  Problem move = 2; // 查看者私有
+  Problem defend = 3; // 查看者私有
+}
+
 message MatchResult {
   // 胜者 "p1"/"p2"；空 = 平局
   string winner = 1;
@@ -57,7 +91,7 @@ message MatchResult {
   string reason = 2;
 }
 
-// ============ 事件（对局事件流，六类；spec「实现决策」） ============
+// ============ 事件（对局事件流；spec「实现决策」） ============
 
 message Envelope {
   uint32 seq = 1; // 单调递增，断号 → 客户端触发重连（ADR-0002）
@@ -69,16 +103,14 @@ message Envelope {
     ActionResolved action_resolved = 6;
     HpChanged hp_changed = 7;
     MatchEnded match_ended = 8;
+    // 参数非法的提交被拒（03 号票：不判题不惩罚，玩家改参数可重交）
+    SubmissionRejected submission_rejected = 9;
   }
 }
 
 message RoundStarted {
   uint32 round = 1; // 1 起
   int64 deadline_unix_ms = 2;
-}
-
-message PanelReady {
-  Problem problem = 1; // 镜像题：双方同实例（spec 用户故事 12）
 }
 
 message SubmissionJudged {
@@ -92,12 +124,24 @@ message SubmissionJudged {
   bool self_damage_applied = 5;
   // 提交者的锁定截止时间；仅本次判定触发锁定（自损路径）时携带，0 = 未触发锁定
   int64 lock_until_unix_ms = 6;
+  // 本次提交对应的行动题（attack | move | defend；03 号票起携带）
+  string action = 7;
 }
 
 message ActionResolved {
   string attacker = 1;
-  int32 damage = 2; // 基础 22 × 时间系数（0.6~1.0）取整；本票固定站位必然命中
-  int32 solve_ms = 3;
+  // 行动类型：attack | move | defend（03 号票起）
+  string action = 2;
+  // 攻击实际落地伤害 = 基础 22 × 时间系数（0.6~1.0）× 护盾折减（命中且有盾 ×0.4）取整；
+  // 闪避或非攻击行动为 0
+  int32 damage = 3;
+  int32 solve_ms = 4;
+  // 攻击未命中：目标不在攻击者相邻 4 格（结算时刻位置判定，走位闪避）
+  bool dodged = 5;
+  // 命中且目标本回合有护盾（damage 已按 ×0.4 折减）
+  bool shielded = 6;
+  // 移动终点（action=move 时有效）
+  Position move_to = 7;
 }
 
 message HpChanged {
@@ -126,6 +170,14 @@ message PlayerElo {
   int32 elo_after = 4;
 }
 
+// 参数非法的移动提交被拒（03 号票）：仅反馈原因，不判题不惩罚；
+// 共享事件流携带（双方可见，无敏感信息），被拒方可改参数重交。
+message SubmissionRejected {
+  string player = 1;
+  // out-of-bounds | diagonal | too-far | path-blocked | dest-occupied
+  string reason = 2;
+}
+
 // ============ 客户端 → 服务端 ============
 
 message ClientMessage {
@@ -146,4 +198,8 @@ message JoinRequest {
 
 message SubmitRequest {
   string code = 1;
+  // 本次提交对应的行动题：attack | move | defend（03 号票；判题用该题的测试用例）
+  string action = 2;
+  // 移动目标格（仅 action=move 携带；直线正交距离 1-2，终点空格且路径不穿过对方）
+  Position move_to = 3;
 }
