@@ -12,6 +12,7 @@ import (
 
 	"codewar/server/gen/judgepb"
 	"codewar/server/internal/accounts"
+	"codewar/server/internal/classes"
 	"codewar/server/internal/hub"
 	"codewar/server/internal/judgeclient"
 	"codewar/server/internal/store"
@@ -58,6 +59,8 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// 06 号票：职业数据同源 JSON（客户端职业选择的唯一权威，裁决 1）
+	r.Get("/api/classes", classes.HTTPHandler())
 	accounts.New(st, logger).Mount(r)
 	r.Get("/ws", h.ServeWS)
 	mountStatic(r, *staticDir)

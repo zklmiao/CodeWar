@@ -265,3 +265,18 @@ func instancesEqual(a, b Instance) bool {
 	a.Seed, b.Seed = "", ""
 	return reflect.DeepEqual(a, b)
 }
+
+// SkillQuestion：私有技能题（06 号票，裁决 4）——难度 = 所选上限档，
+// 不走爬坡/均匀策略（技能题一律贴上限，"高难高收益"的出题面语义）。
+// 上限档无模板时向低档逐档回退取最近可用（12 号票补齐 L4/L5 技能模板后
+// 该回退仅在 cap>L4 时触发）。
+func (f *Factory) SkillQuestion(round int, player match.Player) match.Question {
+	seed := fmt.Sprintf("skill:%s:round=%d|%s", player, round, f.cfg.MatchSeed)
+	for d := f.cfg.MaxDifficulty; d >= L1; d-- {
+		in, err := f.Create(Spec{Difficulty: d, Action: ActionSkill}, seed)
+		if err == nil {
+			return in.ToQuestion(FormComplete)
+		}
+	}
+	return match.Question{ID: "error-no-template", Statement: "无可用技能题模板"}
+}

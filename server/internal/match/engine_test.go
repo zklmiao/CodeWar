@@ -16,8 +16,8 @@ var baseTime = time.Unix(1767225600, 0).UTC() // 固定基准时刻，保证断�
 
 type fakeClock struct{ now time.Time }
 
-func (c *fakeClock) Now() time.Time      { return c.now }
-func (c *fakeClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
+func (c *fakeClock) Now() time.Time                 { return c.now }
+func (c *fakeClock) Advance(d time.Duration)        { c.now = c.now.Add(d) }
 func (c *fakeClock) NewTimer(d time.Duration) Timer { return noopTimer{} }
 
 type noopTimer struct{}
@@ -554,7 +554,7 @@ func TestMoveAwayDodgesAttack(t *testing.T) {
 // 后手移动救不了已落地的攻击：攻击先结算时按当时位置命中（裁决 5 时序语义）。
 func TestLateMoveCannotSaveLandedAttack(t *testing.T) {
 	h := newHarness(t, passOK())
-	h.attack(P1, "good")                 // 先手攻击：P2(2,2) 相邻 → 命中
+	h.attack(P1, "good")                      // 先手攻击：P2(2,2) 相邻 → 命中
 	h.moveTo(P2, "good", Pos{Row: 2, Col: 0}) // 后手移动 → 救不了这一击
 
 	acts := actions(h.events())

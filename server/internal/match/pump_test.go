@@ -12,9 +12,9 @@ import (
 
 type manualTimer struct{ c chan time.Time }
 
-func newManualTimer() *manualTimer      { return &manualTimer{c: make(chan time.Time, 1)} }
+func newManualTimer() *manualTimer         { return &manualTimer{c: make(chan time.Time, 1)} }
 func (t *manualTimer) C() <-chan time.Time { return t.c }
-func (t *manualTimer) Stop() bool       { return true }
+func (t *manualTimer) Stop() bool          { return true }
 func (t *manualTimer) fire() {
 	select {
 	case t.c <- time.Time{}:
