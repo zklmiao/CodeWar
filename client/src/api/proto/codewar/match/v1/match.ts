@@ -93,6 +93,15 @@ export interface PlayerView {
     | undefined;
   /** 该玩家当前是否持有本回合护盾（重连快照渲染用） */
   shielded: boolean;
+  /**
+   * 职业（06 号票）：对局开始前不下发对方职业（盲选隐私，spec 设计 003 §1）；
+   * 自己的一行始终携带。匿名/缺省对局为 "legacy"。
+   */
+  classId: string;
+  /** 已装备技能 ID（空 = 未装备技能位） */
+  skillId: string;
+  /** 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0） */
+  skillCdRounds: number;
 }
 
 /** 网格格子坐标（行列均从 0 计，5×5） */
@@ -114,7 +123,11 @@ export interface Problem {
 /** 单名玩家的私有行动题（移动 + 防御；双方实例独立，seed 含 player 维度） */
 export interface PrivatePanel {
   move: Problem | undefined;
-  defend: Problem | undefined;
+  defend:
+    | Problem
+    | undefined;
+  /** 06 号票：技能槽题（难度 = 所选上限档） */
+  skill: Problem | undefined;
 }
 
 /**
@@ -145,7 +158,11 @@ export interface Panel {
     | Problem
     | undefined;
   /** 查看者私有 */
-  defend: Problem | undefined;
+  defend:
+    | Problem
+    | undefined;
+  /** 技能槽（06 号票）：查看者私有题，难度 = 所选上限档；未装备技能时缺省 */
+  skill: Problem | undefined;
 }
 
 export interface MatchResult {
@@ -198,10 +215,12 @@ export interface ActionResolved {
   /** 行动类型：attack | move | defend（03 号票起） */
   action: string;
   /**
-   * 攻击实际落地伤害 = 基础 22 × 时间系数（0.6~1.0）× 护盾折减（命中且有盾 ×0.4）取整；
-   * 闪避或非攻击行动为 0
+   * 攻击/技能实际落地伤害 = 普攻（基础 × 时间系数）或技能字面值（设计 003 §4），
+   * 命中且有盾时 ×0.4 折减取整；闪避或非攻击/技能行动为 0
    */
   damage: number;
+  /** 治疗量（action=skill 且为治疗/汲取自疗时有效；溢出已截断，06 号票） */
+  heal: number;
   solveMs: number;
   /** 攻击未命中：目标不在攻击者相邻 4 格（结算时刻位置判定，走位闪避） */
   dodged: boolean;
@@ -217,7 +236,7 @@ export interface HpChanged {
   hp: number;
   /** 负值=受伤 */
   delta: number;
-  /** attack | self-damage */
+  /** attack | self-damage | heal | skill（06 号票起扩展） */
   cause: string;
 }
 
@@ -257,7 +276,18 @@ export interface SubmissionRejected {
 export interface ClientMessage {
   /** 首条消息必须 join */
   join?: JoinRequest | undefined;
-  submit?: SubmitRequest | undefined;
+  submit?:
+    | SubmitRequest
+    | undefined;
+  /**
+   * 目标选择（06 号票）：解出攻击/技能题后、结算前可随时提交/修改（免费操作
+   * 不耗答题，设计 003 §1）；未提交则结算时走自动瞄准。
+   */
+  setTargeting?: SetTargeting | undefined;
+}
+
+export interface SetTargeting {
+  targeting: Targeting | undefined;
 }
 
 export interface JoinRequest {
@@ -270,14 +300,44 @@ export interface JoinRequest {
    * 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
    */
   token: string;
+  /**
+   * 职业 + 已装备技能（06 号票，盲选）：各窗口本地选完再 join，天然互不可见；
+   * 对局开始前快照不下发对方职业。缺省/未知值 = legacy 锚点（01~03 号票行为，
+   * HP100/攻22/相邻1格/无技能——既有测试与匿名链路的向后兼容锚点）。
+   * 非法组合（职业不存在/技能不属于该职业）= 建连被拒（fail-closed）。
+   */
+  class: string;
+  skill: string;
 }
 
 export interface SubmitRequest {
   code: string;
-  /** 本次提交对应的行动题：attack | move | defend（03 号票；判题用该题的测试用例） */
+  /** 行动类型：attack | move | defend | skill（06 号票起扩展） */
   action: string;
   /** 移动目标格（仅 action=move 携带；直线正交距离 1-2，终点空格且路径不穿过对方） */
-  moveTo: Position | undefined;
+  moveTo:
+    | Position
+    | undefined;
+  /**
+   * 攻击/技能的目标选择（06 号票；解出后至结算前可经 SetTargeting 随时修改，
+   * 未提交则服务端自动瞄准：方向取指向对手的坐标轴，点狙距离取 min(射程, 与对手距离)）
+   */
+  targeting: Targeting | undefined;
+}
+
+/**
+ * 目标选择载荷（06 号票，设计 003 §1 方向选择全局规则）：
+ *   direction: up|down|left|right（攻击者朝向）；distance: 点狙类在方向上的格距。
+ * 哪些形状需要 direction/distance 由职业表（/api/classes）定义：
+ *   剑士普攻=direction；法师普攻=direction（深度2线扫）；游侠普攻=direction+distance(1-3)；
+ *   巨力斩=无方向（邻域8格）；烈焰风暴=direction；穿云箭=direction+distance(1-4)；
+ *   秘法汲取=direction+distance(≤2)；治疗系=无目标（自身）。
+ */
+export interface Targeting {
+  /** up | down | left | right；空 = 未指定（走自动瞄准） */
+  direction: string;
+  /** 0 = 未指定（走自动瞄准） */
+  distance: number;
 }
 
 function createBaseServerMessage(): ServerMessage {
@@ -570,7 +630,7 @@ export const Snapshot: MessageFns<Snapshot> = {
 };
 
 function createBasePlayerView(): PlayerView {
-  return { id: "", hp: 0, pos: undefined, shielded: false };
+  return { id: "", hp: 0, pos: undefined, shielded: false, classId: "", skillId: "", skillCdRounds: 0 };
 }
 
 export const PlayerView: MessageFns<PlayerView> = {
@@ -586,6 +646,15 @@ export const PlayerView: MessageFns<PlayerView> = {
     }
     if (message.shielded !== false) {
       writer.uint32(32).bool(message.shielded);
+    }
+    if (message.classId !== "") {
+      writer.uint32(42).string(message.classId);
+    }
+    if (message.skillId !== "") {
+      writer.uint32(50).string(message.skillId);
+    }
+    if (message.skillCdRounds !== 0) {
+      writer.uint32(56).int32(message.skillCdRounds);
     }
     return writer;
   },
@@ -635,6 +704,30 @@ export const PlayerView: MessageFns<PlayerView> = {
             message.shielded = reader.bool();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.classId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.skillId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.skillCdRounds = reader.int32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -653,6 +746,21 @@ export const PlayerView: MessageFns<PlayerView> = {
       hp: isSet(object.hp) ? globalThis.Number(object.hp) : 0,
       pos: isSet(object.pos) ? Position.fromJSON(object.pos) : undefined,
       shielded: isSet(object.shielded) ? globalThis.Boolean(object.shielded) : false,
+      classId: isSet(object.classId)
+        ? globalThis.String(object.classId)
+        : isSet(object.class_id)
+        ? globalThis.String(object.class_id)
+        : "",
+      skillId: isSet(object.skillId)
+        ? globalThis.String(object.skillId)
+        : isSet(object.skill_id)
+        ? globalThis.String(object.skill_id)
+        : "",
+      skillCdRounds: isSet(object.skillCdRounds)
+        ? globalThis.Number(object.skillCdRounds)
+        : isSet(object.skill_cd_rounds)
+        ? globalThis.Number(object.skill_cd_rounds)
+        : 0,
     };
   },
 
@@ -670,6 +778,15 @@ export const PlayerView: MessageFns<PlayerView> = {
     if (message.shielded !== false) {
       obj.shielded = message.shielded;
     }
+    if (message.classId !== "") {
+      obj.classId = message.classId;
+    }
+    if (message.skillId !== "") {
+      obj.skillId = message.skillId;
+    }
+    if (message.skillCdRounds !== 0) {
+      obj.skillCdRounds = Math.round(message.skillCdRounds);
+    }
     return obj;
   },
 
@@ -682,6 +799,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     message.hp = object.hp ?? 0;
     message.pos = (object.pos !== undefined && object.pos !== null) ? Position.fromPartial(object.pos) : undefined;
     message.shielded = object.shielded ?? false;
+    message.classId = object.classId ?? "";
+    message.skillId = object.skillId ?? "";
+    message.skillCdRounds = object.skillCdRounds ?? 0;
     return message;
   },
 };
@@ -893,7 +1013,7 @@ export const Problem: MessageFns<Problem> = {
 };
 
 function createBasePrivatePanel(): PrivatePanel {
-  return { move: undefined, defend: undefined };
+  return { move: undefined, defend: undefined, skill: undefined };
 }
 
 export const PrivatePanel: MessageFns<PrivatePanel> = {
@@ -903,6 +1023,9 @@ export const PrivatePanel: MessageFns<PrivatePanel> = {
     }
     if (message.defend !== undefined) {
       Problem.encode(message.defend, writer.uint32(18).fork()).join();
+    }
+    if (message.skill !== undefined) {
+      Problem.encode(message.skill, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -936,6 +1059,14 @@ export const PrivatePanel: MessageFns<PrivatePanel> = {
             message.defend = Problem.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.skill = Problem.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -952,6 +1083,7 @@ export const PrivatePanel: MessageFns<PrivatePanel> = {
     return {
       move: isSet(object.move) ? Problem.fromJSON(object.move) : undefined,
       defend: isSet(object.defend) ? Problem.fromJSON(object.defend) : undefined,
+      skill: isSet(object.skill) ? Problem.fromJSON(object.skill) : undefined,
     };
   },
 
@@ -962,6 +1094,9 @@ export const PrivatePanel: MessageFns<PrivatePanel> = {
     }
     if (message.defend !== undefined) {
       obj.defend = Problem.toJSON(message.defend);
+    }
+    if (message.skill !== undefined) {
+      obj.skill = Problem.toJSON(message.skill);
     }
     return obj;
   },
@@ -974,6 +1109,9 @@ export const PrivatePanel: MessageFns<PrivatePanel> = {
     message.move = (object.move !== undefined && object.move !== null) ? Problem.fromPartial(object.move) : undefined;
     message.defend = (object.defend !== undefined && object.defend !== null)
       ? Problem.fromPartial(object.defend)
+      : undefined;
+    message.skill = (object.skill !== undefined && object.skill !== null)
+      ? Problem.fromPartial(object.skill)
       : undefined;
     return message;
   },
@@ -1083,7 +1221,7 @@ export const PanelReady: MessageFns<PanelReady> = {
 };
 
 function createBasePanel(): Panel {
-  return { attack: undefined, move: undefined, defend: undefined };
+  return { attack: undefined, move: undefined, defend: undefined, skill: undefined };
 }
 
 export const Panel: MessageFns<Panel> = {
@@ -1096,6 +1234,9 @@ export const Panel: MessageFns<Panel> = {
     }
     if (message.defend !== undefined) {
       Problem.encode(message.defend, writer.uint32(26).fork()).join();
+    }
+    if (message.skill !== undefined) {
+      Problem.encode(message.skill, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -1137,6 +1278,14 @@ export const Panel: MessageFns<Panel> = {
             message.defend = Problem.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.skill = Problem.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1154,6 +1303,7 @@ export const Panel: MessageFns<Panel> = {
       attack: isSet(object.attack) ? Problem.fromJSON(object.attack) : undefined,
       move: isSet(object.move) ? Problem.fromJSON(object.move) : undefined,
       defend: isSet(object.defend) ? Problem.fromJSON(object.defend) : undefined,
+      skill: isSet(object.skill) ? Problem.fromJSON(object.skill) : undefined,
     };
   },
 
@@ -1167,6 +1317,9 @@ export const Panel: MessageFns<Panel> = {
     }
     if (message.defend !== undefined) {
       obj.defend = Problem.toJSON(message.defend);
+    }
+    if (message.skill !== undefined) {
+      obj.skill = Problem.toJSON(message.skill);
     }
     return obj;
   },
@@ -1182,6 +1335,9 @@ export const Panel: MessageFns<Panel> = {
     message.move = (object.move !== undefined && object.move !== null) ? Problem.fromPartial(object.move) : undefined;
     message.defend = (object.defend !== undefined && object.defend !== null)
       ? Problem.fromPartial(object.defend)
+      : undefined;
+    message.skill = (object.skill !== undefined && object.skill !== null)
+      ? Problem.fromPartial(object.skill)
       : undefined;
     return message;
   },
@@ -1800,7 +1956,16 @@ export const SubmissionJudged: MessageFns<SubmissionJudged> = {
 };
 
 function createBaseActionResolved(): ActionResolved {
-  return { attacker: "", action: "", damage: 0, solveMs: 0, dodged: false, shielded: false, moveTo: undefined };
+  return {
+    attacker: "",
+    action: "",
+    damage: 0,
+    heal: 0,
+    solveMs: 0,
+    dodged: false,
+    shielded: false,
+    moveTo: undefined,
+  };
 }
 
 export const ActionResolved: MessageFns<ActionResolved> = {
@@ -1813,6 +1978,9 @@ export const ActionResolved: MessageFns<ActionResolved> = {
     }
     if (message.damage !== 0) {
       writer.uint32(24).int32(message.damage);
+    }
+    if (message.heal !== 0) {
+      writer.uint32(64).int32(message.heal);
     }
     if (message.solveMs !== 0) {
       writer.uint32(32).int32(message.solveMs);
@@ -1866,6 +2034,14 @@ export const ActionResolved: MessageFns<ActionResolved> = {
             message.damage = reader.int32();
             continue;
           }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.heal = reader.int32();
+            continue;
+          }
           case 4: {
             if (tag !== 32) {
               break;
@@ -1915,6 +2091,7 @@ export const ActionResolved: MessageFns<ActionResolved> = {
       attacker: isSet(object.attacker) ? globalThis.String(object.attacker) : "",
       action: isSet(object.action) ? globalThis.String(object.action) : "",
       damage: isSet(object.damage) ? globalThis.Number(object.damage) : 0,
+      heal: isSet(object.heal) ? globalThis.Number(object.heal) : 0,
       solveMs: isSet(object.solveMs)
         ? globalThis.Number(object.solveMs)
         : isSet(object.solve_ms)
@@ -1941,6 +2118,9 @@ export const ActionResolved: MessageFns<ActionResolved> = {
     if (message.damage !== 0) {
       obj.damage = Math.round(message.damage);
     }
+    if (message.heal !== 0) {
+      obj.heal = Math.round(message.heal);
+    }
     if (message.solveMs !== 0) {
       obj.solveMs = Math.round(message.solveMs);
     }
@@ -1964,6 +2144,7 @@ export const ActionResolved: MessageFns<ActionResolved> = {
     message.attacker = object.attacker ?? "";
     message.action = object.action ?? "";
     message.damage = object.damage ?? 0;
+    message.heal = object.heal ?? 0;
     message.solveMs = object.solveMs ?? 0;
     message.dodged = object.dodged ?? false;
     message.shielded = object.shielded ?? false;
@@ -2407,7 +2588,7 @@ export const SubmissionRejected: MessageFns<SubmissionRejected> = {
 };
 
 function createBaseClientMessage(): ClientMessage {
-  return { join: undefined, submit: undefined };
+  return { join: undefined, submit: undefined, setTargeting: undefined };
 }
 
 export const ClientMessage: MessageFns<ClientMessage> = {
@@ -2417,6 +2598,9 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     }
     if (message.submit !== undefined) {
       SubmitRequest.encode(message.submit, writer.uint32(18).fork()).join();
+    }
+    if (message.setTargeting !== undefined) {
+      SetTargeting.encode(message.setTargeting, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -2450,6 +2634,14 @@ export const ClientMessage: MessageFns<ClientMessage> = {
             message.submit = SubmitRequest.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.setTargeting = SetTargeting.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2466,6 +2658,11 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     return {
       join: isSet(object.join) ? JoinRequest.fromJSON(object.join) : undefined,
       submit: isSet(object.submit) ? SubmitRequest.fromJSON(object.submit) : undefined,
+      setTargeting: isSet(object.setTargeting)
+        ? SetTargeting.fromJSON(object.setTargeting)
+        : isSet(object.set_targeting)
+        ? SetTargeting.fromJSON(object.set_targeting)
+        : undefined,
     };
   },
 
@@ -2476,6 +2673,9 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     }
     if (message.submit !== undefined) {
       obj.submit = SubmitRequest.toJSON(message.submit);
+    }
+    if (message.setTargeting !== undefined) {
+      obj.setTargeting = SetTargeting.toJSON(message.setTargeting);
     }
     return obj;
   },
@@ -2491,12 +2691,84 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     message.submit = (object.submit !== undefined && object.submit !== null)
       ? SubmitRequest.fromPartial(object.submit)
       : undefined;
+    message.setTargeting = (object.setTargeting !== undefined && object.setTargeting !== null)
+      ? SetTargeting.fromPartial(object.setTargeting)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSetTargeting(): SetTargeting {
+  return { targeting: undefined };
+}
+
+export const SetTargeting: MessageFns<SetTargeting> = {
+  encode(message: SetTargeting, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.targeting !== undefined) {
+      Targeting.encode(message.targeting, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetTargeting {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetTargeting();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.targeting = Targeting.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetTargeting {
+    return { targeting: isSet(object.targeting) ? Targeting.fromJSON(object.targeting) : undefined };
+  },
+
+  toJSON(message: SetTargeting): unknown {
+    const obj: any = {};
+    if (message.targeting !== undefined) {
+      obj.targeting = Targeting.toJSON(message.targeting);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetTargeting>, I>>(base?: I): SetTargeting {
+    return SetTargeting.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetTargeting>, I>>(object: I): SetTargeting {
+    const message = createBaseSetTargeting();
+    message.targeting = (object.targeting !== undefined && object.targeting !== null)
+      ? Targeting.fromPartial(object.targeting)
+      : undefined;
     return message;
   },
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { player: "", token: "" };
+  return { player: "", token: "", class: "", skill: "" };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
@@ -2506,6 +2778,12 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     }
     if (message.token !== "") {
       writer.uint32(18).string(message.token);
+    }
+    if (message.class !== "") {
+      writer.uint32(26).string(message.class);
+    }
+    if (message.skill !== "") {
+      writer.uint32(34).string(message.skill);
     }
     return writer;
   },
@@ -2539,6 +2817,22 @@ export const JoinRequest: MessageFns<JoinRequest> = {
             message.token = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.class = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.skill = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2555,6 +2849,8 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     return {
       player: isSet(object.player) ? globalThis.String(object.player) : "",
       token: isSet(object.token) ? globalThis.String(object.token) : "",
+      class: isSet(object.class) ? globalThis.String(object.class) : "",
+      skill: isSet(object.skill) ? globalThis.String(object.skill) : "",
     };
   },
 
@@ -2566,6 +2862,12 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     if (message.token !== "") {
       obj.token = message.token;
     }
+    if (message.class !== "") {
+      obj.class = message.class;
+    }
+    if (message.skill !== "") {
+      obj.skill = message.skill;
+    }
     return obj;
   },
 
@@ -2576,12 +2878,14 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     const message = createBaseJoinRequest();
     message.player = object.player ?? "";
     message.token = object.token ?? "";
+    message.class = object.class ?? "";
+    message.skill = object.skill ?? "";
     return message;
   },
 };
 
 function createBaseSubmitRequest(): SubmitRequest {
-  return { code: "", action: "", moveTo: undefined };
+  return { code: "", action: "", moveTo: undefined, targeting: undefined };
 }
 
 export const SubmitRequest: MessageFns<SubmitRequest> = {
@@ -2594,6 +2898,9 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
     }
     if (message.moveTo !== undefined) {
       Position.encode(message.moveTo, writer.uint32(26).fork()).join();
+    }
+    if (message.targeting !== undefined) {
+      Targeting.encode(message.targeting, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -2635,6 +2942,14 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
             message.moveTo = Position.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.targeting = Targeting.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2656,6 +2971,7 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
         : isSet(object.move_to)
         ? Position.fromJSON(object.move_to)
         : undefined,
+      targeting: isSet(object.targeting) ? Targeting.fromJSON(object.targeting) : undefined,
     };
   },
 
@@ -2670,6 +2986,9 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
     if (message.moveTo !== undefined) {
       obj.moveTo = Position.toJSON(message.moveTo);
     }
+    if (message.targeting !== undefined) {
+      obj.targeting = Targeting.toJSON(message.targeting);
+    }
     return obj;
   },
 
@@ -2683,6 +3002,94 @@ export const SubmitRequest: MessageFns<SubmitRequest> = {
     message.moveTo = (object.moveTo !== undefined && object.moveTo !== null)
       ? Position.fromPartial(object.moveTo)
       : undefined;
+    message.targeting = (object.targeting !== undefined && object.targeting !== null)
+      ? Targeting.fromPartial(object.targeting)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTargeting(): Targeting {
+  return { direction: "", distance: 0 };
+}
+
+export const Targeting: MessageFns<Targeting> = {
+  encode(message: Targeting, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.direction !== "") {
+      writer.uint32(10).string(message.direction);
+    }
+    if (message.distance !== 0) {
+      writer.uint32(16).int32(message.distance);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Targeting {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTargeting();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.direction = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.distance = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Targeting {
+    return {
+      direction: isSet(object.direction) ? globalThis.String(object.direction) : "",
+      distance: isSet(object.distance) ? globalThis.Number(object.distance) : 0,
+    };
+  },
+
+  toJSON(message: Targeting): unknown {
+    const obj: any = {};
+    if (message.direction !== "") {
+      obj.direction = message.direction;
+    }
+    if (message.distance !== 0) {
+      obj.distance = Math.round(message.distance);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Targeting>, I>>(base?: I): Targeting {
+    return Targeting.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Targeting>, I>>(object: I): Targeting {
+    const message = createBaseTargeting();
+    message.direction = object.direction ?? "";
+    message.distance = object.distance ?? 0;
     return message;
   },
 };
