@@ -142,3 +142,45 @@ QuestionFactory.create(spec, seed) ──→ Instance
 2. 填空形式的收益平衡（spec 开放问题 1，伤害系数 ×0.85 待验证）。
 3. 隐藏用例数量按题型微调（模拟类题可能需要更多用例）。
 4. 情境文本池 → LLM 皮肤切换点已隔离在 `text.scenario` 原语。
+
+## 附录 E：结构体类题格式范例（15 号票判题契约 v2，12 号票直接抄）
+
+契约见 docs/adr/0004：TestCase 可选 `setup`（题作者 Python 代码，玩家 import 后、call 前执行，绑定结构体入参）与 `compare`（`def _normalize(got)` 函数源码，worker 用它把 got 规范化为 repr 字符串回传，宿主做字符串比对；expected 永不进容器）。空串 = 现行 eval/repr 路径。构造辅助库（`list_to_nodes`/`make_cycle`/`nodes_repr`/`build_tree`/`tree_repr`）随 payload 注入，setup/compare 内可直接调用。
+
+### E.1 反转链表（比较器范式）
+
+| 字段 | 值 |
+|---|---|
+| setup | `head = list_to_nodes([1,2,3,4,5])` |
+| call | `reverseList(head)` |
+| expected | `[5,4,3,2,1]`（= `nodes_repr` 的紧凑风格） |
+| compare | `def _normalize(got):\n    return nodes_repr(got)` |
+
+### E.2 环形链表 II（带环构造 + 节点身份比较）
+
+| 字段 | 值 |
+|---|---|
+| setup | `head = list_to_nodes([3,2,0,-4])\nmake_cycle(head, 1)` |
+| call | `detectCycle(head)` |
+| expected | `cycle:[2,0,-4]`（从入口出发的规范环序；pos=1 时 3 不在环上——LC 官方语义） |
+| compare | `def _normalize(got):\n    return nodes_repr(got)` |
+
+身份语义：`nodes_repr` 按 id 走环，从入口出发的旋转序列在节点值唯一时即节点身份。非唯一值环需 id 传递机制（ADR-0004 遗留项）。
+
+### E.3 层序遍历（树构造范式）
+
+| 字段 | 值 |
+|---|---|
+| setup | `root = build_tree([3,9,20,None,None,15,7])` |
+| call | `levelOrder(root)` |
+| expected | `[[3], [9, 20], [15, 7]]`（原生 repr——玩家返回原生列表时无需 compare） |
+
+### E.4 LRU 缓存（有状态调用序列范式）
+
+| 字段 | 值 |
+|---|---|
+| setup | `obj = LRUCache(2)`（构造玩家的有状态对象） |
+| call | `[obj.put(1, 1), obj.put(2, 2), obj.get(1), obj.put(3, 3), obj.get(2), obj.get(3)]`（**call 为表达式序列**：求值结果=每步返回值的列表） |
+| expected | `[None, None, 1, None, -1, 3]`（整段序列的期望 repr） |
+
+端到端样例（真实容器）见 `judge/tests/test_struct_contract.py` 的四个 `test_e2e_*` 用例。
