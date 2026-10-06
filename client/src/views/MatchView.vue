@@ -1,11 +1,13 @@
 <script setup lang="ts">
-// 对局页：玩家选择（?player=1/2）→ 接入 → 渲染对局。
-// 登录用户随 join 上行 token（无 token = 匿名热座）；终局 ELO 随 MatchEnded 下发。
+// 对局页（06 号票）：玩家选择 → 职业盲选（本地选完再 join）→ 接入 → 渲染对局。
+// 职业与技能经 URL query 携带（?player=1&class=warrior&skill=cleave）——两个窗口
+// 各自选择、互不可见（设计 003 §1 盲选）；缺省 = legacy 锚点（匿名/旧链接兼容）。
 // 断线/序号断裂：关闭连接重连，快照重建状态（ADR-0002）。
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useMatchStore } from "../stores/match";
 import { useUserStore } from "../stores/user";
+import { useClassesStore } from "../stores/classes";
 import { socket } from "../api/socket";
 import GameGrid from "../components/GameGrid.vue";
 import HpBar from "../components/HpBar.vue";
@@ -15,31 +17,51 @@ import EndOverlay from "../components/EndOverlay.vue";
 
 const store = useMatchStore();
 const user = useUserStore();
+const classesStore = useClassesStore();
 const route = useRoute();
 const disconnected = ref(false);
-// viewer 必须是响应式的（模板 v-if 依赖它）；URL 在 setup 时即确定
 const viewer = ref(playerFromUrl());
+// 盲选暂存（choose 屏用；进入对局后由 URL query 权威）
+const pickedClass = ref((route.query.class as string) || "");
+const pickedSkill = ref((route.query.skill as string) || "");
 
 function playerFromUrl(): string {
   const p = route.query.player;
   return p === "1" ? "p1" : p === "2" ? "p2" : "";
 }
 
+function joinHref(player: string): string {
+  const q = new URLSearchParams();
+  q.set("player", player);
+  if (pickedClass.value) q.set("class", pickedClass.value);
+  if (pickedSkill.value) q.set("skill", pickedSkill.value);
+  return `/?${q.toString()}`;
+}
+
 function connect() {
-  socket.connect(viewer.value, {
-    onMessage: (data) => {
-      disconnected.value = false;
-      store.applyServerMessage(data, viewer.value);
+  socket.connect(
+    viewer.value,
+    {
+      onMessage: (data) => {
+        disconnected.value = false;
+        store.applyServerMessage(data, viewer.value);
+      },
+      onClose: () => {
+        disconnected.value = true;
+        setTimeout(connect, 500); // 自动重连：接入即收快照，状态自愈
+      },
     },
-    onClose: () => {
-      disconnected.value = true;
-      setTimeout(connect, 500); // 自动重连：接入即收快照，状态自愈
+    {
+      token: user.token,
+      class: (route.query.class as string) || "",
+      skill: (route.query.skill as string) || "",
     },
-  }, user.token);
+  );
 }
 
 onMounted(() => {
   if (viewer.value) connect();
+  classesStore.fetch(); // 职业选择与 targeting 控件的同源数据
 });
 
 onBeforeUnmount(() => socket.close());
@@ -71,10 +93,34 @@ watch(
     </main>
 
     <main v-else class="choose">
-      <p>本机热座对战：用两个浏览器窗口分别扮演双方。</p>
+      <p>本机热座对战：用两个浏览器窗口分别扮演双方。先选职业与技能（盲选——对方开赛前看不到）。</p>
+      <div class="class-grid">
+        <button
+          v-for="c in classesStore.classes"
+          :key="c.id"
+          class="class-card"
+          :class="{ picked: pickedClass === c.id }"
+          :style="{ borderColor: pickedClass === c.id ? c.color : undefined }"
+          @click="pickedClass = c.id; pickedSkill = c.skills[0]?.id ?? ''"
+        >
+          <b :style="{ color: c.color }">{{ c.name }}</b>
+          <small>HP {{ c.hp }} · 攻 {{ c.attackDamage }} · 移动 ≤{{ c.moveMax }}</small>
+          <div class="skills">
+            <button
+              v-for="s in c.skills"
+              :key="s.id"
+              class="skill-pick"
+              :class="{ on: pickedClass === c.id && pickedSkill === s.id }"
+              @click.stop="pickedClass = c.id; pickedSkill = s.id"
+            >
+              {{ s.name }}（{{ s.kind === "heal" ? `治${s.heal}` : s.kind === "drain" ? `伤${s.power}+治${s.heal}` : `伤${s.power}` }} / CD{{ s.cooldown }}）
+            </button>
+          </div>
+        </button>
+      </div>
       <div class="links">
-        <a href="/?player=1">以 P1 接入</a>
-        <a href="/?player=2">以 P2 接入</a>
+        <a :href="joinHref('1')" data-testid="join-p1">以 P1 接入</a>
+        <a :href="joinHref('2')" data-testid="join-p2">以 P2 接入</a>
       </div>
     </main>
 
@@ -88,7 +134,21 @@ watch(
   background: #4a3a20; color: #e0b45f; padding: 8px 14px;
   border-radius: 8px; margin-bottom: 12px; font-size: 13px;
 }
-.choose { text-align: center; color: #8a93a8; padding: 60px 0; }
+.choose { text-align: center; color: #8a93a8; padding: 24px 0; }
+.class-grid { display: flex; gap: 14px; justify-content: center; margin: 18px 0; }
+.class-card {
+  background: #1a2030; border: 2px solid #2c3650; border-radius: 10px;
+  padding: 12px; color: #c7cede; cursor: pointer; display: flex;
+  flex-direction: column; gap: 8px; min-width: 200px; text-align: left;
+}
+.class-card.picked { background: #232b40; }
+.class-card small { color: #56607a; }
+.skills { display: flex; flex-direction: column; gap: 6px; }
+.skill-pick {
+  background: #12141a; border: 1px solid #2c3650; border-radius: 6px;
+  color: #8a93a8; padding: 4px 8px; cursor: pointer; font-size: 12px; text-align: left;
+}
+.skill-pick.on { border-color: #7fd1a8; color: #dfe4ee; }
 .links { display: flex; gap: 24px; justify-content: center; margin-top: 20px; }
 .links a {
   color: #7fd1a8; text-decoration: none; font-size: 18px;

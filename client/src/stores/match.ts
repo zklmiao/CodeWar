@@ -42,11 +42,24 @@ export interface ProblemView {
   starterCode: string;
 }
 
-// 三槽面板：攻击镜像 + 查看者私有行动题（快照按查看者过滤；事件流按 viewerId 取用）
+// 四槽面板（06 号票）：攻击镜像 + 查看者私有行动题 + 技能槽（未装备时为 null）
 export interface PanelState {
   attack: ProblemView | null;
   move: ProblemView | null;
   defend: ProblemView | null;
+  skill: ProblemView | null;
+}
+
+export interface TargetingView {
+  direction: string; // up | down | left | right；空 = 自动瞄准
+  distance: number; // 0 = 自动瞄准
+}
+
+export interface ClassView {
+  classId: string; // warrior | mage | ranger | legacy
+  skillId: string; // 空 = 未装备技能位
+  // 查看者自己的技能冷却剩余回合数（0 = 可用）；对手行不携带
+  skillCdRounds: number;
 }
 
 export interface MatchState {
@@ -59,6 +72,8 @@ export interface MatchState {
   positions: Record<string, PosView>; // 结算位置（5×5，行列 0 计）
   shield: Record<string, boolean>; // 本回合护盾
   panel: PanelState | null;
+  classes: Record<string, ClassView>; // 职业/技能/冷却（06 号票快照字段）
+  pendingTargeting: TargetingView | null; // 攻击/技能槽的目标选择（未提交 = 自动瞄准）
   viewerLockUntil: number;
   viewerActed: boolean; // 本回合查看者已行动（服务端权威结论的本地缓存）
   actedKind: string | null; // 已行动的行动类型
@@ -85,6 +100,8 @@ export const useMatchStore = defineStore("match", {
     positions: { p1: { row: 3, col: 2 }, p2: { row: 2, col: 2 } },
     shield: {},
     panel: null,
+    classes: {},
+    pendingTargeting: null,
     viewerLockUntil: 0,
     viewerActed: false,
     actedKind: null,
@@ -128,11 +145,20 @@ export const useMatchStore = defineStore("match", {
         this.positions[p.id] = p.pos ? { row: p.pos.row, col: p.pos.col } : { row: 0, col: 0 };
         this.shield[p.id] = p.shielded;
       }
+      this.classes = {};
+      for (const p of s.players) {
+        this.classes[p.id] = {
+          classId: p.classId ?? "",
+          skillId: p.skillId ?? "",
+          skillCdRounds: p.skillCdRounds ?? 0,
+        };
+      }
       this.panel = s.panel
         ? {
             attack: toProblem(s.panel.attack),
             move: toProblem(s.panel.move),
             defend: toProblem(s.panel.defend),
+            skill: toProblem(s.panel.skill),
           }
         : null;
       this.viewerLockUntil = Number(s.viewerLockUntilUnixMs);
@@ -158,6 +184,7 @@ export const useMatchStore = defineStore("match", {
         this.viewerActed = false;
         this.actedKind = null;
         this.pendingMoveTo = null;
+        this.pendingTargeting = null;
         this.shield = {}; // 护盾不跨回合；位置跨回合持续
         this.panel = null;
         this.pushLog(`—— 第 ${this.round} 回合 ——`);
@@ -173,12 +200,14 @@ export const useMatchStore = defineStore("match", {
         this.pushLog(
           env.hpChanged.cause === "self-damage"
             ? `✖ ${p} 提交错误，自损 3（剩余 ${env.hpChanged.hp}）`
-            : `💢 ${p} 受到 ${-env.hpChanged.delta} 伤害（剩余 ${env.hpChanged.hp}）`,
+            : env.hpChanged.cause === "heal"
+              ? `✚ ${p} 恢复 ${env.hpChanged.delta} HP（剩余 ${env.hpChanged.hp}）`
+              : `💢 ${p} 受到 ${-env.hpChanged.delta} 伤害（剩余 ${env.hpChanged.hp}）`,
         );
       } else if (env.submissionRejected) {
-        this.pushLog(
-          `⚠ ${env.submissionRejected.player} 的移动参数被拒（${env.submissionRejected.reason}），可调整后重交`,
-        );
+        const why = env.submissionRejected.reason;
+        const what = why === "skill-cooldown" ? "技能冷却中" : why === "no-skill-equipped" ? "未装备技能" : "移动参数";
+        this.pushLog(`⚠ ${env.submissionRejected.player} 的${what}被拒（${why}），可调整后重交`);
       } else if (env.matchEnded) {
         this.phase = MatchPhase.MATCH_PHASE_ENDED;
         this.result = {
@@ -206,6 +235,7 @@ export const useMatchStore = defineStore("match", {
         attack: toProblem(pr.attack),
         move: toProblem(mine?.move),
         defend: toProblem(mine?.defend),
+        skill: toProblem(mine?.skill),
       };
     },
     applyJudged(j: SubmissionJudged) {
@@ -238,6 +268,16 @@ export const useMatchStore = defineStore("match", {
       } else if (a.action === "defend") {
         this.shield[p] = true;
         this.pushLog(`🛡 ${p} 挂起护盾（本回合减伤 60%）`);
+      } else if (a.action === "skill") {
+        if (a.dodged) {
+          this.pushLog(`💨 ${p} 的技能落空——目标不在覆盖范围`);
+        } else {
+          const parts: string[] = [];
+          if (a.damage > 0) parts.push(`造成 ${a.damage} 伤害`);
+          if (a.heal > 0) parts.push(`恢复 ${a.heal} HP`);
+          const tail = a.shielded ? "（护盾折减）" : "";
+          this.pushLog(`✨ ${p} 释放技能：${parts.join("、")}${tail}`);
+        }
       } else if (a.action === "attack") {
         if (a.dodged) {
           this.pushLog(`💨 ${p} 的攻击落空——目标已移出相邻格`);
@@ -249,6 +289,10 @@ export const useMatchStore = defineStore("match", {
     },
     setMoveTo(pos: PosView | null) {
       this.pendingMoveTo = pos;
+    },
+    // 06 号票：攻击/技能槽的目标选择（未提交 = 自动瞄准，direction 空）
+    setTargeting(t: TargetingView | null) {
+      this.pendingTargeting = t;
     },
     pushLog(text: string) {
       this.log.push({ seq: this.seq, text });
