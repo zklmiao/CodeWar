@@ -408,7 +408,10 @@ try:
                   "err": type(e).__name__, "errno": getattr(e, "errno", None)}
     else:
         NS = dict(vars(solution))  # 玩家模块命名空间（含其自定义辅助函数）
-        NS.update(_h.EXPORTS)      # 15 号票：构造辅助库对 setup/call 可见
+        # 构造辅助库只补缺、不覆盖：玩家自定义同名符号（如自建 ListNode /
+        # list_to_nodes）优先——题面 call 是按玩家自己的实现写的（review 发现）。
+        for _k, _v in _h.EXPORTS.items():
+            NS.setdefault(_k, _v)
         if setup_src:
             try:
                 exec(setup_src, NS)  # 题作者构造声明：为 call 绑定结构体入参

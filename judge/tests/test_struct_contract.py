@@ -93,8 +93,11 @@ def test_guard_accepts_legit_author_code():
         "def _normalize(got):\n    return nodes_repr(got)", "compare")
 
 
+@needs_docker
 def test_guard_violation_maps_to_judge_error():
-    # 卫兵违规 = 模板缺陷 → judge-error（fail-closed：不注入、不罚玩家）
+    # 卫兵违规 = 模板缺陷 → judge-error（fail-closed：不注入、不罚玩家）。
+    # 必须 @needs_docker：无 docker 时 docker_available() 先短路返回 judge-error，
+    # 测试会走错路径而假绿——卫兵逻辑本身从未被执行（review 发现 1）。
     r = executor.run(
         "def f():\n    return 1",
         [{"name": "t1", "call": "f()", "expected": "1",
@@ -102,6 +105,23 @@ def test_guard_violation_maps_to_judge_error():
         timeout_ms=3000,
     )
     assert r["category"] == "judge-error" and r["passed"] is False
+
+
+@needs_docker
+def test_player_definitions_win_over_helpers():
+    # 回归钉（review 发现）：构造辅助库只补缺、不覆盖——玩家自定义同名符号
+    # （如自建 list_to_nodes）必须优先，否则按玩家实现书写的题面会被判错。
+    # 修复前 NS.update(EXPORTS) 会用辅助库覆盖玩家的 list_to_nodes。
+    r = executor.run(
+        "def list_to_nodes(arr):\n"
+        "    return 42\n"
+        "def f():\n"
+        "    return list_to_nodes([1, 2, 3])",
+        [{"name": "t1", "call": "f()", "expected": "42",
+          "setup": "head = list_to_nodes([1, 2, 3])"}],
+        timeout_ms=3000,
+    )
+    assert r["passed"] is True and r["category"] == "ok"
 
 
 # ===== 端到端样题×4（真实容器判题；同时是 12 号票的格式范例） =====
