@@ -231,7 +231,7 @@ function submitSkill() {
 .submit.atk { background: var(--cw-color-accent-warrior, var(--cw-color-class-warrior)); }
 .submit.mov { background: var(--cw-color-accent); }
 .submit.def { background: var(--cw-color-state-success); }
-.submit.skl { background: var(--cw-color-accent-mage, #7c5cbf); }
+.submit.skl { background: var(--cw-color-class-mage); }
 .targeting {
   display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--cw-color-text-secondary);
 }

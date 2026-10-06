@@ -440,31 +440,13 @@ func (e *Engine) resolveRound() {
 			switch sk.Kind {
 			case classes.KindDamage:
 				if !hit {
-					e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
-						Attacker: p, Action: ActionSkill, SolveMs: int32(a.solveMs), Dodged: true,
-					}}})
+					e.emitSkillDodged(p, a.solveMs)
 					break
 				}
-				dmg := sk.Power
-				shielded := e.shield[target]
-				if shielded {
-					dmg = int32(math.Round(float64(dmg) * DefendFactor))
-				}
-				e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
-					Attacker: p, Action: ActionSkill, SolveMs: int32(a.solveMs),
-					Damage: dmg, Shielded: shielded,
-				}}})
-				e.hp[target] -= dmg
-				e.emitHp(target, -dmg, "skill")
+				e.applySkillDamage(p, target, a.solveMs, sk.Power)
 			case classes.KindHeal:
 				// 治疗不溢出（设计 003 §1）：以职业表最大 HP 封顶
-				healed := sk.Heal
-				if room := e.cls[p].HP - e.hp[p]; healed > room {
-					healed = room
-				}
-				if healed < 0 {
-					healed = 0
-				}
+				healed := e.clampHeal(p, sk.Heal)
 				e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
 					Attacker: p, Action: ActionSkill, SolveMs: int32(a.solveMs), Heal: healed,
 				}}})
@@ -476,27 +458,11 @@ func (e *Engine) resolveRound() {
 				// 秘法汲取：命中 → 伤 25（受盾）+ 自疗 20（溢出截断）；
 				// 未命中 → 两段都不发生（伤害没打中就没有汲取的血液可回）
 				if !hit {
-					e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
-						Attacker: p, Action: ActionSkill, SolveMs: int32(a.solveMs), Dodged: true,
-					}}})
+					e.emitSkillDodged(p, a.solveMs)
 					break
 				}
-				dmg := sk.Power
-				shielded := e.shield[target]
-				if shielded {
-					dmg = int32(math.Round(float64(dmg) * DefendFactor))
-				}
-				e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
-					Attacker: p, Action: ActionSkill, SolveMs: int32(a.solveMs),
-					Damage: dmg, Shielded: shielded,
-				}}})
-				e.hp[target] -= dmg
-				e.emitHp(target, -dmg, "skill")
-				healed := sk.Heal
-				if room := e.cls[p].HP - e.hp[p]; healed > room {
-					healed = room
-				}
-				if healed > 0 {
+				e.applySkillDamage(p, target, a.solveMs, sk.Power)
+				if healed := e.clampHeal(p, sk.Heal); healed > 0 {
 					e.hp[p] += healed
 					e.emitHp(p, healed, "heal")
 				}
@@ -612,6 +578,40 @@ func (e *Engine) endMatch(winner Player, reason string) {
 	}}})
 }
 
+// emitSkillDodged：技能被闪避的统一事件（伤害/汲取的未命中分支共用）。
+func (e *Engine) emitSkillDodged(p Player, solveMs int64) {
+	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+		Attacker: p, Action: ActionSkill, SolveMs: int32(solveMs), Dodged: true,
+	}}})
+}
+
+// applySkillDamage：技能伤害落地（盾减免 → 事件 → 扣血）。
+// KindDamage 与 KindDrain 共用（review 发现 3：两段原本逐行重复）。
+func (e *Engine) applySkillDamage(attacker, target Player, solveMs int64, power int32) {
+	dmg := power
+	shielded := e.shield[target]
+	if shielded {
+		dmg = int32(math.Round(float64(dmg) * DefendFactor))
+	}
+	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_ActionResolved{ActionResolved: &matchpb.ActionResolved{
+		Attacker: attacker, Action: ActionSkill, SolveMs: int32(solveMs),
+		Damage: dmg, Shielded: shielded,
+	}}})
+	e.hp[target] -= dmg
+	e.emitHp(target, -dmg, "skill")
+}
+
+// clampHeal：治疗不溢出（设计 003 §1）——以职业表最大 HP 封顶，负值截 0。
+func (e *Engine) clampHeal(p Player, amount int32) int32 {
+	if room := e.cls[p].HP - e.hp[p]; amount > room {
+		amount = room
+	}
+	if amount < 0 {
+		amount = 0
+	}
+	return amount
+}
+
 func (e *Engine) emitHp(p Player, delta int32, cause string) {
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_HpChanged{HpChanged: &matchpb.HpChanged{
 		Player: p, Hp: e.hp[p], Delta: delta, Cause: cause,
@@ -659,6 +659,16 @@ func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 			playerRow(P2),
 		},
 	}
+	if !revealOpponent {
+		// 盲选期不泄露对手职业血量（110/90/95 三档可反推职业，review 发现）：
+		// 对手行按初始 100 上报，开局（revealOpponent）即恢复真实值。
+		opp := other(viewer)
+		for _, row := range s.Players {
+			if row.Id == opp {
+				row.Hp = 100
+			}
+		}
+	}
 	if e.phase == matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
 		s.DeadlineUnixMs = e.deadline.UnixMilli()
 		s.Panel = &matchpb.Panel{
@@ -688,11 +698,6 @@ func damageFor(solveMs int64, base int32) int32 {
 		coeff = CoeffMin
 	}
 	return int32(math.Round(float64(base) * coeff))
-}
-
-// isAdjacent：正交相邻（曼哈顿距离恰 1）——本票普攻形状（相邻 4 格）。
-func isAdjacent(a, b Pos) bool {
-	return abs(a.Row-b.Row)+abs(a.Col-b.Col) == 1
 }
 
 func abs(x int) int {

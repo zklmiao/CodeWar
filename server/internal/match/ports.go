@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// 本票战斗数值（spec 附注初稿；调参以 spec 表为准）
+// 战斗时长常量（职业/技能数值已迁往 classes 注册表单一来源，review 发现 4）
 const (
-	BaseDamage = 22 // 普攻基础伤害
-
 	// 时长一律用 time.Duration 类型常量，杜绝裸 int 手工换算（review 修复：
 	// 散落的 * time.Millisecond 是 timer 单位 bug 的成因）
 	RoundDuration = 75 * time.Second // 回合倒计时

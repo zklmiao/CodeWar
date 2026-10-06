@@ -99,10 +99,21 @@ func TestBlindPickPrivacy(t *testing.T) {
 	if snap.Players[0].ClassId != "warrior" {
 		t.Fatalf("自己的职业始终可见：%q", snap.Players[0].ClassId)
 	}
+	// 血量同样泄露职业（110/90/95 三档互异）：盲选期对手行按初始 100 上报
+	// （review 发现：WAITING 快照 hp 可反推职业）
+	if snap.Players[1].Hp != 100 {
+		t.Fatalf("开赛前对手血量必须按初始 100 上报（防职业反推），实际 %d", snap.Players[1].Hp)
+	}
+	if snap.Players[0].Hp != 110 {
+		t.Fatalf("自己的真实血量（剑士 110）始终可见：%d", snap.Players[0].Hp)
+	}
 	eng.StartMatch()
 	snap = eng.Snapshot(P1)
 	if snap.Players[1].ClassId != "mage" {
 		t.Fatalf("开赛后对方职业应揭示：mage，实际 %q", snap.Players[1].ClassId)
+	}
+	if snap.Players[1].Hp != 90 {
+		t.Fatalf("开赛后对手真实血量（法师 90）应揭示：%d", snap.Players[1].Hp)
 	}
 }
 
