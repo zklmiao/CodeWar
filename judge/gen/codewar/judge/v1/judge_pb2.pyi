@@ -17,14 +17,18 @@ class JudgeRequest(_message.Message):
     def __init__(self, code: _Optional[str] = ..., test_cases: _Optional[_Iterable[_Union[TestCase, _Mapping]]] = ..., timeout_ms: _Optional[int] = ...) -> None: ...
 
 class TestCase(_message.Message):
-    __slots__ = ("name", "call", "expected")
+    __slots__ = ("name", "call", "expected", "setup", "compare")
     NAME_FIELD_NUMBER: _ClassVar[int]
     CALL_FIELD_NUMBER: _ClassVar[int]
     EXPECTED_FIELD_NUMBER: _ClassVar[int]
+    SETUP_FIELD_NUMBER: _ClassVar[int]
+    COMPARE_FIELD_NUMBER: _ClassVar[int]
     name: str
     call: str
     expected: str
-    def __init__(self, name: _Optional[str] = ..., call: _Optional[str] = ..., expected: _Optional[str] = ...) -> None: ...
+    setup: str
+    compare: str
+    def __init__(self, name: _Optional[str] = ..., call: _Optional[str] = ..., expected: _Optional[str] = ..., setup: _Optional[str] = ..., compare: _Optional[str] = ...) -> None: ...
 
 class JudgeVerdict(_message.Message):
     __slots__ = ("passed", "category", "duration_ms", "detail")

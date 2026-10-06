@@ -94,16 +94,20 @@ def _parse_json_lines(text):
     return out
 
 
-def build_stdin_payload(code: str, test_cases: list[dict], worker_src: str) -> str:
-    """构造进容器的 stdin 载荷：解法源码 + worker 脚本 + 用例清单。
+def build_stdin_payload(code: str, test_cases: list[dict], worker_src: str,
+                        helpers_src: str) -> str:
+    """构造进容器的 stdin 载荷：解法源码 + worker 脚本 + 构造辅助库 + 用例清单。
 
-    只含用例名与 call 表达式，不含期望值；worker 脚本经 stdin 注入而非
-    挂载（零宿主路径依赖，见模块 docstring）。
+    只含用例名、call 表达式与题作者 setup/compare 声明，不含期望值；worker
+    与辅助库脚本经 stdin 注入而非挂载（零宿主路径依赖，见模块 docstring）。
     """
     return json.dumps({
         "solution": code or "",
         "worker": worker_src,
-        "calls": [{"name": t["name"], "call": t["call"]} for t in test_cases],
+        "helpers": helpers_src,
+        "calls": [{"name": t["name"], "call": t["call"],
+                   "setup": t.get("setup", ""), "compare": t.get("compare", "")}
+                  for t in test_cases],
     })
 
 
@@ -130,6 +134,131 @@ def build_sandbox_cmd(per_test_ms: int, harness_src: str) -> list[str]:
     ]
 
 
+# ---- 沙箱构造辅助库（15 号票）：随 payload 注入容器，题作者 setup/compare 可用 ----
+# 所有遍历对"玩家可能造出的环"有界（visited 按 id 判定 + 纵深上限）；
+# 规范化 repr 采用紧凑风格（"[1,2,3]"），题作者据同一风格书写 expected。
+_HELPERS = r'''
+import json
+
+class ListNode:
+    def __init__(self, val=0, nxt=None):
+        self.val = val
+        self.next = nxt
+
+def list_to_nodes(arr):
+    dummy = ListNode()
+    cur = dummy
+    for v in arr:
+        cur.next = ListNode(v)
+        cur = cur.next
+    return dummy.next
+
+def make_cycle(head, pos):
+    """尾节点.next 指向第 pos 个节点（0 起）；pos<0 或空链 = 无环。"""
+    if pos is None or pos < 0 or head is None:
+        return head
+    entry = head
+    for _ in range(pos):
+        entry = entry.next
+    tail = head
+    while tail.next is not None:
+        tail = tail.next
+    tail.next = entry
+    return head
+
+def _walk_bounded(node, limit=100000):
+    """沿 next 行走，返回 (值序列, 环入口在序列中的下标或 None)。
+    visited 按 id 判定——环有界；limit 为纵深防御。"""
+    seen = {}
+    vals = []
+    cur = node
+    while cur is not None and id(cur) not in seen and len(vals) < limit:
+        seen[id(cur)] = len(vals)
+        vals.append(cur.val)
+        cur = cur.next
+    entry = seen.get(id(cur)) if cur is not None else None
+    return vals, entry
+
+def nodes_repr(node):
+    """规范化 repr：None→"None"；无环→"[1,2,3]"；node 为环入口→
+    "cycle:[2,0,-4,3]"（从 node 出发走到 id 回到 node 为止——对唯一值
+    测试数据即节点身份的规范化表达）。"""
+    if node is None:
+        return "None"
+    vals, entry = _walk_bounded(node)
+    if entry is None:
+        return "[" + ",".join(map(str, vals)) + "]"
+    return "cycle:[" + ",".join(map(str, vals)) + "]"
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def build_tree(arr):
+    """层序数组（None=空位）构造二叉树，返回根或 None。"""
+    if not arr or arr[0] is None:
+        return None
+    root = TreeNode(arr[0])
+    queue = [root]
+    i = 1
+    while queue and i < len(arr):
+        node = queue.pop(0)
+        if i < len(arr):
+            v = arr[i]
+            i += 1
+            if v is not None:
+                node.left = TreeNode(v)
+                queue.append(node.left)
+        if i < len(arr):
+            v = arr[i]
+            i += 1
+            if v is not None:
+                node.right = TreeNode(v)
+                queue.append(node.right)
+    return root
+
+def tree_repr(root, limit=100000):
+    """规范化 repr：层序数组含 None 占位（尾部裁剪），紧凑风格；节点总数
+    以 limit 限界（树本无环，防玩家造环导致 BFS 不终止）。"""
+    out = []
+    queue = [root]
+    while queue and len(out) < limit:
+        node = queue.pop(0)
+        if node is None:
+            out.append(None)
+            continue
+        out.append(node.val)
+        queue.append(node.left)
+        queue.append(node.right)
+    while out and out[-1] is None:
+        out.pop()
+    return json.dumps(out, separators=(",", ":"))
+
+EXPORTS = {"ListNode": ListNode, "list_to_nodes": list_to_nodes,
+           "make_cycle": make_cycle, "nodes_repr": nodes_repr,
+           "TreeNode": TreeNode, "build_tree": build_tree,
+           "tree_repr": tree_repr}
+'''
+
+# ---- 题作者代码静态卫兵（纵深防御；真实边界是沙箱本身） ----
+_AUTHOR_CODE_MAX_LEN = 4000
+_AUTHOR_DENYLIST = re.compile(
+    r"__import__|open\s*\(|os\.system|subprocess|shutil|importlib|eval\s*\(|exec\s*\(")
+
+
+def guard_author_code(src: str, what: str) -> None:
+    """setup/compare 是题作者代码（可信侧），但注入沙箱前仍过静态卫兵：
+    长度上限、禁用调用清单、可编译。违规抛 ValueError → judge-error
+    （模板缺陷属基础设施故障，不罚玩家）。"""
+    if len(src) > _AUTHOR_CODE_MAX_LEN:
+        raise ValueError(what + " 超过长度上限 " + str(_AUTHOR_CODE_MAX_LEN))
+    if src.strip() and _AUTHOR_DENYLIST.search(src):
+        raise ValueError(what + " 含禁用调用")
+    compile(src, what, "exec")
+
+
 # ---- 容器内 harness：父进程（逐用例 fork worker，首败即停） ----
 # 程序本体经 `python -c` 加载（stdin 完整留给 payload）；stdin JSON 携带
 # 解法源码 + worker 脚本 + call 清单（无期望值）；harness 把解法与 worker
@@ -152,11 +281,13 @@ def emit(obj):
 def summary():
     emit({"i": "done", "duration_ms": int((time.monotonic() - t0) * 1000)})
 
-# 注入文件到 /tmp tmpfs（exec 开启）：解法 + worker 脚本，零挂载
+# 注入文件到 /tmp tmpfs（exec 开启）：解法 + worker + 构造辅助库，零挂载
 with open("/tmp/solution.py", "w", encoding="utf-8") as f:
     f.write(payload["solution"])
 with open("/tmp/_worker.py", "w", encoding="utf-8") as f:
     f.write(payload["worker"])
+with open("/tmp/_helpers.py", "w", encoding="utf-8") as f:
+    f.write(payload["helpers"])
 
 # 静态语法预检：compile 不执行代码，安全；行号信息无害可回传
 try:
@@ -176,7 +307,9 @@ for idx, c in enumerate(calls):
     try:
         proc = subprocess.run(
             [sys.executable, "/tmp/_worker.py"],
-            input=json.dumps({"i": idx, "call": c["call"]}),
+            input=json.dumps({"i": idx, "call": c["call"],
+                              "setup": c.get("setup", ""),
+                              "compare": c.get("compare", "")}),
             capture_output=True, text=True, timeout=per_test_s,
         )
     except subprocess.TimeoutExpired:
@@ -197,6 +330,10 @@ for idx, c in enumerate(calls):
     if outcome == "ok":
         emit({"i": idx, "status": "ok", "repr": got.get("repr", "")})
         continue
+    if outcome == "infra-error":
+        # 15 号票：构造辅助库/题作者 setup/比较器崩溃=基础设施故障，不罚玩家
+        emit({"i": idx, "status": "judge-error"})
+        break
     if outcome in ("import-error", "call-error"):
         # 配额杀：内存耗尽或进程/线程配额耗尽（errno 11 = EAGAIN）；
         # 其余：导入期顶层崩溃 → runtime-error，调用期异常 → call-error。
@@ -217,12 +354,18 @@ summary()
 
 # ---- 容器内 worker：单用例执行者（每个用例全新进程，全新 import） ----
 # 脚本源码由 harness 经 stdin 注入的 payload 落到 /tmp；stdin 只收自己的
-# {"i", "call"}；全程见不到期望值（__main__ 命名空间里就没有）。
+# {"i", "call", "setup", "compare"}；全程见不到期望值（__main__ 命名空间里
+# 就没有）。15 号票 v2 流程：import 玩家代码 → NS 并入构造辅助库 → exec
+# setup（题作者声明，失败=infra 不罚玩家）→ eval(call) → 若声明 compare
+# 则用其 _normalize 把 got 规范化为 repr 字符串回传（值比对在宿主）。
 _WORKER = r'''
 import io, json, sys
 
 job = json.load(sys.stdin)
-idx, call = job["i"], job["call"]
+idx = job["i"]
+call = job["call"]
+setup_src = job.get("setup", "")
+compare_src = job.get("compare", "")
 
 def emit(obj):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
@@ -243,11 +386,20 @@ try:
 except (ImportError, OSError):
     pass
 
+# 构造辅助库：harness 已落盘 /tmp/_helpers.py。失败=基础设施故障（非玩家
+# 代码问题），按 infra-error 归因，harness 转判 judge-error。
+sys.path.insert(0, "/tmp")
+try:
+    import _helpers as _h
+except Exception:
+    emit({"i": idx, "outcome": "infra-error"})
+    raise SystemExit(0)
+
 # 玩家代码的打印/报错截留在内存中，绝不进 worker 协议流（防协议污染与信息泄漏）
 buf_out, buf_err = io.StringIO(), io.StringIO()
-sys.path.insert(0, "/tmp")
 old_out, old_err = sys.stdout, sys.stderr
 sys.stdout, sys.stderr = buf_out, buf_err
+result = None
 try:
     try:
         import solution  # noqa: E402  玩家代码（每 worker 全新 import）
@@ -255,13 +407,34 @@ try:
         result = {"i": idx, "outcome": "import-error",
                   "err": type(e).__name__, "errno": getattr(e, "errno", None)}
     else:
-        NS = vars(solution)  # 玩家模块命名空间求值（含其自定义辅助函数）
-        try:
-            result = {"i": idx, "outcome": "ok",
-                      "repr": repr(eval(call, dict(NS)))}
-        except BaseException as e:
-            result = {"i": idx, "outcome": "call-error",
-                      "err": type(e).__name__, "errno": getattr(e, "errno", None)}
+        NS = dict(vars(solution))  # 玩家模块命名空间（含其自定义辅助函数）
+        NS.update(_h.EXPORTS)      # 15 号票：构造辅助库对 setup/call 可见
+        if setup_src:
+            try:
+                exec(setup_src, NS)  # 题作者构造声明：为 call 绑定结构体入参
+            except BaseException:
+                # setup 失败=题作者代码缺陷（模板问题），infra 不罚玩家
+                result = {"i": idx, "outcome": "infra-error"}
+        if result is None:
+            try:
+                got = eval(call, dict(NS))
+            except BaseException as e:
+                result = {"i": idx, "outcome": "call-error",
+                          "err": type(e).__name__, "errno": getattr(e, "errno", None)}
+            if result is None:
+                if compare_src:
+                    try:
+                        cns = dict(_h.EXPORTS)
+                        exec(compare_src, cns)
+                        nr = cns["_normalize"](got)
+                        if not isinstance(nr, str):
+                            nr = repr(nr)
+                        result = {"i": idx, "outcome": "ok", "repr": nr}
+                    except BaseException:
+                        # 比较器/规范化崩溃=题作者代码缺陷（infra），绝不归咎玩家
+                        result = {"i": idx, "outcome": "infra-error"}
+                else:
+                    result = {"i": idx, "outcome": "ok", "repr": repr(got)}
 finally:
     sys.stdout, sys.stderr = old_out, old_err
 
@@ -320,6 +493,8 @@ def _assemble_verdict(lines: list[dict], test_cases: list[dict],
             return verdict("limit-exceeded")  # 配额杀
         if status == "runtime-error":
             return verdict("runtime-error")  # 导入期顶层崩溃/协议外崩溃
+        if status == "judge-error":
+            return verdict("judge-error")  # harness 转发的 infra 故障（辅助库/setup/比较器崩溃）
         if status == "call-error":
             # 调用期异常 = 没算出值，不可能正确；配额类异常单独归因
             if r.get("err") == "MemoryError" or r.get("errno") == 11:
@@ -349,10 +524,20 @@ def run(code: str, test_cases: list[dict], timeout_ms: int = 8000) -> dict:
     else:
         per_test_ms = PER_TEST_TIMEOUT_MS
     outer_s = len(test_cases) * (per_test_ms / 1000.0) + WALL_CLOCK_SLACK_S
-    # 零挂载：解法源码 + worker 脚本 + 用例清单（仅 call，无期望值）全部经
-    # stdin 注入；运行期文件只落在容器内 /tmp tmpfs——嵌套容器解析不了
-    # 宿主路径，任何 -v 挂载都会静默拿到空目录（浏览器验收发现的 P1）。
-    payload = build_stdin_payload(code, test_cases, _WORKER)
+    # 题作者 setup/compare 静态卫兵：违规（超长/禁用调用/语法错误）=模板缺陷
+    # → judge-error，不注入容器（纵深防御；真实边界是沙箱本身，见 ADR-0004）。
+    for t in test_cases:
+        for key in ("setup", "compare"):
+            src = t.get(key, "")
+            if src:
+                try:
+                    guard_author_code(src, key)
+                except Exception:
+                    return _judge_error(0)
+    # 零挂载：解法源码 + worker 脚本 + 构造辅助库 + 用例清单（仅 call，无期
+    # 望值）全部经 stdin 注入；运行期文件只落在容器内 /tmp tmpfs——嵌套容器
+    # 解析不了宿主路径，任何 -v 挂载都会静默拿到空目录（浏览器验收发现的 P1）。
+    payload = build_stdin_payload(code, test_cases, _WORKER, _HELPERS)
     cmd = build_sandbox_cmd(per_test_ms, _HARNESS)
 
     started = time.monotonic()

@@ -30,10 +30,17 @@ const (
 )
 
 // TestCase：判题用例（call 为 Python 表达式，expected 为期望 repr）。
+// 15 号票契约 v2：Setup/Compare 为可选的题作者声明（空串 = 未声明，走现行
+// eval/repr 路径）——setup 在玩家代码 import 后、call 求值前 exec 进玩家
+// 命名空间（可用沙箱构造辅助库）；compare 是 `def _normalize(got)` 的函数
+// 源码，worker 用它把 got 规范化为 repr 字符串，值比对仍在宿主（expected
+// 永不进容器）。见 docs/adr/0004。
 type TestCase struct {
 	Name     string
 	Call     string
 	Expected string
+	Setup    string
+	Compare  string
 }
 
 // Question：题实例。04 号票起由出题工厂按 (spec, seed) 生成；题面/用例格式

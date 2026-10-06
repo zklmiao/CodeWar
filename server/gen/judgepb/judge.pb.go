@@ -91,7 +91,18 @@ type TestCase struct {
 	// Python 表达式：调用玩家函数，如 two_sum([2, 7, 11, 15], 9)
 	Call string `protobuf:"bytes,2,opt,name=call,proto3" json:"call,omitempty"`
 	// 期望结果的 Python repr，如 [0, 1]
-	Expected      string `protobuf:"bytes,3,opt,name=expected,proto3" json:"expected,omitempty"`
+	Expected string `protobuf:"bytes,3,opt,name=expected,proto3" json:"expected,omitempty"`
+	// 15 号票（判题契约 v2）：可选的题作者 setup 代码——在 worker 内、玩家代码
+	// import 之后、call 求值之前 exec 进玩家命名空间（可用沙箱构造辅助库：
+	// list_to_nodes/build_tree/make_cycle 等），为 call 绑定结构体入参。
+	// 空串 = 未声明，走现行 eval/repr 路径（完全向后兼容）。
+	Setup string `protobuf:"bytes,4,opt,name=setup,proto3" json:"setup,omitempty"`
+	// 可选的题作者比较器声明：`def _normalize(got): ...` 的完整函数源码，
+	// 返回 got 的规范化 repr 字符串（链表→"[1,2,3]"、环→"cycle:[...]"、
+	// 树→层序列表；环有界输出）。worker 只回传规范化串，值比对仍在宿主
+	// （expected 永不进容器——零泄漏协议不变）。空串 = 用 repr(got)。
+	// 题作者代码进容器属信任边界变化，见 docs/adr/0004。
+	Compare       string `protobuf:"bytes,5,opt,name=compare,proto3" json:"compare,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,6 +154,20 @@ func (x *TestCase) GetCall() string {
 func (x *TestCase) GetExpected() string {
 	if x != nil {
 		return x.Expected
+	}
+	return ""
+}
+
+func (x *TestCase) GetSetup() string {
+	if x != nil {
+		return x.Setup
+	}
+	return ""
+}
+
+func (x *TestCase) GetCompare() string {
+	if x != nil {
+		return x.Compare
 	}
 	return ""
 }
@@ -230,11 +255,13 @@ const file_codewar_judge_v1_judge_proto_rawDesc = "" +
 	"\n" +
 	"test_cases\x18\x02 \x03(\v2\x1a.codewar.judge.v1.TestCaseR\ttestCases\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\x03 \x01(\x05R\ttimeoutMs\"N\n" +
+	"timeout_ms\x18\x03 \x01(\x05R\ttimeoutMs\"~\n" +
 	"\bTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04call\x18\x02 \x01(\tR\x04call\x12\x1a\n" +
-	"\bexpected\x18\x03 \x01(\tR\bexpected\"{\n" +
+	"\bexpected\x18\x03 \x01(\tR\bexpected\x12\x14\n" +
+	"\x05setup\x18\x04 \x01(\tR\x05setup\x12\x18\n" +
+	"\acompare\x18\x05 \x01(\tR\acompare\"{\n" +
 	"\fJudgeVerdict\x12\x16\n" +
 	"\x06passed\x18\x01 \x01(\bR\x06passed\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1f\n" +

@@ -26,6 +26,17 @@ message TestCase {
   string call = 2;
   // 期望结果的 Python repr，如 [0, 1]
   string expected = 3;
+  // 15 号票（判题契约 v2）：可选的题作者 setup 代码——在 worker 内、玩家代码
+  // import 之后、call 求值之前 exec 进玩家命名空间（可用沙箱构造辅助库：
+  // list_to_nodes/build_tree/make_cycle 等），为 call 绑定结构体入参。
+  // 空串 = 未声明，走现行 eval/repr 路径（完全向后兼容）。
+  string setup = 4;
+  // 可选的题作者比较器声明：`def _normalize(got): ...` 的完整函数源码，
+  // 返回 got 的规范化 repr 字符串（链表→"[1,2,3]"、环→"cycle:[...]"、
+  // 树→层序列表；环有界输出）。worker 只回传规范化串，值比对仍在宿主
+  // （expected 永不进容器——零泄漏协议不变）。空串 = 用 repr(got)。
+  // 题作者代码进容器属信任边界变化，见 docs/adr/0004。
+  string compare = 5;
 }
 
 message JudgeVerdict {
