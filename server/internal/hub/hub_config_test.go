@@ -105,6 +105,7 @@ func idDifficulty(t *testing.T, qid string) int {
 type probeResult struct {
 	snapshot  *matchpb.Snapshot
 	attackIDs []string
+	hpDeltas  []int32 // HpChanged.cause=attack 的 delta（负值）；URL→伤害事件的端到端观测面
 	ended     *matchpb.MatchEnded
 }
 
@@ -161,6 +162,9 @@ func probeClient(t *testing.T, srv *httptest.Server, join *matchpb.JoinRequest, 
 				out <- nil
 				return
 			}
+		}
+		if hp := env.GetHpChanged(); hp != nil && hp.GetCause() == "attack" {
+			res.hpDeltas = append(res.hpDeltas, hp.GetDelta())
 		}
 		if me := env.GetMatchEnded(); me != nil {
 			res.ended = me
@@ -239,6 +243,12 @@ func TestJoinConfigLocksOnFirstJoin(t *testing.T) {
 	if r1.ended.GetWinner() != "" {
 		t.Fatalf("对称秒解应平局，实际 %q", r1.ended.GetWinner())
 	}
+	// 默认锚点的伤害事件流：cap=L3 → 系数 1.0，每回合 22（05 之前行为逐字节一致）
+	for i, d := range r1.hpDeltas {
+		if d != -22 {
+			t.Fatalf("默认配置第 %d 次攻击伤害应为 22，实际 %d", i+1, -d)
+		}
+	}
 	// 两窗口快照都携带服务端锁定的配置（对局内展示不撒谎）
 	for name, snap := range map[string]*matchpb.Snapshot{"p1": r1.snapshot, "p2": r2.snapshot} {
 		cfg := snap.GetMatchConfig()
@@ -302,6 +312,13 @@ func TestJoinCapL5RaisesDifficultyCeiling(t *testing.T) {
 		}
 		if d := idDifficulty(t, qid); d != want[i] {
 			t.Fatalf("round %d 难度应为 L%d（爬坡 cap=L5），实际 L%d（%q）", i+1, want[i], d, qid)
+		}
+	}
+	// URL cap=L5 → 伤害事件流：riskCoeff 1.2 下普攻 26（round(22×1.2)）——
+	// 验收 3/4 的 hub 端到端伤害断言（也解释了 4 回合终局：26×4 ≥ 100）
+	for i, d := range r1.hpDeltas {
+		if d != -26 {
+			t.Fatalf("cap=L5 第 %d 次攻击伤害应为 26，实际 %d", i+1, -d)
 		}
 	}
 	if r2.snapshot.GetMatchConfig().GetCap() != 5 {
