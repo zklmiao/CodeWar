@@ -90,17 +90,17 @@ type Meta struct {
 // Instance：工厂产物（MatchEngine 与 Judge 的消费单元，设计 002 §1）。
 // VisibleTests 固定 2 个（题面自解释），HiddenTests 5-8 个（边界密集）。
 type Instance struct {
-	Meta           Meta
-	Seed           string // 实例种子（派生链可追溯）
-	Statement      string // 题面（含 2 个可见样例文本）
-	Signature      string // 函数签名
+	Meta            Meta
+	Seed            string // 实例种子（派生链可追溯）
+	Statement       string // 题面（含 2 个可见样例文本）
+	Signature       string // 函数签名
 	CompleteStarter string // complete 形式起始代码
-	Skeleton       string // fill-blank 形式骨架（挖空 ≤3 行）
-	BlankLines     int    // 挖空行数
-	BlankIsCore    bool   // 挖空是否为逻辑核心行
-	VisibleTests   []match.TestCase
-	HiddenTests    []match.TestCase
-	AnswerKey      string // 参考解（完整函数体）
+	Skeleton        string // fill-blank 形式骨架（挖空 ≤3 行）
+	BlankLines      int    // 挖空行数
+	BlankIsCore     bool   // 挖空是否为逻辑核心行
+	VisibleTests    []match.TestCase
+	HiddenTests     []match.TestCase
+	AnswerKey       string // 参考解（完整函数体）
 }
 
 // Tests：判题用例全集（可见 + 隐藏，全部通过才生效）。

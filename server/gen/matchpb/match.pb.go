@@ -267,7 +267,14 @@ type PlayerView struct {
 	// 结算位置（5×5 网格，行列从 0 计；03 号票起动态站位）
 	Pos *Position `protobuf:"bytes,3,opt,name=pos,proto3" json:"pos,omitempty"`
 	// 该玩家当前是否持有本回合护盾（重连快照渲染用）
-	Shielded      bool `protobuf:"varint,4,opt,name=shielded,proto3" json:"shielded,omitempty"`
+	Shielded bool `protobuf:"varint,4,opt,name=shielded,proto3" json:"shielded,omitempty"`
+	// 职业（06 号票）：对局开始前不下发对方职业（盲选隐私，spec 设计 003 §1）；
+	// 自己的一行始终携带。匿名/缺省对局为 "legacy"。
+	ClassId string `protobuf:"bytes,5,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
+	// 已装备技能 ID（空 = 未装备技能位）
+	SkillId string `protobuf:"bytes,6,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
+	// 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0）
+	SkillCdRounds int32 `protobuf:"varint,7,opt,name=skill_cd_rounds,json=skillCdRounds,proto3" json:"skill_cd_rounds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -328,6 +335,27 @@ func (x *PlayerView) GetShielded() bool {
 		return x.Shielded
 	}
 	return false
+}
+
+func (x *PlayerView) GetClassId() string {
+	if x != nil {
+		return x.ClassId
+	}
+	return ""
+}
+
+func (x *PlayerView) GetSkillId() string {
+	if x != nil {
+		return x.SkillId
+	}
+	return ""
+}
+
+func (x *PlayerView) GetSkillCdRounds() int32 {
+	if x != nil {
+		return x.SkillCdRounds
+	}
+	return 0
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）
@@ -456,6 +484,7 @@ type PrivatePanel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Move          *Problem               `protobuf:"bytes,1,opt,name=move,proto3" json:"move,omitempty"`
 	Defend        *Problem               `protobuf:"bytes,2,opt,name=defend,proto3" json:"defend,omitempty"`
+	Skill         *Problem               `protobuf:"bytes,3,opt,name=skill,proto3" json:"skill,omitempty"` // 06 号票：技能槽题（难度 = 所选上限档）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -500,6 +529,13 @@ func (x *PrivatePanel) GetMove() *Problem {
 func (x *PrivatePanel) GetDefend() *Problem {
 	if x != nil {
 		return x.Defend
+	}
+	return nil
+}
+
+func (x *PrivatePanel) GetSkill() *Problem {
+	if x != nil {
+		return x.Skill
 	}
 	return nil
 }
@@ -569,10 +605,12 @@ func (x *PanelReady) GetP2() *PrivatePanel {
 
 // 查看者视角的三题面板（Snapshot.panel 用；私有题已按查看者过滤）
 type Panel struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attack        *Problem               `protobuf:"bytes,1,opt,name=attack,proto3" json:"attack,omitempty"`
-	Move          *Problem               `protobuf:"bytes,2,opt,name=move,proto3" json:"move,omitempty"`     // 查看者私有
-	Defend        *Problem               `protobuf:"bytes,3,opt,name=defend,proto3" json:"defend,omitempty"` // 查看者私有
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Attack *Problem               `protobuf:"bytes,1,opt,name=attack,proto3" json:"attack,omitempty"`
+	Move   *Problem               `protobuf:"bytes,2,opt,name=move,proto3" json:"move,omitempty"`     // 查看者私有
+	Defend *Problem               `protobuf:"bytes,3,opt,name=defend,proto3" json:"defend,omitempty"` // 查看者私有
+	// 技能槽（06 号票）：查看者私有题，难度 = 所选上限档；未装备技能时缺省
+	Skill         *Problem `protobuf:"bytes,4,opt,name=skill,proto3" json:"skill,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -624,6 +662,13 @@ func (x *Panel) GetMove() *Problem {
 func (x *Panel) GetDefend() *Problem {
 	if x != nil {
 		return x.Defend
+	}
+	return nil
+}
+
+func (x *Panel) GetSkill() *Problem {
+	if x != nil {
+		return x.Skill
 	}
 	return nil
 }
@@ -1015,9 +1060,11 @@ type ActionResolved struct {
 	Attacker string                 `protobuf:"bytes,1,opt,name=attacker,proto3" json:"attacker,omitempty"`
 	// 行动类型：attack | move | defend（03 号票起）
 	Action string `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	// 攻击实际落地伤害 = 基础 22 × 时间系数（0.6~1.0）× 护盾折减（命中且有盾 ×0.4）取整；
-	// 闪避或非攻击行动为 0
-	Damage  int32 `protobuf:"varint,3,opt,name=damage,proto3" json:"damage,omitempty"`
+	// 攻击/技能实际落地伤害 = 普攻（基础 × 时间系数）或技能字面值（设计 003 §4），
+	// 命中且有盾时 ×0.4 折减取整；闪避或非攻击/技能行动为 0
+	Damage int32 `protobuf:"varint,3,opt,name=damage,proto3" json:"damage,omitempty"`
+	// 治疗量（action=skill 且为治疗/汲取自疗时有效；溢出已截断，06 号票）
+	Heal    int32 `protobuf:"varint,8,opt,name=heal,proto3" json:"heal,omitempty"`
 	SolveMs int32 `protobuf:"varint,4,opt,name=solve_ms,json=solveMs,proto3" json:"solve_ms,omitempty"`
 	// 攻击未命中：目标不在攻击者相邻 4 格（结算时刻位置判定，走位闪避）
 	Dodged bool `protobuf:"varint,5,opt,name=dodged,proto3" json:"dodged,omitempty"`
@@ -1080,6 +1127,13 @@ func (x *ActionResolved) GetDamage() int32 {
 	return 0
 }
 
+func (x *ActionResolved) GetHeal() int32 {
+	if x != nil {
+		return x.Heal
+	}
+	return 0
+}
+
 func (x *ActionResolved) GetSolveMs() int32 {
 	if x != nil {
 		return x.SolveMs
@@ -1113,7 +1167,7 @@ type HpChanged struct {
 	Player string                 `protobuf:"bytes,1,opt,name=player,proto3" json:"player,omitempty"`
 	Hp     int32                  `protobuf:"varint,2,opt,name=hp,proto3" json:"hp,omitempty"`       // 变更后
 	Delta  int32                  `protobuf:"varint,3,opt,name=delta,proto3" json:"delta,omitempty"` // 负值=受伤
-	// attack | self-damage
+	// attack | self-damage | heal | skill（06 号票起扩展）
 	Cause         string `protobuf:"bytes,4,opt,name=cause,proto3" json:"cause,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1371,6 +1425,7 @@ type ClientMessage struct {
 	//
 	//	*ClientMessage_Join
 	//	*ClientMessage_Submit
+	//	*ClientMessage_SetTargeting
 	Payload       isClientMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1431,6 +1486,15 @@ func (x *ClientMessage) GetSubmit() *SubmitRequest {
 	return nil
 }
 
+func (x *ClientMessage) GetSetTargeting() *SetTargeting {
+	if x != nil {
+		if x, ok := x.Payload.(*ClientMessage_SetTargeting); ok {
+			return x.SetTargeting
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Payload interface {
 	isClientMessage_Payload()
 }
@@ -1443,9 +1507,61 @@ type ClientMessage_Submit struct {
 	Submit *SubmitRequest `protobuf:"bytes,2,opt,name=submit,proto3,oneof"`
 }
 
+type ClientMessage_SetTargeting struct {
+	// 目标选择（06 号票）：解出攻击/技能题后、结算前可随时提交/修改（免费操作
+	// 不耗答题，设计 003 §1）；未提交则结算时走自动瞄准。
+	SetTargeting *SetTargeting `protobuf:"bytes,3,opt,name=set_targeting,json=setTargeting,proto3,oneof"`
+}
+
 func (*ClientMessage_Join) isClientMessage_Payload() {}
 
 func (*ClientMessage_Submit) isClientMessage_Payload() {}
+
+func (*ClientMessage_SetTargeting) isClientMessage_Payload() {}
+
+type SetTargeting struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Targeting     *Targeting             `protobuf:"bytes,1,opt,name=targeting,proto3" json:"targeting,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetTargeting) Reset() {
+	*x = SetTargeting{}
+	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTargeting) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTargeting) ProtoMessage() {}
+
+func (x *SetTargeting) ProtoReflect() protoreflect.Message {
+	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTargeting.ProtoReflect.Descriptor instead.
+func (*SetTargeting) Descriptor() ([]byte, []int) {
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SetTargeting) GetTargeting() *Targeting {
+	if x != nil {
+		return x.Targeting
+	}
+	return nil
+}
 
 type JoinRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -1454,14 +1570,20 @@ type JoinRequest struct {
 	// 客户端存 sessionStorage（按标签页隔离，支持同机双账号热座），WS 建连时明文携带（与页面同源）。
 	// 为空 = 匿名热座，与 01 号票行为完全一致（向后兼容，不强制登录）；
 	// 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
-	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Token string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	// 职业 + 已装备技能（06 号票，盲选）：各窗口本地选完再 join，天然互不可见；
+	// 对局开始前快照不下发对方职业。缺省/未知值 = legacy 锚点（01~03 号票行为，
+	// HP100/攻22/相邻1格/无技能——既有测试与匿名链路的向后兼容锚点）。
+	// 非法组合（职业不存在/技能不属于该职业）= 建连被拒（fail-closed）。
+	Class         string `protobuf:"bytes,3,opt,name=class,proto3" json:"class,omitempty"`
+	Skill         string `protobuf:"bytes,4,opt,name=skill,proto3" json:"skill,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1473,7 +1595,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1486,7 +1608,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{18}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *JoinRequest) GetPlayer() string {
@@ -1503,20 +1625,37 @@ func (x *JoinRequest) GetToken() string {
 	return ""
 }
 
+func (x *JoinRequest) GetClass() string {
+	if x != nil {
+		return x.Class
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetSkill() string {
+	if x != nil {
+		return x.Skill
+	}
+	return ""
+}
+
 type SubmitRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
-	// 本次提交对应的行动题：attack | move | defend（03 号票；判题用该题的测试用例）
+	// 行动类型：attack | move | defend | skill（06 号票起扩展）
 	Action string `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
 	// 移动目标格（仅 action=move 携带；直线正交距离 1-2，终点空格且路径不穿过对方）
-	MoveTo        *Position `protobuf:"bytes,3,opt,name=move_to,json=moveTo,proto3" json:"move_to,omitempty"`
+	MoveTo *Position `protobuf:"bytes,3,opt,name=move_to,json=moveTo,proto3" json:"move_to,omitempty"`
+	// 攻击/技能的目标选择（06 号票；解出后至结算前可经 SetTargeting 随时修改，
+	// 未提交则服务端自动瞄准：方向取指向对手的坐标轴，点狙距离取 min(射程, 与对手距离)）
+	Targeting     *Targeting `protobuf:"bytes,4,opt,name=targeting,proto3" json:"targeting,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitRequest) Reset() {
 	*x = SubmitRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1528,7 +1667,7 @@ func (x *SubmitRequest) String() string {
 func (*SubmitRequest) ProtoMessage() {}
 
 func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1541,7 +1680,7 @@ func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{19}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SubmitRequest) GetCode() string {
@@ -1565,6 +1704,74 @@ func (x *SubmitRequest) GetMoveTo() *Position {
 	return nil
 }
 
+func (x *SubmitRequest) GetTargeting() *Targeting {
+	if x != nil {
+		return x.Targeting
+	}
+	return nil
+}
+
+// 目标选择载荷（06 号票，设计 003 §1 方向选择全局规则）：
+//
+//	direction: up|down|left|right（攻击者朝向）；distance: 点狙类在方向上的格距。
+//
+// 哪些形状需要 direction/distance 由职业表（/api/classes）定义：
+//
+//	剑士普攻=direction；法师普攻=direction（深度2线扫）；游侠普攻=direction+distance(1-3)；
+//	巨力斩=无方向（邻域8格）；烈焰风暴=direction；穿云箭=direction+distance(1-4)；
+//	秘法汲取=direction+distance(≤2)；治疗系=无目标（自身）。
+type Targeting struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Direction     string                 `protobuf:"bytes,1,opt,name=direction,proto3" json:"direction,omitempty"` // up | down | left | right；空 = 未指定（走自动瞄准）
+	Distance      int32                  `protobuf:"varint,2,opt,name=distance,proto3" json:"distance,omitempty"`  // 0 = 未指定（走自动瞄准）
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Targeting) Reset() {
+	*x = Targeting{}
+	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Targeting) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Targeting) ProtoMessage() {}
+
+func (x *Targeting) ProtoReflect() protoreflect.Message {
+	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Targeting.ProtoReflect.Descriptor instead.
+func (*Targeting) Descriptor() ([]byte, []int) {
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *Targeting) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *Targeting) GetDistance() int32 {
+	if x != nil {
+		return x.Distance
+	}
+	return 0
+}
+
 var File_codewar_match_v1_match_proto protoreflect.FileDescriptor
 
 const file_codewar_match_v1_match_proto_rawDesc = "" +
@@ -1582,13 +1789,16 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x05 \x01(\x03R\x0edeadlineUnixMs\x128\n" +
 	"\x19viewer_lock_until_unix_ms\x18\a \x01(\x03R\x15viewerLockUntilUnixMs\x125\n" +
 	"\x06result\x18\b \x01(\v2\x1d.codewar.match.v1.MatchResultR\x06result\x12-\n" +
-	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panelJ\x04\b\x06\x10\a\"v\n" +
+	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panelJ\x04\b\x06\x10\a\"\xd4\x01\n" +
 	"\n" +
 	"PlayerView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x0e\n" +
 	"\x02hp\x18\x02 \x01(\x05R\x02hp\x12,\n" +
 	"\x03pos\x18\x03 \x01(\v2\x1a.codewar.match.v1.PositionR\x03pos\x12\x1a\n" +
-	"\bshielded\x18\x04 \x01(\bR\bshielded\".\n" +
+	"\bshielded\x18\x04 \x01(\bR\bshielded\x12\x19\n" +
+	"\bclass_id\x18\x05 \x01(\tR\aclassId\x12\x19\n" +
+	"\bskill_id\x18\x06 \x01(\tR\askillId\x12&\n" +
+	"\x0fskill_cd_rounds\x18\a \x01(\x05R\rskillCdRounds\".\n" +
 	"\bPosition\x12\x10\n" +
 	"\x03row\x18\x01 \x01(\x05R\x03row\x12\x10\n" +
 	"\x03col\x18\x02 \x01(\x05R\x03col\"x\n" +
@@ -1596,19 +1806,21 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tstatement\x18\x02 \x01(\tR\tstatement\x12\x1c\n" +
 	"\tsignature\x18\x03 \x01(\tR\tsignature\x12!\n" +
-	"\fstarter_code\x18\x04 \x01(\tR\vstarterCode\"p\n" +
+	"\fstarter_code\x18\x04 \x01(\tR\vstarterCode\"\xa1\x01\n" +
 	"\fPrivatePanel\x12-\n" +
 	"\x04move\x18\x01 \x01(\v2\x19.codewar.match.v1.ProblemR\x04move\x121\n" +
-	"\x06defend\x18\x02 \x01(\v2\x19.codewar.match.v1.ProblemR\x06defend\"\x9f\x01\n" +
+	"\x06defend\x18\x02 \x01(\v2\x19.codewar.match.v1.ProblemR\x06defend\x12/\n" +
+	"\x05skill\x18\x03 \x01(\v2\x19.codewar.match.v1.ProblemR\x05skill\"\x9f\x01\n" +
 	"\n" +
 	"PanelReady\x121\n" +
 	"\x06attack\x18\x01 \x01(\v2\x19.codewar.match.v1.ProblemR\x06attack\x12.\n" +
 	"\x02p1\x18\x02 \x01(\v2\x1e.codewar.match.v1.PrivatePanelR\x02p1\x12.\n" +
-	"\x02p2\x18\x03 \x01(\v2\x1e.codewar.match.v1.PrivatePanelR\x02p2\"\x9c\x01\n" +
+	"\x02p2\x18\x03 \x01(\v2\x1e.codewar.match.v1.PrivatePanelR\x02p2\"\xcd\x01\n" +
 	"\x05Panel\x121\n" +
 	"\x06attack\x18\x01 \x01(\v2\x19.codewar.match.v1.ProblemR\x06attack\x12-\n" +
 	"\x04move\x18\x02 \x01(\v2\x19.codewar.match.v1.ProblemR\x04move\x121\n" +
-	"\x06defend\x18\x03 \x01(\v2\x19.codewar.match.v1.ProblemR\x06defend\"=\n" +
+	"\x06defend\x18\x03 \x01(\v2\x19.codewar.match.v1.ProblemR\x06defend\x12/\n" +
+	"\x05skill\x18\x04 \x01(\v2\x19.codewar.match.v1.ProblemR\x05skill\"=\n" +
 	"\vMatchResult\x12\x16\n" +
 	"\x06winner\x18\x01 \x01(\tR\x06winner\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xbe\x04\n" +
@@ -1636,11 +1848,12 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\bsolve_ms\x18\x04 \x01(\x05R\asolveMs\x12.\n" +
 	"\x13self_damage_applied\x18\x05 \x01(\bR\x11selfDamageApplied\x12+\n" +
 	"\x12lock_until_unix_ms\x18\x06 \x01(\x03R\x0flockUntilUnixMs\x12\x16\n" +
-	"\x06action\x18\a \x01(\tR\x06action\"\xe0\x01\n" +
+	"\x06action\x18\a \x01(\tR\x06action\"\xf4\x01\n" +
 	"\x0eActionResolved\x12\x1a\n" +
 	"\battacker\x18\x01 \x01(\tR\battacker\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x12\x16\n" +
-	"\x06damage\x18\x03 \x01(\x05R\x06damage\x12\x19\n" +
+	"\x06damage\x18\x03 \x01(\x05R\x06damage\x12\x12\n" +
+	"\x04heal\x18\b \x01(\x05R\x04heal\x12\x19\n" +
 	"\bsolve_ms\x18\x04 \x01(\x05R\asolveMs\x12\x16\n" +
 	"\x06dodged\x18\x05 \x01(\bR\x06dodged\x12\x1a\n" +
 	"\bshielded\x18\x06 \x01(\bR\bshielded\x123\n" +
@@ -1663,18 +1876,27 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\telo_after\x18\x04 \x01(\x05R\beloAfter\"D\n" +
 	"\x12SubmissionRejected\x12\x16\n" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x8a\x01\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xd1\x01\n" +
 	"\rClientMessage\x123\n" +
 	"\x04join\x18\x01 \x01(\v2\x1d.codewar.match.v1.JoinRequestH\x00R\x04join\x129\n" +
-	"\x06submit\x18\x02 \x01(\v2\x1f.codewar.match.v1.SubmitRequestH\x00R\x06submitB\t\n" +
-	"\apayload\";\n" +
+	"\x06submit\x18\x02 \x01(\v2\x1f.codewar.match.v1.SubmitRequestH\x00R\x06submit\x12E\n" +
+	"\rset_targeting\x18\x03 \x01(\v2\x1e.codewar.match.v1.SetTargetingH\x00R\fsetTargetingB\t\n" +
+	"\apayload\"I\n" +
+	"\fSetTargeting\x129\n" +
+	"\ttargeting\x18\x01 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"g\n" +
 	"\vJoinRequest\x12\x16\n" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"p\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12\x14\n" +
+	"\x05class\x18\x03 \x01(\tR\x05class\x12\x14\n" +
+	"\x05skill\x18\x04 \x01(\tR\x05skill\"\xab\x01\n" +
 	"\rSubmitRequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x123\n" +
-	"\amove_to\x18\x03 \x01(\v2\x1a.codewar.match.v1.PositionR\x06moveTo*w\n" +
+	"\amove_to\x18\x03 \x01(\v2\x1a.codewar.match.v1.PositionR\x06moveTo\x129\n" +
+	"\ttargeting\x18\x04 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"E\n" +
+	"\tTargeting\x12\x1c\n" +
+	"\tdirection\x18\x01 \x01(\tR\tdirection\x12\x1a\n" +
+	"\bdistance\x18\x02 \x01(\x05R\bdistance*w\n" +
 	"\n" +
 	"MatchPhase\x12\x1b\n" +
 	"\x17MATCH_PHASE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1695,7 +1917,7 @@ func file_codewar_match_v1_match_proto_rawDescGZIP() []byte {
 }
 
 var file_codewar_match_v1_match_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_codewar_match_v1_match_proto_goTypes = []any{
 	(MatchPhase)(0),            // 0: codewar.match.v1.MatchPhase
 	(*ServerMessage)(nil),      // 1: codewar.match.v1.ServerMessage
@@ -1716,8 +1938,10 @@ var file_codewar_match_v1_match_proto_goTypes = []any{
 	(*PlayerElo)(nil),          // 16: codewar.match.v1.PlayerElo
 	(*SubmissionRejected)(nil), // 17: codewar.match.v1.SubmissionRejected
 	(*ClientMessage)(nil),      // 18: codewar.match.v1.ClientMessage
-	(*JoinRequest)(nil),        // 19: codewar.match.v1.JoinRequest
-	(*SubmitRequest)(nil),      // 20: codewar.match.v1.SubmitRequest
+	(*SetTargeting)(nil),       // 19: codewar.match.v1.SetTargeting
+	(*JoinRequest)(nil),        // 20: codewar.match.v1.JoinRequest
+	(*SubmitRequest)(nil),      // 21: codewar.match.v1.SubmitRequest
+	(*Targeting)(nil),          // 22: codewar.match.v1.Targeting
 }
 var file_codewar_match_v1_match_proto_depIdxs = []int32{
 	2,  // 0: codewar.match.v1.ServerMessage.snapshot:type_name -> codewar.match.v1.Snapshot
@@ -1729,29 +1953,34 @@ var file_codewar_match_v1_match_proto_depIdxs = []int32{
 	4,  // 6: codewar.match.v1.PlayerView.pos:type_name -> codewar.match.v1.Position
 	5,  // 7: codewar.match.v1.PrivatePanel.move:type_name -> codewar.match.v1.Problem
 	5,  // 8: codewar.match.v1.PrivatePanel.defend:type_name -> codewar.match.v1.Problem
-	5,  // 9: codewar.match.v1.PanelReady.attack:type_name -> codewar.match.v1.Problem
-	6,  // 10: codewar.match.v1.PanelReady.p1:type_name -> codewar.match.v1.PrivatePanel
-	6,  // 11: codewar.match.v1.PanelReady.p2:type_name -> codewar.match.v1.PrivatePanel
-	5,  // 12: codewar.match.v1.Panel.attack:type_name -> codewar.match.v1.Problem
-	5,  // 13: codewar.match.v1.Panel.move:type_name -> codewar.match.v1.Problem
-	5,  // 14: codewar.match.v1.Panel.defend:type_name -> codewar.match.v1.Problem
-	11, // 15: codewar.match.v1.Envelope.round_started:type_name -> codewar.match.v1.RoundStarted
-	7,  // 16: codewar.match.v1.Envelope.panel_ready:type_name -> codewar.match.v1.PanelReady
-	12, // 17: codewar.match.v1.Envelope.submission_judged:type_name -> codewar.match.v1.SubmissionJudged
-	13, // 18: codewar.match.v1.Envelope.action_resolved:type_name -> codewar.match.v1.ActionResolved
-	14, // 19: codewar.match.v1.Envelope.hp_changed:type_name -> codewar.match.v1.HpChanged
-	15, // 20: codewar.match.v1.Envelope.match_ended:type_name -> codewar.match.v1.MatchEnded
-	17, // 21: codewar.match.v1.Envelope.submission_rejected:type_name -> codewar.match.v1.SubmissionRejected
-	4,  // 22: codewar.match.v1.ActionResolved.move_to:type_name -> codewar.match.v1.Position
-	16, // 23: codewar.match.v1.MatchEnded.elo:type_name -> codewar.match.v1.PlayerElo
-	19, // 24: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
-	20, // 25: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
-	4,  // 26: codewar.match.v1.SubmitRequest.move_to:type_name -> codewar.match.v1.Position
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	5,  // 9: codewar.match.v1.PrivatePanel.skill:type_name -> codewar.match.v1.Problem
+	5,  // 10: codewar.match.v1.PanelReady.attack:type_name -> codewar.match.v1.Problem
+	6,  // 11: codewar.match.v1.PanelReady.p1:type_name -> codewar.match.v1.PrivatePanel
+	6,  // 12: codewar.match.v1.PanelReady.p2:type_name -> codewar.match.v1.PrivatePanel
+	5,  // 13: codewar.match.v1.Panel.attack:type_name -> codewar.match.v1.Problem
+	5,  // 14: codewar.match.v1.Panel.move:type_name -> codewar.match.v1.Problem
+	5,  // 15: codewar.match.v1.Panel.defend:type_name -> codewar.match.v1.Problem
+	5,  // 16: codewar.match.v1.Panel.skill:type_name -> codewar.match.v1.Problem
+	11, // 17: codewar.match.v1.Envelope.round_started:type_name -> codewar.match.v1.RoundStarted
+	7,  // 18: codewar.match.v1.Envelope.panel_ready:type_name -> codewar.match.v1.PanelReady
+	12, // 19: codewar.match.v1.Envelope.submission_judged:type_name -> codewar.match.v1.SubmissionJudged
+	13, // 20: codewar.match.v1.Envelope.action_resolved:type_name -> codewar.match.v1.ActionResolved
+	14, // 21: codewar.match.v1.Envelope.hp_changed:type_name -> codewar.match.v1.HpChanged
+	15, // 22: codewar.match.v1.Envelope.match_ended:type_name -> codewar.match.v1.MatchEnded
+	17, // 23: codewar.match.v1.Envelope.submission_rejected:type_name -> codewar.match.v1.SubmissionRejected
+	4,  // 24: codewar.match.v1.ActionResolved.move_to:type_name -> codewar.match.v1.Position
+	16, // 25: codewar.match.v1.MatchEnded.elo:type_name -> codewar.match.v1.PlayerElo
+	20, // 26: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
+	21, // 27: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
+	19, // 28: codewar.match.v1.ClientMessage.set_targeting:type_name -> codewar.match.v1.SetTargeting
+	22, // 29: codewar.match.v1.SetTargeting.targeting:type_name -> codewar.match.v1.Targeting
+	4,  // 30: codewar.match.v1.SubmitRequest.move_to:type_name -> codewar.match.v1.Position
+	22, // 31: codewar.match.v1.SubmitRequest.targeting:type_name -> codewar.match.v1.Targeting
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_codewar_match_v1_match_proto_init() }
@@ -1775,6 +2004,7 @@ func file_codewar_match_v1_match_proto_init() {
 	file_codewar_match_v1_match_proto_msgTypes[17].OneofWrappers = []any{
 		(*ClientMessage_Join)(nil),
 		(*ClientMessage_Submit)(nil),
+		(*ClientMessage_SetTargeting)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1782,7 +2012,7 @@ func file_codewar_match_v1_match_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_codewar_match_v1_match_proto_rawDesc), len(file_codewar_match_v1_match_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   20,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

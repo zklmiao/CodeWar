@@ -49,6 +49,13 @@ message PlayerView {
   Position pos = 3;
   // 该玩家当前是否持有本回合护盾（重连快照渲染用）
   bool shielded = 4;
+  // 职业（06 号票）：对局开始前不下发对方职业（盲选隐私，spec 设计 003 §1）；
+  // 自己的一行始终携带。匿名/缺省对局为 "legacy"。
+  string class_id = 5;
+  // 已装备技能 ID（空 = 未装备技能位）
+  string skill_id = 6;
+  // 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0）
+  int32 skill_cd_rounds = 7;
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）
@@ -68,6 +75,7 @@ message Problem {
 message PrivatePanel {
   Problem move = 1;
   Problem defend = 2;
+  Problem skill = 3; // 06 号票：技能槽题（难度 = 所选上限档）
 }
 
 // 三题面板（03 号票）：攻击镜像 + 双方私有行动题。
@@ -84,6 +92,8 @@ message Panel {
   Problem attack = 1;
   Problem move = 2; // 查看者私有
   Problem defend = 3; // 查看者私有
+  // 技能槽（06 号票）：查看者私有题，难度 = 所选上限档；未装备技能时缺省
+  Problem skill = 4;
 }
 
 message MatchResult {
@@ -134,9 +144,11 @@ message ActionResolved {
   string attacker = 1;
   // 行动类型：attack | move | defend（03 号票起）
   string action = 2;
-  // 攻击实际落地伤害 = 基础 22 × 时间系数（0.6~1.0）× 护盾折减（命中且有盾 ×0.4）取整；
-  // 闪避或非攻击行动为 0
+  // 攻击/技能实际落地伤害 = 普攻（基础 × 时间系数）或技能字面值（设计 003 §4），
+  // 命中且有盾时 ×0.4 折减取整；闪避或非攻击/技能行动为 0
   int32 damage = 3;
+  // 治疗量（action=skill 且为治疗/汲取自疗时有效；溢出已截断，06 号票）
+  int32 heal = 8;
   int32 solve_ms = 4;
   // 攻击未命中：目标不在攻击者相邻 4 格（结算时刻位置判定，走位闪避）
   bool dodged = 5;
@@ -150,7 +162,7 @@ message HpChanged {
   string player = 1;
   int32 hp = 2; // 变更后
   int32 delta = 3; // 负值=受伤
-  // attack | self-damage
+  // attack | self-damage | heal | skill（06 号票起扩展）
   string cause = 4;
 }
 
@@ -186,7 +198,14 @@ message ClientMessage {
   oneof payload {
     JoinRequest join = 1; // 首条消息必须 join
     SubmitRequest submit = 2;
+    // 目标选择（06 号票）：解出攻击/技能题后、结算前可随时提交/修改（免费操作
+    // 不耗答题，设计 003 §1）；未提交则结算时走自动瞄准。
+    SetTargeting set_targeting = 3;
   }
+}
+
+message SetTargeting {
+  Targeting targeting = 1;
 }
 
 message JoinRequest {
@@ -196,12 +215,32 @@ message JoinRequest {
   // 为空 = 匿名热座，与 01 号票行为完全一致（向后兼容，不强制登录）；
   // 非空但无效/过期 = 建连被拒（客户端应重登后重试）。
   string token = 2;
+  // 职业 + 已装备技能（06 号票，盲选）：各窗口本地选完再 join，天然互不可见；
+  // 对局开始前快照不下发对方职业。缺省/未知值 = legacy 锚点（01~03 号票行为，
+  // HP100/攻22/相邻1格/无技能——既有测试与匿名链路的向后兼容锚点）。
+  // 非法组合（职业不存在/技能不属于该职业）= 建连被拒（fail-closed）。
+  string class = 3;
+  string skill = 4;
 }
 
 message SubmitRequest {
   string code = 1;
-  // 本次提交对应的行动题：attack | move | defend（03 号票；判题用该题的测试用例）
+  // 行动类型：attack | move | defend | skill（06 号票起扩展）
   string action = 2;
   // 移动目标格（仅 action=move 携带；直线正交距离 1-2，终点空格且路径不穿过对方）
   Position move_to = 3;
+  // 攻击/技能的目标选择（06 号票；解出后至结算前可经 SetTargeting 随时修改，
+  // 未提交则服务端自动瞄准：方向取指向对手的坐标轴，点狙距离取 min(射程, 与对手距离)）
+  Targeting targeting = 4;
+}
+
+// 目标选择载荷（06 号票，设计 003 §1 方向选择全局规则）：
+//   direction: up|down|left|right（攻击者朝向）；distance: 点狙类在方向上的格距。
+// 哪些形状需要 direction/distance 由职业表（/api/classes）定义：
+//   剑士普攻=direction；法师普攻=direction（深度2线扫）；游侠普攻=direction+distance(1-3)；
+//   巨力斩=无方向（邻域8格）；烈焰风暴=direction；穿云箭=direction+distance(1-4)；
+//   秘法汲取=direction+distance(≤2)；治疗系=无目标（自身）。
+message Targeting {
+  string direction = 1; // up | down | left | right；空 = 未指定（走自动瞄准）
+  int32 distance = 2;   // 0 = 未指定（走自动瞄准）
 }

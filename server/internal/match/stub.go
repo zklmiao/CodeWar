@@ -5,9 +5,9 @@ package match
 
 var DemoQuestions = []Question{
 	{
-		ID:        "palindrome-L2",
-		Statement: "判断字符串是否为回文（区分大小写，空串视为回文）。\n示例：is_palindrome(\"level\") → True；is_palindrome(\"hello\") → False",
-		Signature: "def is_palindrome(s: str) -> bool:",
+		ID:          "palindrome-L2",
+		Statement:   "判断字符串是否为回文（区分大小写，空串视为回文）。\n示例：is_palindrome(\"level\") → True；is_palindrome(\"hello\") → False",
+		Signature:   "def is_palindrome(s: str) -> bool:",
 		StarterCode: "def is_palindrome(s: str) -> bool:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
 		Tests: []TestCase{
 			{Name: "odd", Call: `is_palindrome("level")`, Expected: "True"},
@@ -18,9 +18,9 @@ var DemoQuestions = []Question{
 		},
 	},
 	{
-		ID:        "two-sum-L3",
-		Statement: "在数组中找出和为目标值的两个数的下标（恰好一个解，返回升序下标列表）。\n示例：two_sum([2, 7, 11, 15], 9) → [0, 1]",
-		Signature: "def two_sum(nums: list, target: int) -> list:",
+		ID:          "two-sum-L3",
+		Statement:   "在数组中找出和为目标值的两个数的下标（恰好一个解，返回升序下标列表）。\n示例：two_sum([2, 7, 11, 15], 9) → [0, 1]",
+		Signature:   "def two_sum(nums: list, target: int) -> list:",
 		StarterCode: "def two_sum(nums: list, target: int) -> list:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: "two_sum([2, 7, 11, 15], 9)", Expected: "[0, 1]"},
@@ -30,9 +30,9 @@ var DemoQuestions = []Question{
 		},
 	},
 	{
-		ID:        "run-length-L3",
-		Statement: "字符串压缩：连续字符按「字符+次数」输出（次数为 1 也要输出）。\n示例：compress(\"aabcc\") → \"a2b1c2\"",
-		Signature: "def compress(s: str) -> str:",
+		ID:          "run-length-L3",
+		Statement:   "字符串压缩：连续字符按「字符+次数」输出（次数为 1 也要输出）。\n示例：compress(\"aabcc\") → \"a2b1c2\"",
+		Signature:   "def compress(s: str) -> str:",
 		StarterCode: "def compress(s: str) -> str:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: `compress("aabcc")`, Expected: `'a2b1c2'`},
@@ -42,9 +42,9 @@ var DemoQuestions = []Question{
 		},
 	},
 	{
-		ID:        "dedup-L2",
-		Statement: "列表去重并保持首次出现的顺序。\n示例：dedup([1, 2, 2, 3, 1]) → [1, 2, 3]",
-		Signature: "def dedup(nums: list) -> list:",
+		ID:          "dedup-L2",
+		Statement:   "列表去重并保持首次出现的顺序。\n示例：dedup([1, 2, 2, 3, 1]) → [1, 2, 3]",
+		Signature:   "def dedup(nums: list) -> list:",
 		StarterCode: "def dedup(nums: list) -> list:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: "dedup([1, 2, 2, 3, 1])", Expected: "[1, 2, 3]"},
@@ -62,7 +62,7 @@ var DemoQuestions = []Question{
 type StubQuestions struct{}
 
 func (StubQuestions) AttackQuestion(round int) Question {
-	i := ((round - 1) % len(DemoQuestions) + len(DemoQuestions)) % len(DemoQuestions)
+	i := ((round-1)%len(DemoQuestions) + len(DemoQuestions)) % len(DemoQuestions)
 	return DemoQuestions[i]
 }
 
@@ -82,5 +82,15 @@ func (StubQuestions) DefendQuestion(round int, player Player) Question {
 	q.ID = "defend-stub-" + player
 	q.Tests = append(append([]TestCase{}, q.Tests...),
 		TestCase{Name: "defend-only-probe", Call: "1", Expected: "1"})
+	return q
+}
+
+// SkillQuestion：技能题桩（06 号票）——轮换攻击题桩充当技能题。
+// 真实实现见 question.Factory.SkillQuestion（难度 = 所选上限档，裁决 4）；
+// 桩不模拟档位语义，只保证 QuestionPort 接口完整与对局可跑。
+func (StubQuestions) SkillQuestion(round int, player Player) Question {
+	i := ((round-1)%len(DemoQuestions) + len(DemoQuestions)) % len(DemoQuestions)
+	q := DemoQuestions[i]
+	q.ID = "skill-" + q.ID
 	return q
 }

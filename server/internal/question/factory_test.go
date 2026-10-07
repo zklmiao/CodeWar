@@ -211,3 +211,36 @@ func TestTwoMatchesDiffer(t *testing.T) {
 		t.Fatalf("4 对局仅 %d 对首题不同，MatchSeed 未生效", diff)
 	}
 }
+
+// 技能题难度 = 所选上限档（票据验收 2；裁决 4）：
+//   - cap 档有技能模板 → 直接取 cap 档；
+//   - cap 档缺失 → 逐档向低回退取最近可用（生产：技能模板首批仅 L3，
+//     cap=L5 时回退到 L3；L4/L5 模板由 12 号票补齐后回退仅在 cap>L4 触发）；
+//   - cap 低于全部可用档（如 cap=L2）→ 现行为返回占位题
+//     （"error-no-template"）——真实缺口，归 12 号票补 L1/L2 技能模板，
+//     或改为"最近可用档双向回退"（05 接线前必须二选一，见 review 汇报）。
+func TestSkillQuestionCapTierAndFallback(t *testing.T) {
+	f := NewFactory(Config{MaxDifficulty: L5, MatchSeed: "s1"})
+	for _, d := range []Difficulty{L3} {
+		f.Register(stubTemplate{meta: Meta{
+			ID: fmt.Sprintf("sk3-%s", d), Topic: TopicSyntax, Difficulty: d,
+			Action: ActionSkill, Form: FormComplete,
+		}})
+	}
+
+	if q := f.SkillQuestion(1, match.P1); !strings.HasPrefix(q.ID, "sk3-L3@") {
+		t.Fatalf("cap=L5 应回退到最近可用的 L3 技能模板，实际 %q", q.ID)
+	}
+	if q := f.SkillQuestion(2, match.P2); !strings.HasPrefix(q.ID, "sk3-L3@") {
+		t.Fatalf("cap=L3 应直接取 L3 档，实际 %q", q.ID)
+	}
+
+	low := NewFactory(Config{MaxDifficulty: L2, MatchSeed: "s1"})
+	low.Register(stubTemplate{meta: Meta{
+		ID: "sk3-x", Topic: TopicSyntax, Difficulty: L3,
+		Action: ActionSkill, Form: FormComplete,
+	}})
+	if q := low.SkillQuestion(1, match.P1); q.ID != "error-no-template" {
+		t.Fatalf("cap 低于全部可用档时应返回占位题（现行为钉子，归 12 处理），实际 %q", q.ID)
+	}
+}

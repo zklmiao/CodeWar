@@ -1,9 +1,28 @@
 <script setup lang="ts">
 // 5×5 网格（03 号票）：动态渲染 store 中的结算位置；回合活跃且未行动时
 // 点选格子作为移动题的目标格（服务端校验合法性，客户端只做选择）。
+// 06 号票：棋子按职业渲染 13 号票占位资产（cw-class-*.svg）+ 职业主色。
 import { useMatchStore } from "../stores/match";
+import { useClassesStore } from "../stores/classes";
+import warriorSvg from "../../../design/components/cw-class-warrior.svg";
+import mageSvg from "../../../design/components/cw-class-mage.svg";
+import rangerSvg from "../../../design/components/cw-class-ranger.svg";
 
 const store = useMatchStore();
+const classesStore = useClassesStore();
+
+const classArt: Record<string, string> = {
+  warrior: warriorSvg,
+  mage: mageSvg,
+  ranger: rangerSvg,
+};
+
+function classArtOf(p: string): string {
+  return classArt[store.classes[p]?.classId ?? ""] ?? "";
+}
+function classColorOf(p: string): string {
+  return classesStore.byId(store.classes[p]?.classId ?? "")?.color ?? "";
+}
 // 行列从 0 计
 const cells = Array.from({ length: 25 }, (_, i) => ({ row: Math.floor(i / 5), col: i % 5 }));
 
@@ -50,8 +69,16 @@ function pick(row: number, col: number) {
         }"
         @click="pick(c.row, c.col)"
       >
-        <span v-if="occupant(c.row, c.col) === 'p1'" class="pawn p1" title="P1">P1</span>
-        <span v-else-if="occupant(c.row, c.col) === 'p2'" class="pawn p2" title="P2">P2</span>
+        <span
+          v-if="occupant(c.row, c.col)"
+          class="pawn"
+          :class="occupant(c.row, c.col)"
+          :title="occupant(c.row, c.col).toUpperCase()"
+          :style="{ background: classColorOf(occupant(c.row, c.col)) || undefined }"
+        >
+          <img v-if="classArtOf(occupant(c.row, c.col))" :src="classArtOf(occupant(c.row, c.col))" alt="" />
+          <template v-else>{{ occupant(c.row, c.col).toUpperCase() }}</template>
+        </span>
         <span v-if="isShielded(c.row, c.col)" class="shield" title="护盾中">🛡</span>
       </div>
     </div>
@@ -94,8 +121,8 @@ function pick(row: number, col: number) {
   font-weight: 700;
   font-size: 13px;
 }
-.pawn.p1 { background: #c2554f; }
-.pawn.p2 { background: #5b7fd4; }
+.pawn { overflow: hidden; }
+.pawn img { width: 100%; height: 100%; object-fit: contain; }
 .shield {
   position: absolute;
   top: 2px;

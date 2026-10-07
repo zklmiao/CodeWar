@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// 本票战斗数值（spec 附注初稿；调参以 spec 表为准）
+// 战斗时长常量（职业/技能数值已迁往 classes 注册表单一来源，review 发现 4）
 const (
-	BaseDamage = 22 // 普攻基础伤害
-
 	// 时长一律用 time.Duration 类型常量，杜绝裸 int 手工换算（review 修复：
 	// 散落的 * time.Millisecond 是 timer 单位 bug 的成因）
 	RoundDuration = 75 * time.Second // 回合倒计时
@@ -43,6 +41,13 @@ type TestCase struct {
 	Compare  string
 }
 
+// Targeting：攻击/技能的目标选择载荷（06 号票，设计 003 §1 方向选择全局规则）。
+// proto SetTargeting/SubmitRequest.targeting 同构；几何解释见 shapes.go。
+type Targeting struct {
+	Direction string // up | down | left | right；空 = 未指定（结算时自动瞄准）
+	Distance  int    // 点狙类在方向上的格距；0 = 未指定
+}
+
 // Question：题实例。04 号票起由出题工厂按 (spec, seed) 生成；题面/用例格式
 // 与判题器对接契约：call 为 Python 表达式，expected 为期望 repr。
 type Question struct {
@@ -53,14 +58,16 @@ type Question struct {
 	Tests       []TestCase
 }
 
-// QuestionPort：按回合取题（04 号票最小扩展）。
+// QuestionPort：按回合取题（06 号票扩展技能槽）。
 //   - AttackQuestion：攻击镜像题（双方同实例，seed = f(matchSeed, round)）。
 //   - Move/DefendQuestion：私有行动题（双方独立，seed = f(matchSeed, player, round)）。
-// 引擎本期只消费 AttackQuestion；移动/防御的消费方是 03/06 号票。
+//   - SkillQuestion：私有技能题（06 号票；难度 = 所选上限档，不走爬坡/均匀策略——
+//     实现见 question.Factory；仅装备了技能位的玩家会被消费）。
 type QuestionPort interface {
 	AttackQuestion(round int) Question
 	MoveQuestion(round int, player Player) Question
 	DefendQuestion(round int, player Player) Question
+	SkillQuestion(round int, player Player) Question
 }
 
 // JudgeResult：判题结果。Category 取值见 proto judge.proto 注释。

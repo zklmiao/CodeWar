@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"codewar/server/gen/matchpb"
+	"codewar/server/internal/classes"
 	"codewar/server/internal/match"
 	"codewar/server/internal/question"
 	"codewar/server/internal/question/templates"
@@ -98,7 +99,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	player, token, err := h.readJoin(ws)
+	player, token, classID, skillID, err := h.readJoin(ws)
 	if err != nil {
 		ws.Close()
 		return
@@ -109,6 +110,14 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		h.mu.Unlock()
 		h.reject(ws, player+" 已有玩家接入（本票不支持重连，08 号票处理）")
 		return
+	}
+	// 06 号票：职业装备组合校验（盲选值 fail-closed；缺省/空 = legacy 锚点）
+	if classID != "" || skillID != "" {
+		if err := classes.ValidateLoadout(classID, skillID); err != nil {
+			h.mu.Unlock()
+			h.reject(ws, "职业装备组合非法："+err.Error())
+			return
+		}
 	}
 	// 07 号票：有 token 则鉴权建绑，无 token = 匿名热座（向后兼容）。
 	// token 非空但无效/过期 → 直接拒连（客户端应重登后重试，不静默降级，
@@ -137,6 +146,15 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		questions.RegisterAll(templates.All()...)
 		h.engine = match.NewEngine(match.RealClock{}, questions, h.judge, h.broadcast)
 	}
+	// 06 号票：职业绑定（仅 WAITING 可绑；join 请求已 fail-closed 校验过组合）。
+	// 第二名玩家 join 时引擎已存在，同样可绑——双方就位开赛前数值与初始 HP 冻结。
+	if classID != "" {
+		if err := h.engine.BindClass(player, classID, skillID); err != nil {
+			h.mu.Unlock()
+			h.reject(ws, "职业绑定失败："+err.Error())
+			return
+		}
+	}
 	c := &conn{player: player, ws: ws, outbox: make(chan []byte, 64), closed: make(chan struct{})}
 	h.conns[player] = c
 	eng := h.engine
@@ -161,24 +179,24 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	h.readLoop(c)
 }
 
-func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, error) {
+func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string, error) {
 	_, data, err := ws.ReadMessage()
 	if err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	var msg matchpb.ClientMessage
 	if err := protojson.Unmarshal(data, &msg); err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	join := msg.GetJoin()
 	if join == nil {
-		return "", "", fmt.Errorf("首条消息必须是 join")
+		return "", "", "", "", fmt.Errorf("首条消息必须是 join")
 	}
 	p := match.Player(join.GetPlayer())
 	if p != match.P1 && p != match.P2 {
-		return "", "", fmt.Errorf("player 必须是 p1 或 p2")
+		return "", "", "", "", fmt.Errorf("player 必须是 p1 或 p2")
 	}
-	return p, join.GetToken(), nil
+	return p, join.GetToken(), join.GetClass(), join.GetSkill(), nil
 }
 
 func (h *Hub) reject(ws *websocket.Conn, msg string) {
@@ -214,7 +232,26 @@ func (h *Hub) readLoop(c *conn) {
 				if mt := sub.GetMoveTo(); mt != nil {
 					moveTo = match.Pos{Row: int(mt.GetRow()), Col: int(mt.GetCol())}
 				}
+				// 06 号票：提交自带 targeting 时先落引擎（结算读最新值；等效
+				// SetTargeting，省一次往返）。
+				if t := sub.GetTargeting(); t != nil {
+					eng.SetTargeting(c.player, match.Targeting{
+						Direction: t.GetDirection(), Distance: int(t.GetDistance()),
+					})
+				}
 				eng.Submit(c.player, sub.GetAction(), sub.GetCode(), moveTo)
+			}
+		}
+		// 06 号票：SetTargeting——解出攻击/技能题后、结算前随时修改目标（免费操作）。
+		if st := msg.GetSetTargeting(); st != nil {
+			h.mu.Lock()
+			eng := h.engine
+			h.mu.Unlock()
+			if eng != nil && st.GetTargeting() != nil {
+				eng.SetTargeting(c.player, match.Targeting{
+					Direction: st.GetTargeting().GetDirection(),
+					Distance:  int(st.GetTargeting().GetDistance()),
+				})
 			}
 		}
 	}
