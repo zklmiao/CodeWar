@@ -99,7 +99,7 @@ func coverageByCell(t *testing.T) map[cellKey]int {
 // expectedGaps：棘轮清单——当前尚未填上的格与关键格副本（12 号票分批收缩至空）。
 // 格缺口 = "<topic>-<L#>-<action>"；关键格副本缺口 = 其后缀 "#2"。
 var expectedGaps = []string{
-	// 攻击格缺口（批3a 后 7）
+	// 攻击格缺口（批3a 后 6）
 	"array-L1-attack", "array-L5-attack",
 	"hash-L1-attack", "hash-L5-attack",
 	"sort-L1-attack", "sort-L5-attack",
