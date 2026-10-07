@@ -396,7 +396,7 @@ func skillOddL2() question.Template {
 			caseAlias{name: "single-char", call: `odd_chars("x")`, expected: pyStr("")},
 			caseAlias{name: "two-chars", call: `odd_chars("hi")`, expected: pyStr("i")},
 			caseAlias{name: "all-same", call: `odd_chars("aaaa")`, expected: pyStr("aa")},
-			caseAlias{name: "drawn-even", call: fmt.Sprintf("odd_chars(%s)", pyStr(word+"z")), expected: pyStr(oddCharsGo(word+"z"))},
+			caseAlias{name: "drawn-even", call: fmt.Sprintf("odd_chars(%s)", pyStr(word+"z")), expected: pyStr(oddCharsGo(word + "z"))},
 		)
 		stmt := fmt.Sprintf("%s奇位汲取：抽取字符串中下标为奇数（0 起）的字符并按序拼接。\n%s", kind, examplesText(visible))
 		return bareInstance(meta, stmt, sig, answer, visible, hidden)

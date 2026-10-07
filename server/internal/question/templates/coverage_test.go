@@ -35,6 +35,7 @@ func (c cellKey) String() string {
 //   - (recursion, L5)：「递归与简单 DP」题型定位为单一递归/入门 DP 思想；L5 要求 ≥2 思想组合、
 //     参考解 12-18 行，超出「简单 DP」定位（04 号票 MANIFEST 声明，本票维持）。
 //   - (syntax, L5)：纯语法无法承载 ≥2 算法思想组合（设计 002 §7 点名）。
+//
 // 新增白名单条目必须在此写明理由并同步设计文档（测试纪律：语义空格白名单须注释理由）。
 var emptyRows = map[question.Topic]map[question.Difficulty]string{
 	question.TopicRecursion: {
