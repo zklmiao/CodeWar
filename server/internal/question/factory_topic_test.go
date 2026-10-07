@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"codewar/server/internal/match"
 	"codewar/server/internal/question"
 	"codewar/server/internal/question/templates"
 )
@@ -99,6 +100,40 @@ func TestActionQuestionsCrossTopic(t *testing.T) {
 	}
 	if len(moveTopics) < 2 || len(defendTopics) < 2 {
 		t.Fatalf("行动题应跨题型（不受过滤限制）：move=%v defend=%v", moveTopics, defendTopics)
+	}
+}
+
+// cap=L5 时行动题不得落空成错误占位题：移动/防御模板只到 L3，策略抽到
+// L4/L5 时就近平移到最近可用档（05 号票浏览器验收发现的回归——cap 真实
+// 生效后行动题首次能抽到 L4/L5，空格必须回退而非把占位题推进题面板）。
+func TestActionQuestionsNeverPlaceholderAtCapL5(t *testing.T) {
+	for _, strategy := range []string{question.StrategyUniform, question.StrategyClimb} {
+		f := newTopicFactory(question.Config{MaxDifficulty: question.L5, Strategy: strategy, MatchSeed: "action-cap5-" + strategy})
+		for round := 1; round <= 20; round++ {
+			for _, p := range []match.Player{"p1", "p2"} {
+				for _, q := range []match.Question{
+					f.MoveQuestion(round, p),
+					f.DefendQuestion(round, p),
+				} {
+					if strings.HasPrefix(templateID(q.ID), "error") {
+						t.Fatalf("strategy=%s round=%d player=%s 行动题落空：%q", strategy, round, p, q.ID)
+					}
+				}
+			}
+		}
+	}
+}
+
+// cap=L5 + 技能位：贴上限语义下就近回退——现役技能模板仅 L3，cap=L5 应回
+// 落 L3 而非错误占位（与 06 号票 pinned 行为一致的端到端面）。
+func TestSkillQuestionNearestFallbackAtCapL5(t *testing.T) {
+	f := newTopicFactory(question.Config{MaxDifficulty: question.L5, Strategy: question.StrategyClimb, MatchSeed: "skill-cap5"})
+	q := f.SkillQuestion(1, "p1")
+	if strings.HasPrefix(templateID(q.ID), "error") {
+		t.Fatalf("cap=L5 技能题应回退到最近可用档，实际 %q", q.ID)
+	}
+	if !strings.Contains(templateID(q.ID), "-L3-") {
+		t.Fatalf("现役技能模板仅 L3，应回退到 L3：%q", q.ID)
 	}
 }
 
