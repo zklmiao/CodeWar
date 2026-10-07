@@ -113,14 +113,12 @@ var expectedGaps = []string{
 	"hash-L1-move", "hash-L2-move", "hash-L3-move", "hash-L4-move", "hash-L5-move",
 	"sort-L1-move", "sort-L2-move", "sort-L3-move", "sort-L4-move", "sort-L5-move",
 	"recursion-L2-move", "recursion-L3-move", "recursion-L4-move",
-	// 防御格缺口（批2 后 21）
-	"string-L1-defend", "string-L2-defend", "string-L3-defend", "string-L4-defend", "string-L5-defend",
+	// 防御格缺口（批3b 后 16）
 	"array-L1-defend", "array-L3-defend", "array-L4-defend", "array-L5-defend",
 	"hash-L1-defend", "hash-L2-defend", "hash-L4-defend", "hash-L5-defend",
 	"sort-L1-defend", "sort-L2-defend", "sort-L3-defend", "sort-L4-defend", "sort-L5-defend",
 	"recursion-L2-defend", "recursion-L3-defend", "recursion-L4-defend",
-	// 技能格缺口（批2 后 22）
-	"string-L1-skill", "string-L2-skill", "string-L3-skill", "string-L4-skill", "string-L5-skill",
+	// 技能格缺口（批3b 后 17）
 	"array-L1-skill", "array-L3-skill", "array-L4-skill", "array-L5-skill",
 	"hash-L1-skill", "hash-L2-skill", "hash-L4-skill", "hash-L5-skill",
 	"sort-L1-skill", "sort-L2-skill", "sort-L3-skill", "sort-L4-skill", "sort-L5-skill",

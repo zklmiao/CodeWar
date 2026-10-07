@@ -46,6 +46,10 @@
 | move-vector-L2-move | 语法与运算 | L2 | 否 | unknown-char |
 | move-corridor-L3-move | 语法与运算 | L3 | 否 | empty-input, negative-steps, full-loop, wrap-around |
 | move-parse-L4-move | 语法与运算 | L4 | 否 | empty-input, no-number, multi-digit |
+| move-firststep-L1-move | 字符串处理 | L1 | 否 | — |
+| move-count-forward-L2-move | 字符串处理 | L2 | 否 | empty-input, none-forward |
+| move-facing-L4-move | 字符串处理 | L4 | 否 | empty-input, full-circle, unknown-char |
+| move-beacon-L5-move | 字符串处理 | L5 | 否 | empty-input, undo-empty, undo-back, all-back |
 
 ## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
 
@@ -57,6 +61,11 @@
 | defend-repair-L2-defend | 语法与运算 | L2 | 否 | over-cap, empty-input |
 | defend-hp-after-L3-defend | 语法与运算 | L3 | 否 | empty-input, shield-eats-all, overkill, exact-zero |
 | defend-siege-L4-defend | 语法与运算 | L4 | 否 | empty-input, full-block, degrade-chain, lethal |
+| defend-badge-L1-defend | 字符串处理 | L1 | 否 | — |
+| defend-mask-L2-defend | 字符串处理 | L2 | 否 | empty-input, short-input |
+| defend-censor-L3-defend | 字符串处理 | L3 | 否 | empty-input, no-match, all-match |
+| defend-scroll-L4-defend | 字符串处理 | L4 | 否 | empty-input, punctuation-only, mixed-case, odd-length |
+| defend-barrier-L5-defend | 字符串处理 | L5 | 否 | empty-input, all-open, all-close, concatenated |
 
 ## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
@@ -68,6 +77,11 @@
 | skill-heal-L3-skill | 哈希与计数 | L3 | no-missing, over-heal |
 | skill-mana-L2-skill | 语法与运算 | L2 | over-cap |
 | skill-arcana-L4-skill | 语法与运算 | L4 | zero-targets, decay-floor, overcap |
+| skill-echo-L1-skill | 字符串处理 | L1 | — |
+| skill-odd-L2-skill | 字符串处理 | L2 | empty-input, single-char |
+| skill-draw-L3-skill | 字符串处理 | L3 | empty-input, no-digits |
+| skill-decompress-L4-skill | 字符串处理 | L4 | empty-input, multi-digit-count, no-count |
+| skill-ward-L5-skill | 字符串处理 | L5 | empty-input, single-char, all-same, whole-palindrome, worst-case |
 
 ## 档位覆盖
 
