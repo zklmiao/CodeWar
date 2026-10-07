@@ -35,3 +35,10 @@ func Settle(p1Elo, p2Elo int, winner string) (p1After, p2After int) {
 	p2After = int(math.Round(float64(p2Elo) + K*((1.0-scoreP1)-(1.0-expP1))))
 	return p1After, p2After
 }
+
+// ScaleDelta：难度风险系数作用于 ELO delta（05 号票）：delta × coeff 四舍五入。
+// 结算奖励随所选难度档放大/缩小（spec 用户故事 9 的结算面）；平局 delta=0
+// 与系数相乘天然仍为 +0；双方乘同一系数，零和对称性保持。
+func ScaleDelta(delta int, coeff float64) int {
+	return int(math.Round(float64(delta) * coeff))
+}

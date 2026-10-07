@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // 对局页（06 号票）：玩家选择 → 职业盲选（本地选完再 join）→ 接入 → 渲染对局。
 // 职业与技能经 URL query 携带（?player=1&class=warrior&skill=cleave）——两个窗口
-// 各自选择、互不可见（设计 003 §1 盲选）；缺省 = legacy 锚点（匿名/旧链接兼容）。
+// 各自选择、互不可见（设计 003 §1）；缺省 = legacy 锚点（匿名/旧链接兼容）。
+// 05 号票：对局配置表单（题型/难度上限/抽题策略）——配置随接入链接携带，
+// 服务端按首个 join 锁定整场；「复制接入链接」供热座第二窗口直接粘贴。
 // 断线/序号断裂：关闭连接重连，快照重建状态（ADR-0002）。
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useMatchStore } from "../stores/match";
 import { useUserStore } from "../stores/user";
 import { useClassesStore } from "../stores/classes";
+import { CAP_OPTIONS, STRATEGY_OPTIONS, TOPIC_OPTIONS } from "../topics";
 import { socket } from "../api/socket";
 import GameGrid from "../components/GameGrid.vue";
 import HpBar from "../components/HpBar.vue";
@@ -24,6 +27,19 @@ const viewer = ref(playerFromUrl());
 // 盲选暂存（choose 屏用；进入对局后由 URL query 权威）
 const pickedClass = ref((route.query.class as string) || "");
 const pickedSkill = ref((route.query.skill as string) || "");
+// 05 号票：对局配置（表单值随链接携带；URL 带非法值时回退表单默认，
+// 与服务端回退语义一致——服务端才是权威）
+const cfgTopic = ref(
+  TOPIC_OPTIONS.some((t) => t.key === route.query.topic) ? (route.query.topic as string) : "",
+);
+const cfgCap = ref(
+  CAP_OPTIONS.includes(route.query.cap as string) ? (route.query.cap as string) : "L3",
+);
+const cfgStrategy = ref(
+  STRATEGY_OPTIONS.some((s) => s.key === route.query.strategy)
+    ? (route.query.strategy as string)
+    : "climb",
+);
 
 function playerFromUrl(): string {
   const p = route.query.player;
@@ -35,7 +51,24 @@ function joinHref(player: string): string {
   q.set("player", player);
   if (pickedClass.value) q.set("class", pickedClass.value);
   if (pickedSkill.value) q.set("skill", pickedSkill.value);
+  // 05 号票：配置随链接携带（topic 空 = 全部题型，省参；cap/strategy 恒携带）
+  if (cfgTopic.value) q.set("topic", cfgTopic.value);
+  q.set("cap", cfgCap.value);
+  q.set("strategy", cfgStrategy.value);
   return `/?${q.toString()}`;
+}
+
+// 复制接入链接（第二窗口 = P2）：clipboard 不可用（非安全上下文/旧浏览器）
+// 时静默失败——下方「以 P2 接入」链接仍可右键复制
+const copied = ref(false);
+async function copyJoinLink() {
+  try {
+    await navigator.clipboard.writeText(location.origin + joinHref("2"));
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 1500);
+  } catch {
+    copied.value = false;
+  }
 }
 
 function connect() {
@@ -55,6 +88,10 @@ function connect() {
       token: user.token,
       class: (route.query.class as string) || "",
       skill: (route.query.skill as string) || "",
+      // 05 号票：配置随 join 注入（重连同参——服务端按首个 join 锁定，幂等）
+      topic: cfgTopic.value,
+      cap: cfgCap.value,
+      strategy: cfgStrategy.value,
     },
   );
 }
@@ -93,7 +130,34 @@ watch(
     </main>
 
     <main v-else class="choose">
-      <p>本机热座对战：用两个浏览器窗口分别扮演双方。先选职业与技能（盲选——对方开赛前看不到）。</p>
+      <p>本机热座对战：用两个浏览器窗口分别扮演双方。先配置对局，再选职业与技能（盲选——对方开赛前看不到）。</p>
+
+      <!-- 05 号票：对局配置表单（题型过滤只约束攻击题；难度上限档挂钩伤害与结算奖励） -->
+      <div class="cfg-form" data-testid="match-config">
+        <label>
+          题型
+          <select v-model="cfgTopic" data-testid="cfg-topic">
+            <option v-for="t in TOPIC_OPTIONS" :key="t.key" :value="t.key">{{ t.label }}</option>
+          </select>
+        </label>
+        <label>
+          难度上限
+          <select v-model="cfgCap" data-testid="cfg-cap">
+            <option v-for="c in CAP_OPTIONS" :key="c" :value="c">{{ c }}</option>
+          </select>
+        </label>
+        <label>
+          抽题策略
+          <select v-model="cfgStrategy" data-testid="cfg-strategy">
+            <option v-for="s in STRATEGY_OPTIONS" :key="s.key" :value="s.key">{{ s.label }}</option>
+          </select>
+        </label>
+        <button class="copy" data-testid="copy-link" @click="copyJoinLink">
+          {{ copied ? "已复制 ✓" : "复制接入链接（第二窗口）" }}
+        </button>
+      </div>
+      <p class="cfg-hint">难度上限越高，普攻伤害与结算奖励系数越高（L1 ×0.85 → L5 ×1.20）。</p>
+
       <div class="class-grid">
         <button
           v-for="c in classesStore.classes"
@@ -135,6 +199,27 @@ watch(
   border-radius: var(--cw-radius-md); margin-bottom: var(--cw-space-3); font-size: var(--cw-font-size-xs);
 }
 .choose { text-align: center; color: var(--cw-color-text-secondary); padding: var(--cw-space-6) 0; }
+/* 05 号票：对局配置表单 */
+.cfg-form {
+  display: flex; gap: var(--cw-space-4); justify-content: center; align-items: flex-end;
+  flex-wrap: wrap; margin: var(--cw-space-4) auto 0; max-width: 720px;
+}
+.cfg-form label {
+  display: flex; flex-direction: column; gap: var(--cw-space-1); text-align: left;
+  font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted);
+}
+.cfg-form select {
+  background: var(--cw-color-bg-inset); color: var(--cw-color-text-primary);
+  border: 1px solid var(--cw-color-border); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-2) var(--cw-space-3); font-size: var(--cw-font-size-sm); cursor: pointer;
+}
+.cfg-form .copy {
+  background: var(--cw-color-bg-surface); color: var(--cw-color-state-success);
+  border: 1px solid var(--cw-color-state-success); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-2) var(--cw-space-4); cursor: pointer; font-size: var(--cw-font-size-sm);
+}
+.cfg-form .copy:hover { background: var(--cw-color-bg-raised); }
+.cfg-hint { font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted); margin: var(--cw-space-2) 0 0; }
 .class-grid { display: flex; gap: var(--cw-space-3); justify-content: center; margin: var(--cw-space-5) 0; }
 .class-card {
   background: var(--cw-color-bg-surface); border: 2px solid var(--cw-color-border); border-radius: var(--cw-radius-lg);

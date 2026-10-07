@@ -62,6 +62,14 @@ export interface ClassView {
   skillCdRounds: number;
 }
 
+// 本场对局配置（05 号票，首个 join 锁定；快照下发的服务端权威值，
+// 对局内只读展示——两窗口 URL 参数冲突时以服务端锁定值为准）
+export interface MatchConfigView {
+  topic: string; // 题型 key；空 = 全部 6 题型
+  cap: number; // 难度上限档 1..5（L1..L5）
+  strategy: string; // uniform | climb
+}
+
 export interface MatchState {
   viewerId: string;
   phase: MatchPhase;
@@ -73,6 +81,7 @@ export interface MatchState {
   shield: Record<string, boolean>; // 本回合护盾
   panel: PanelState | null;
   classes: Record<string, ClassView>; // 职业/技能/冷却（06 号票快照字段）
+  matchConfig: MatchConfigView | null; // 本场锁定配置（05 号票快照字段）
   pendingTargeting: TargetingView | null; // 攻击/技能槽的目标选择（未提交 = 自动瞄准）
   viewerLockUntil: number;
   viewerActed: boolean; // 本回合查看者已行动（服务端权威结论的本地缓存）
@@ -101,6 +110,7 @@ export const useMatchStore = defineStore("match", {
     shield: {},
     panel: null,
     classes: {},
+    matchConfig: null,
     pendingTargeting: null,
     viewerLockUntil: 0,
     viewerActed: false,
@@ -153,6 +163,10 @@ export const useMatchStore = defineStore("match", {
           skillCdRounds: p.skillCdRounds ?? 0,
         };
       }
+      // 05 号票：本场锁定配置（服务端权威；对局内只读展示的数据源）
+      this.matchConfig = s.matchConfig
+        ? { topic: s.matchConfig.topic ?? "", cap: s.matchConfig.cap ?? 0, strategy: s.matchConfig.strategy ?? "" }
+        : null;
       this.panel = s.panel
         ? {
             attack: toProblem(s.panel.attack),

@@ -151,14 +151,39 @@ func (f *Factory) attackQuestion(round int) (match.Question, error) {
 	spec := Spec{Topic: topic, Difficulty: d, Action: ActionAttack}
 	in, err := f.Create(spec, roundSeed)
 	if err != nil {
-		// 回退：同动作忽略题型再试（行动题跨题型语义；攻击题一般不需要，保底）。
-		spec.Topic = ""
-		in, err = f.Create(spec, roundSeed)
-		if err != nil {
-			return match.Question{}, err
+		// 题型过滤硬语义（05 号票验收 2：攻击题只从所选题型抽取）：策略抽出的
+		// 难度格在本题型下为空时，就近平移难度重试（不放弃题型，seed 流不变、
+		// 确定性保持）；整个 [L1, cap] 区间都没有该题型攻击模板（12 号票补齐
+		// 模板矩阵前的真空格）才退回跨题型——与行动题同语义的最后保底。
+		if in2, ok := f.createNearestDifficulty(spec, d); ok {
+			in = in2
+		} else {
+			spec.Topic = ""
+			in, err = f.Create(spec, roundSeed)
+			if err != nil {
+				return match.Question{}, err
+			}
 		}
 	}
 	return in.ToQuestion(pickForm(rng, in.Meta.Form)), nil
+}
+
+// createNearestDifficulty：题型不变，从 drawn 难度向外螺旋（+1/−1/+2/−2…）
+// 寻找 [L1, cap] 内首个有模板的难度档（平移距离最近，策略语义漂移最小）。
+func (f *Factory) createNearestDifficulty(spec Spec, drawn Difficulty) (Instance, bool) {
+	capD := f.cfg.MaxDifficulty
+	for step := 1; step < int(capD); step++ {
+		for _, d := range []Difficulty{drawn + Difficulty(step), drawn - Difficulty(step)} {
+			if d < L1 || d > capD {
+				continue
+			}
+			spec.Difficulty = d
+			if in, err := f.Create(spec, fmt.Sprintf("%s|near=%d", specKey(spec), int(drawn))); err == nil {
+				return in, true
+			}
+		}
+	}
+	return Instance{}, false
 }
 
 // MoveQuestion：私有移动题（seed = f(matchSeed, player, round)，双方独立）。

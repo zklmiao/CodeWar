@@ -4,6 +4,7 @@
 import { computed, ref, watch } from "vue";
 import { useMatchStore } from "../stores/match";
 import { useClassesStore } from "../stores/classes";
+import { strategyLabel, topicLabel } from "../topics";
 import { socket } from "../api/socket";
 import CodeEditor from "./CodeEditor.vue";
 
@@ -113,6 +114,10 @@ function submitSkill() {
   <div class="panel">
     <div v-if="!store.isRoundActive" class="placeholder">等待对局开始…</div>
     <template v-else>
+      <!-- 05 号票：本场锁定的对局配置（快照下发，只读——两窗口参数冲突时以服务端为准） -->
+      <div v-if="store.matchConfig" class="match-cfg" data-testid="match-config-view">
+        题型 {{ topicLabel(store.matchConfig.topic) }} · 难度上限 L{{ store.matchConfig.cap }} · 抽题{{ strategyLabel(store.matchConfig.strategy) }}
+      </div>
       <div class="head">
         <span class="round">回合 {{ store.round }}</span>
         <span class="timer" :class="{ low: remainingSec <= 10 }">{{ remainingSec }}s</span>
@@ -197,6 +202,7 @@ function submitSkill() {
   display: flex; flex-direction: column; gap: 12px;
 }
 .placeholder { color: var(--cw-color-text-muted); margin: auto; }
+.match-cfg { font-size: 12px; color: var(--cw-color-text-muted); }
 .head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .round { font-weight: 700; color: var(--cw-color-text-primary); }
 .timer { font-variant-numeric: tabular-nums; color: var(--cw-color-state-success); font-weight: 700; }

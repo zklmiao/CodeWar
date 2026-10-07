@@ -96,6 +96,7 @@ type Engine struct {
 	equipped       map[Player]classes.Skill // 已装备技能（局前盲选装备，局内唯一）
 	skillReadyFrom map[Player]int           // 技能再度可用回合（第 N 回合释放 → N+CD）
 	targeting      map[Player]Targeting     // 攻击/技能目标选择（可随时覆盖，结算时读取）
+	riskCoeff      float64                  // 难度风险系数（05 号票，只乘普攻伤害）
 	timer          Timer
 	timerC         <-chan time.Time
 	resetC         chan struct{} // armTimer 替换 timer 时 close+重建，唤醒阻塞在旧 timerC 上的泵
@@ -114,6 +115,8 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 		lockUntil: map[Player]time.Time{},
 		actions:   map[Player]*pendingAction{},
 		solveSeq:  map[Player]int64{},
+		// 难度风险系数（05 号票）：缺省 L3 → 1.0（05 之前行为的字节级锚点）
+		riskCoeff:      RiskCoeff(0),
 		// 初始站位：垂直相邻（ruling #7 的坐标实例；03 起随移动题动态变化）
 		pos:            map[Player]Pos{P1: {Row: 3, Col: 2}, P2: {Row: 2, Col: 2}},
 		shield:         map[Player]bool{},
@@ -131,6 +134,10 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 type Setup struct {
 	P1Class, P1Skill string
 	P2Class, P2Skill string
+	// RiskTier：所选难度上限档 L1..L5（05 号票，风险系数档位——只乘普攻伤害，
+	// 技能效果为设计 003 字面值不乘系数）。0 = 未配置 → L3（系数 1.0，
+	// 匿名缺省链路零行为变化）。
+	RiskTier int
 }
 
 // NewEngineWithSetup：带职业配置的构造（hub 用；未知组合由 hub 先行校验，
@@ -140,6 +147,9 @@ func NewEngineWithSetup(clock Clock, questions QuestionPort, judge JudgePort,
 	e := NewEngine(clock, questions, judge, broadcast)
 	_ = e.BindClass(P1, setup.P1Class, setup.P1Skill)
 	_ = e.BindClass(P2, setup.P2Class, setup.P2Skill)
+	if setup.RiskTier != 0 {
+		e.riskCoeff = RiskCoeff(setup.RiskTier)
+	}
 	return e
 }
 
@@ -415,7 +425,7 @@ func (e *Engine) resolveRound() {
 				}}})
 				continue
 			}
-			base := damageFor(a.solveMs, cls.AttackDamage)
+			base := damageFor(a.solveMs, cls.AttackDamage, e.riskCoeff)
 			dmg := base
 			shielded := e.shield[target]
 			if shielded {
@@ -686,9 +696,12 @@ func (e *Engine) Snapshot(viewer Player) *matchpb.Snapshot {
 	return s
 }
 
-// damageFor：伤害 = 职业普攻基础值 × 时间系数（solveMs→[0.6,1.0] 线性）四舍五入。
-// 06 号票起基础值来自职业表（legacy 锚点 = 22，与 01~03 号票行为一致）。
-func damageFor(solveMs int64, base int32) int32 {
+// damageFor：伤害 = 职业普攻基础值 × 时间系数（solveMs→[0.6,1.0] 线性）×
+// 难度风险系数（05 号票，L1 0.85 → L5 1.20，见 risk.go）四舍五入。
+// 06 号票起基础值来自职业表（legacy 锚点 = 22，与 01~03 号票行为一致）；
+// riskCoeff=1.0（缺省 L3）时与 05 之前的「基础 × 时间系数」逐字节一致。
+// 注意：技能伤害/治疗走 applySkillDamage 的设计 003 字面值，不经本函数（05 裁决 2）。
+func damageFor(solveMs int64, base int32, riskCoeff float64) int32 {
 	ratio := float64(solveMs) / float64(RoundDuration.Milliseconds())
 	if ratio > 1 {
 		ratio = 1
@@ -697,7 +710,7 @@ func damageFor(solveMs int64, base int32) int32 {
 	if coeff < CoeffMin {
 		coeff = CoeffMin
 	}
-	return int32(math.Round(float64(base) * coeff))
+	return int32(math.Round(float64(base) * coeff * riskCoeff))
 }
 
 func abs(x int) int {
