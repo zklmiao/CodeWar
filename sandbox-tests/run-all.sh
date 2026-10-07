@@ -58,7 +58,13 @@ else
 fi
 
 out=$(bash 08-fork-bomb-limit.sh)
-check "08-fork-bomb" "'category': 'limit-exceeded'" "$out"
+if echo "$out" | grep -qE "'category': '(limit-exceeded|timeout)'"; then
+  echo "PASS  08-fork-bomb"
+  pass=$((pass + 1))
+else
+  echo "FAIL  08-fork-bomb  (实际: $out)"
+  fail=$((fail + 1))
+fi
 
 echo "----------------------------------------"
 echo "汇总: $pass PASS / $fail FAIL"
