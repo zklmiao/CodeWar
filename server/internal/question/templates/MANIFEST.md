@@ -1,4 +1,4 @@
-# 首批模板登记表（04 号票，26 个；L5 归 12 号票）
+# 模板登记表（04 号票首批 26 + 12 号票扩容；矩阵口径见 templates/coverage_test.go）
 
 > 四维 = 题型 × 难度档 × 动作类型 × 题面形式；陷阱清单与隐藏用例一一对应（`checks.invariants` 强制）。
 > 黄金样板 20 个（攻击 18 全覆盖 + 移动/防御各 1 模式样板）+ 仿写 6 个（移动 2、防御 2、技能 2）。
@@ -10,9 +10,13 @@
 | syntax-add-L1-attack | 语法与运算 | L1 | both | 是 | — |
 | syntax-sum-evens-L2-attack | 语法与运算 | L2 | both | 是 | empty-input |
 | syntax-count-div-L3-attack | 语法与运算 | L3 | both | 是 | empty-input, no-match |
+| syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
+| syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
 | string-palindrome-L2-attack | 字符串处理 | L2 | both | 是 | empty-input, case-sensitive |
 | string-vowel-count-L3-attack | 字符串处理 | L3 | both | 是 | empty-input, no-vowel |
 | string-run-length-L4-attack | 字符串处理 | L4 | both | 是 | empty-input, single-char, long-run |
+| string-palindrome-substr-L5-attack | 字符串处理 | L5 | both | 是 | empty-input, single-char, all-same, tie-first |
+| string-palindrome-substr-L5-attack | 字符串处理 | L5 | both | 是 | empty-input, single-char, all-same, tie-first |
 | array-dedup-L2-attack | 数组与列表 | L2 | both | 是 | empty-input, all-same |
 | array-two-sum-L3-attack | 数组与列表 | L3 | both | 是 | duplicates, negative |
 | array-window-sum-L4-attack | 数组与列表 | L4 | both | 是 | empty-input, single-element, all-negative, full-window |
@@ -44,14 +48,16 @@
 | defend-shield-L2-defend | L2 | 否 | empty-input, overkill |
 | defend-survive-L3-defend | L3 | 否 | empty-input, lethal, full-block |
 
-## 技能题（2，供 06 号票参照，形式 complete）
+## 技能题（4，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
-| 模板 ID | 难度 | 陷阱 |
-|---|---|---|
-| skill-blast-L3-skill | L3 | —（overcap/negative 为普通边界用例） |
-| skill-heal-L3-skill | L3 | no-missing, over-heal |
+| 模板 ID | 题型 | 难度 | 陷阱 |
+|---|---|---|---|
+| skill-clamp-L1-skill | 语法与运算 | L1 | — |
+| skill-chain-heal-L2-skill | 数组与列表 | L2 | empty-input |
+| skill-blast-L3-skill | 语法与运算 | L3 | —（overcap/negative 为普通边界用例） |
+| skill-heal-L3-skill | 哈希与计数 | L3 | no-missing, over-heal |
 
 ## 档位覆盖
 
-- 攻击：L1×1、L2×6、L3×6、L4×5；L5 缺失（12 号票补 DP/贪心）。
-- 移动/防御：L1~L3；技能：L3 样板（技能题难度=所选上限档，06 号票消费）。
+- 攻击：L1×1、L2×6、L3×6、L4×6（12 批1 +语法 L4）、L5×1（12 批1 +字符串）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
+- 移动/防御：L1~L3；技能：L1/L2（12 批1）+ L3 样板（技能题难度=所选上限档，06 号票消费）。

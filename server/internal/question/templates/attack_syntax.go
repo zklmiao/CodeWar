@@ -1,4 +1,4 @@
-// 攻击题·语法与运算（3 模板：L1/L2/L3，黄金样板）。
+// 攻击题·语法与运算（L1/L2/L3 黄金样板 + L4 十二号票扩容）。
 package templates
 
 import (
@@ -108,4 +108,52 @@ func countDiv(nums []int, k int) int {
 		}
 	}
 	return c
+}
+
+// 语法 L4：符文串括号匹配（栈模拟 + 边界，参考解 9 行；12 号票批 1 高档示范，
+// 算法内核参考 codetop59 有效的括号，题面经情境池重包装）。
+func syntaxBracketsL4() question.Template {
+	meta := question.Meta{ID: "syntax-brackets-L4-attack", Topic: question.TopicSyntax,
+		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "wrong-order", "unmatched-open", "unmatched-close"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		kind := rng.Scenario("rune")
+		wellFormed := rng.Pick([]string{"{[()]}", "([]{})", "{[()()]}"})
+		sig := "def matched_brackets(s: str) -> bool:"
+		answer := "def matched_brackets(s: str) -> bool:\n" +
+			"    pairs = {')': '(', ']': '[', '}': '{'}\n" +
+			"    stack = []\n" +
+			"    for ch in s:\n" +
+			"        if ch in '([{':\n" +
+			"            stack.append(ch)\n" +
+			"            continue\n" +
+			"        if not stack or stack.pop() != pairs[ch]:\n" +
+			"            return False\n" +
+			"    return not stack\n"
+		body := []string{
+			"    pairs = {')': '(', ']': '[', '}': '{'}",
+			"    stack = []",
+			"    for ch in s:",
+			"        if ch in '([{':",
+			"            stack.append(ch)",
+			"            continue",
+			"        if not stack or stack.pop() != pairs[ch]:",
+			"            return False",
+			"    return not stack",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("matched_brackets(%s)", pyStr(wellFormed)), expected: "True"},
+			caseAlias{name: "example-2", call: "matched_brackets('([)]')", expected: "False"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "matched_brackets('')", expected: "True"},
+			caseAlias{name: "unmatched-close", call: "matched_brackets(')(')", expected: "False"},
+			caseAlias{name: "unmatched-open", call: "matched_brackets('((')", expected: "False"},
+			caseAlias{name: "wrong-order", call: "matched_brackets('{(})')", expected: "False"},
+			caseAlias{name: "nested-ok", call: "matched_brackets('{[()()]}')", expected: "True"},
+			caseAlias{name: "sequential-ok", call: "matched_brackets('()[]{}')", expected: "True"},
+		)
+		stmt := fmt.Sprintf("%s串校验：字符串只含 ()[]{} 四种括号，必须以正确顺序闭合（空串视为合法）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{3: true, 6: true}, visible, hidden, answer)
+	}}
 }

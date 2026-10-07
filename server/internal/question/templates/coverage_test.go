@@ -99,9 +99,8 @@ func coverageByCell(t *testing.T) map[cellKey]int {
 // expectedGaps：棘轮清单——当前尚未填上的格与关键格副本（12 号票分批收缩至空）。
 // 格缺口 = "<topic>-<L#>-<action>"；关键格副本缺口 = 其后缀 "#2"。
 var expectedGaps = []string{
-	// 攻击格缺口（9）
-	"syntax-L4-attack",
-	"string-L1-attack", "string-L5-attack",
+	// 攻击格缺口（批1 后 8）
+	"string-L1-attack",
 	"array-L1-attack", "array-L5-attack",
 	"hash-L1-attack", "hash-L5-attack",
 	"sort-L1-attack", "sort-L5-attack",
@@ -126,10 +125,10 @@ var expectedGaps = []string{
 	"hash-L1-defend", "hash-L2-defend", "hash-L4-defend", "hash-L5-defend",
 	"sort-L1-defend", "sort-L2-defend", "sort-L3-defend", "sort-L4-defend", "sort-L5-defend",
 	"recursion-L2-defend", "recursion-L3-defend", "recursion-L4-defend",
-	// 技能格缺口（25）
-	"syntax-L1-skill", "syntax-L2-skill", "syntax-L4-skill",
+	// 技能格缺口（批1 后 23）
+	"syntax-L2-skill", "syntax-L4-skill",
 	"string-L1-skill", "string-L2-skill", "string-L3-skill", "string-L4-skill", "string-L5-skill",
-	"array-L1-skill", "array-L2-skill", "array-L3-skill", "array-L4-skill", "array-L5-skill",
+	"array-L1-skill", "array-L3-skill", "array-L4-skill", "array-L5-skill",
 	"hash-L1-skill", "hash-L2-skill", "hash-L4-skill", "hash-L5-skill",
 	"sort-L1-skill", "sort-L2-skill", "sort-L3-skill", "sort-L4-skill", "sort-L5-skill",
 	"recursion-L2-skill", "recursion-L3-skill", "recursion-L4-skill",

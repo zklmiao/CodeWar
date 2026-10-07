@@ -1,4 +1,4 @@
-// 攻击题·字符串处理（3 模板：L2/L3/L4，黄金样板）。
+// 攻击题·字符串处理（L2/L3/L4 黄金样板 + L5 十二号票扩容）。
 package templates
 
 import (
@@ -134,4 +134,79 @@ func runLength(s string) string {
 	}
 	fmt.Fprintf(&b, "%c%d", s[len(s)-1], count)
 	return b.String()
+}
+
+// 字符串 L5：最长回文子串（中心扩展 + 双指针双形式，参考解 13 行；12 号票批 1 高档示范，
+// 算法内核参考 codetop59 最长回文子串，题面经情境池重包装）。
+func stringPalindromeSubstrL5() question.Template {
+	meta := question.Meta{ID: "string-palindrome-substr-L5-attack", Topic: question.TopicString,
+		Difficulty: question.L5, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "single-char", "all-same", "tie-first"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		drawn := rng.Str(rng.Int(4, 7), "binary")
+		kind := rng.Scenario("rune")
+		sig := "def longest_palindrome(s: str) -> str:"
+		answer := "def longest_palindrome(s: str) -> str:\n" +
+			"    if not s:\n" +
+			"        return \"\"\n" +
+			"    best_start = 0\n" +
+			"    best_len = 0\n" +
+			"    for i in range(len(s)):\n" +
+			"        for left, right in ((i, i), (i, i + 1)):\n" +
+			"            while left >= 0 and right < len(s) and s[left] == s[right]:\n" +
+			"                left -= 1\n" +
+			"                right += 1\n" +
+			"            if right - left - 1 > best_len:\n" +
+			"                best_start = left + 1\n" +
+			"                best_len = right - left - 1\n" +
+			"    return s[best_start:best_start + best_len]\n"
+		body := []string{
+			"    if not s:",
+			"        return \"\"",
+			"    best_start = 0",
+			"    best_len = 0",
+			"    for i in range(len(s)):",
+			"        for left, right in ((i, i), (i, i + 1)):",
+			"            while left >= 0 and right < len(s) and s[left] == s[right]:",
+			"                left -= 1",
+			"                right += 1",
+			"            if right - left - 1 > best_len:",
+			"                best_start = left + 1",
+			"                best_len = right - left - 1",
+			"    return s[best_start:best_start + best_len]",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("longest_palindrome(%s)", pyStr(drawn)), expected: pyStr(longestPalindromeGo(drawn))},
+			caseAlias{name: "example-2", call: `longest_palindrome("cbbd")`, expected: pyStr("bb")},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: `longest_palindrome("")`, expected: pyStr("")},
+			caseAlias{name: "single-char", call: `longest_palindrome("x")`, expected: pyStr("x")},
+			caseAlias{name: "all-same", call: `longest_palindrome("aaaa")`, expected: pyStr("aaaa")},
+			caseAlias{name: "tie-first", call: `longest_palindrome("babad")`, expected: pyStr("bab")},
+			caseAlias{name: "even-center", call: `longest_palindrome("abba")`, expected: pyStr("abba")},
+			caseAlias{name: "odd-center", call: `longest_palindrome("racecar")`, expected: pyStr("racecar")},
+			caseAlias{name: "no-repeat", call: `longest_palindrome("abc")`, expected: pyStr("a")},
+		)
+		stmt := fmt.Sprintf("修复断裂的%s：返回字符串中最长的回文子串（并列取最先出现者；空串返回空串）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{6: true, 9: true}, visible, hidden, answer)
+	}}
+}
+
+// longestPalindromeGo：期望值计算（与参考解同语义：枚举中心 + 奇偶双扩展，严格大于保首个）。
+func longestPalindromeGo(s string) string {
+	bestStart, bestLen := 0, 0
+	for i := 0; i < len(s); i++ {
+		for _, pair := range [2][2]int{{i, i}, {i, i + 1}} {
+			l, r := pair[0], pair[1]
+			for l >= 0 && r < len(s) && s[l] == s[r] {
+				l--
+				r++
+			}
+			if r-l-1 > bestLen {
+				bestStart, bestLen = l+1, r-l-1
+			}
+		}
+	}
+	return s[bestStart : bestStart+bestLen]
 }

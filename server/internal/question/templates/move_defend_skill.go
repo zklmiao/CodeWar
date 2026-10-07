@@ -1,4 +1,4 @@
-// 私有行动题·移动 / 防御 / 技能（8 模板：形式均为 complete；
+// 私有行动题·移动 / 防御 / 技能（10 模板：形式均为 complete；
 // 引擎本期只消费攻击题，移动/防御的消费方是 03/06 号票——本票只在工厂层实现并测试覆盖）。
 package templates
 
@@ -171,7 +171,7 @@ func defendSurviveL3() question.Template {
 	}}
 }
 
-// ---- 技能题（供 06 号票参照，本期引擎不消费） ----
+// ---- 技能题（06 号票消费；L1/L2 为 12 号票批 1 补缺口——cap<L3 时技能位不再空缺） ----
 
 // 技能 L3：蓄力爆伤（上限 60，参考解 7 行）。
 func skillBlastL3() question.Template {
@@ -218,6 +218,59 @@ func skillHealL3() question.Template {
 			caseAlias{name: "small", call: "heal_amount(8, 5)", expected: "5"},
 		)
 		stmt := fmt.Sprintf("治疗量 = min(已损, 强度)，不溢出（全满/零强度返回 0）。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 技能 L1：蓄能截断（单语法点，参考解 3 行；12 号票批 1）。
+func skillClampL1() question.Template {
+	meta := question.Meta{ID: "skill-clamp-L1-skill", Topic: question.TopicSyntax,
+		Difficulty: question.L1, Action: question.ActionSkill, Form: question.FormComplete}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		val, limit := rng.Int(-5, 40), rng.Int(10, 30)
+		kind := rng.Scenario("spell")
+		sig := "def clamp_charge(value: int, cap: int) -> int:"
+		answer := "def clamp_charge(value: int, cap: int) -> int:\n    if value > cap:\n        return cap\n    return value\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("clamp_charge(%d, %d)", val, limit), expected: fmt.Sprintf("%d", clampGo(val, limit))},
+			caseAlias{name: "example-2", call: "clamp_charge(30, 20)", expected: "20"},
+		)
+		hidden := cases(
+			caseAlias{name: "over-cap", call: "clamp_charge(25, 20)", expected: "20"},
+			caseAlias{name: "exact-cap", call: "clamp_charge(20, 20)", expected: "20"},
+			caseAlias{name: "below-cap", call: "clamp_charge(12, 20)", expected: "12"},
+			caseAlias{name: "zero", call: "clamp_charge(0, 20)", expected: "0"},
+			caseAlias{name: "negative", call: "clamp_charge(-3, 20)", expected: "-3"},
+			caseAlias{name: "zero-cap", call: "clamp_charge(7, 0)", expected: "0"},
+		)
+		stmt := fmt.Sprintf("%s蓄能截断：输入值不超过上限 cap 时原样返回，超过则返回 cap。\n%s", kind, examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 技能 L2：连锁治疗（循环 + min 截断，参考解 4 行；12 号票批 1）。
+func skillChainHealL2() question.Template {
+	meta := question.Meta{ID: "skill-chain-heal-L2-skill", Topic: question.TopicArray,
+		Difficulty: question.L2, Action: question.ActionSkill, Form: question.FormComplete,
+		Traps: []string{"empty-input"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		power := rng.Int(3, 12)
+		missing := rng.IntList(rng.Int(2, 5), 1, 15, question.ListOpts{})
+		kind := rng.Scenario("heal")
+		sig := "def chain_heal(power: int, missing: list) -> int:"
+		answer := "def chain_heal(power: int, missing: list) -> int:\n    total = 0\n    for m in missing:\n        total += m if m < power else power\n    return total\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("chain_heal(%d, %s)", power, pyList(missing)), expected: fmt.Sprintf("%d", chainHealGo(power, missing))},
+			caseAlias{name: "example-2", call: "chain_heal(5, [3, 8, 2])", expected: "10"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "chain_heal(6, [])", expected: "0"},
+			caseAlias{name: "all-capped", call: "chain_heal(5, [9, 12])", expected: "10"},
+			caseAlias{name: "none-capped", call: "chain_heal(9, [2, 4])", expected: "6"},
+			caseAlias{name: "mixed", call: "chain_heal(7, [4, 10, 2])", expected: "13"},
+			caseAlias{name: "single", call: "chain_heal(10, [6])", expected: "6"},
+		)
+		stmt := fmt.Sprintf("%s连锁：对每位队友回复 min(power, 其已损生命)，返回总治疗量。\n%s", kind, examplesText(visible))
 		return bareInstance(meta, stmt, sig, answer, visible, hidden)
 	}}
 }
@@ -306,4 +359,23 @@ func healGo(missing, power int) int {
 		return missing
 	}
 	return power
+}
+
+func clampGo(v, limit int) int {
+	if v > limit {
+		return limit
+	}
+	return v
+}
+
+func chainHealGo(power int, missing []int) int {
+	total := 0
+	for _, m := range missing {
+		if m < power {
+			total += m
+		} else {
+			total += power
+		}
+	}
+	return total
 }

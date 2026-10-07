@@ -1,21 +1,24 @@
-// 注册表：首批模板全集（黄金样板法，设计 002 §7）。
+// 注册表：模板全集（黄金样板法，设计 002 §7；12 号票扩容至 ~124，
+// 数量与矩阵覆盖目标见 coverage_test.go）。
 package templates
 
 import (
 	"codewar/server/internal/question"
 )
 
-// All：返回首批全部模板（攻击 18 + 移动 3 + 防御 3 + 技能 2 = 26）。
+// All：返回全部模板（04 首批 26 + 12 号票分批扩容）。
 func All() []question.Template {
 	return []question.Template{
 		// 语法与运算
 		syntaxAddL1(),
 		syntaxSumEvensL2(),
 		syntaxCountDivL3(),
+		syntaxBracketsL4(),
 		// 字符串处理
 		stringPalindromeL2(),
 		stringVowelCountL3(),
 		stringRunLengthL4(),
+		stringPalindromeSubstrL5(),
 		// 数组与列表
 		arrayDedupL2(),
 		arrayTwoSumL3(),
@@ -40,7 +43,9 @@ func All() []question.Template {
 		defendReduceL1(),
 		defendShieldL2(),
 		defendSurviveL3(),
-		// 技能（供 06 号票参照）
+		// 技能（06 号票消费；L1/L2 由 12 号票批 1 补 cap<L3 缺口）
+		skillClampL1(),
+		skillChainHealL2(),
 		skillBlastL3(),
 		skillHealL3(),
 	}
