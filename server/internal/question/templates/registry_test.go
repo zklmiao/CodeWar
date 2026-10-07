@@ -17,8 +17,9 @@ import (
 func testRegistry(t *testing.T) []question.Template {
 	t.Helper()
 	all := All()
-	if len(all) < 20 || len(all) > 30 {
-		t.Fatalf("首批模板应为 20-30 个，实际 %d", len(all))
+	// 数量目标（124）与矩阵覆盖归 coverage_test.go 管；此处只保注册表非空与 ID 唯一。
+	if len(all) < 26 {
+		t.Fatalf("模板应 ≥26 个（04 首批 26 + 12 号票扩容），实际 %d", len(all))
 	}
 	seen := map[string]bool{}
 	for _, tm := range all {
