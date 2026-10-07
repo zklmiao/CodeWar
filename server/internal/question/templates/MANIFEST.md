@@ -11,7 +11,11 @@
 | syntax-sum-evens-L2-attack | 语法与运算 | L2 | both | 是 | empty-input |
 | syntax-count-div-L3-attack | 语法与运算 | L3 | both | 是 | empty-input, no-match |
 | syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
+| syntax-reverse-digits-L3-attack | 语法与运算 | L3 | both | 是 | trailing-zero, negative, single-digit, zero |
+| syntax-big-add-L4-attack | 语法与运算 | L4 | both | 是 | carry-chain, different-length, zero-value |
 | syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
+| syntax-reverse-digits-L3-attack | 语法与运算 | L3 | both | 是 | trailing-zero, negative, single-digit, zero |
+| syntax-big-add-L4-attack | 语法与运算 | L4 | both | 是 | carry-chain, different-length, zero-value |
 | string-palindrome-L2-attack | 字符串处理 | L2 | both | 是 | empty-input, case-sensitive |
 | string-vowel-count-L3-attack | 字符串处理 | L3 | both | 是 | empty-input, no-vowel |
 | string-run-length-L4-attack | 字符串处理 | L4 | both | 是 | empty-input, single-char, long-run |
@@ -32,23 +36,29 @@
 
 注：递归题型 L1/L5 在 Rubric 下无语义（矩阵空语义格），归 12 号票。
 
-## 移动题（3，私有，形式 complete）
+## 移动题（6，私有，形式 complete；12 批 2 起带题型标注）
 
-| 模板 ID | 难度 | 黄金 | 陷阱 |
-|---|---|---|---|
-| move-manhattan-L1-move | L1 | 是 | — |
-| move-step-L2-move | L2 | 否 | already-there |
-| move-follow-L3-move | L3 | 否 | empty-input, invalid-char |
+| 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
+|---|---|---|---|---|
+| move-manhattan-L1-move | 语法与运算 | L1 | 是 | — |
+| move-step-L2-move | 数组与列表 | L2 | 否 | already-there |
+| move-follow-L3-move | 字符串处理 | L3 | 否 | empty-input, invalid-char |
+| move-vector-L2-move | 语法与运算 | L2 | 否 | unknown-char |
+| move-corridor-L3-move | 语法与运算 | L3 | 否 | empty-input, negative-steps, full-loop, wrap-around |
+| move-parse-L4-move | 语法与运算 | L4 | 否 | empty-input, no-number, multi-digit |
 
-## 防御题（3，私有，形式 complete）
+## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
 
-| 模板 ID | 难度 | 黄金 | 陷阱 |
-|---|---|---|---|
-| defend-reduce-L1-defend | L1 | 是 | — |
-| defend-shield-L2-defend | L2 | 否 | empty-input, overkill |
-| defend-survive-L3-defend | L3 | 否 | empty-input, lethal, full-block |
+| 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
+|---|---|---|---|---|
+| defend-reduce-L1-defend | 语法与运算 | L1 | 是 | — |
+| defend-shield-L2-defend | 数组与列表 | L2 | 否 | empty-input, overkill |
+| defend-survive-L3-defend | 哈希与计数 | L3 | 否 | empty-input, lethal, full-block |
+| defend-repair-L2-defend | 语法与运算 | L2 | 否 | over-cap, empty-input |
+| defend-hp-after-L3-defend | 语法与运算 | L3 | 否 | empty-input, shield-eats-all, overkill, exact-zero |
+| defend-siege-L4-defend | 语法与运算 | L4 | 否 | empty-input, full-block, degrade-chain, lethal |
 
-## 技能题（4，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
+## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
 | 模板 ID | 题型 | 难度 | 陷阱 |
 |---|---|---|---|
@@ -56,8 +66,10 @@
 | skill-chain-heal-L2-skill | 数组与列表 | L2 | empty-input |
 | skill-blast-L3-skill | 语法与运算 | L3 | —（overcap/negative 为普通边界用例） |
 | skill-heal-L3-skill | 哈希与计数 | L3 | no-missing, over-heal |
+| skill-mana-L2-skill | 语法与运算 | L2 | over-cap |
+| skill-arcana-L4-skill | 语法与运算 | L4 | zero-targets, decay-floor, overcap |
 
 ## 档位覆盖
 
 - 攻击：L1×1、L2×6、L3×6、L4×6（12 批1 +语法 L4）、L5×1（12 批1 +字符串）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
-- 移动/防御：L1~L3；技能：L1/L2（12 批1）+ L3 样板（技能题难度=所选上限档，06 号票消费）。
+- 移动/防御：L1~L4 各题型推进中（12 批 2 补语法主题）；技能：L1/L2（12 批1）+ L3 样板 + L4（12 批 2）（技能题难度=所选上限档，06 号票消费）。

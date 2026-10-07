@@ -104,29 +104,25 @@ var expectedGaps = []string{
 	"array-L1-attack", "array-L5-attack",
 	"hash-L1-attack", "hash-L5-attack",
 	"sort-L1-attack", "sort-L5-attack",
-	// 攻击关键格副本缺口（16）
-	"syntax-L3-attack#2", "syntax-L4-attack#2",
+	// 攻击关键格副本缺口（批2 后 14）
 	"string-L3-attack#2", "string-L4-attack#2", "string-L5-attack#2",
 	"array-L3-attack#2", "array-L4-attack#2", "array-L5-attack#2",
 	"hash-L3-attack#2", "hash-L4-attack#2", "hash-L5-attack#2",
 	"sort-L3-attack#2", "sort-L4-attack#2", "sort-L5-attack#2",
 	"recursion-L3-attack#2", "recursion-L4-attack#2",
-	// 移动格缺口（24）
-	"syntax-L2-move", "syntax-L3-move", "syntax-L4-move",
+	// 移动格缺口（批2 后 21）
 	"string-L1-move", "string-L2-move", "string-L4-move", "string-L5-move",
 	"array-L1-move", "array-L3-move", "array-L4-move", "array-L5-move",
 	"hash-L1-move", "hash-L2-move", "hash-L3-move", "hash-L4-move", "hash-L5-move",
 	"sort-L1-move", "sort-L2-move", "sort-L3-move", "sort-L4-move", "sort-L5-move",
 	"recursion-L2-move", "recursion-L3-move", "recursion-L4-move",
-	// 防御格缺口（24）
-	"syntax-L2-defend", "syntax-L3-defend", "syntax-L4-defend",
+	// 防御格缺口（批2 后 21）
 	"string-L1-defend", "string-L2-defend", "string-L3-defend", "string-L4-defend", "string-L5-defend",
 	"array-L1-defend", "array-L3-defend", "array-L4-defend", "array-L5-defend",
 	"hash-L1-defend", "hash-L2-defend", "hash-L4-defend", "hash-L5-defend",
 	"sort-L1-defend", "sort-L2-defend", "sort-L3-defend", "sort-L4-defend", "sort-L5-defend",
 	"recursion-L2-defend", "recursion-L3-defend", "recursion-L4-defend",
-	// 技能格缺口（批1 后 23）
-	"syntax-L2-skill", "syntax-L4-skill",
+	// 技能格缺口（批2 后 22）
 	"string-L1-skill", "string-L2-skill", "string-L3-skill", "string-L4-skill", "string-L5-skill",
 	"array-L1-skill", "array-L3-skill", "array-L4-skill", "array-L5-skill",
 	"hash-L1-skill", "hash-L2-skill", "hash-L4-skill", "hash-L5-skill",

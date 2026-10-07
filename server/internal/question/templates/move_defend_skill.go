@@ -1,5 +1,5 @@
-// 私有行动题·移动 / 防御 / 技能（10 模板：形式均为 complete；
-// 引擎本期只消费攻击题，移动/防御的消费方是 03/06 号票——本票只在工厂层实现并测试覆盖）。
+// 私有行动题·移动 / 防御 / 技能（04 首批 8 + 12 号票扩容：形式均为 complete，
+// 按「题型 × 难度 × 动作」矩阵格补齐；引擎本期只消费攻击题，私有题消费方是 03/06 号票）。
 package templates
 
 import (
@@ -275,6 +275,225 @@ func skillChainHealL2() question.Template {
 	}}
 }
 
+// ---- 语法主题私有题（12 号票批 2：该题型 × 难度 × 动作矩阵格补齐） ----
+
+// 移动 L2·语法：方向向量（查表 + get 兜底，参考解 3 行）。
+func moveVectorL2() question.Template {
+	meta := question.Meta{ID: "move-vector-L2-move", Topic: question.TopicSyntax,
+		Difficulty: question.L2, Action: question.ActionMove, Form: question.FormComplete,
+		Traps: []string{"unknown-char"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		ch := rng.Pick([]string{"U", "D", "L", "R"})
+		kind := rng.Scenario("rune")
+		sig := "def direction_vector(ch: str) -> list:"
+		answer := "def direction_vector(ch: str) -> list:\n    dx = {'U': 0, 'D': 0, 'L': -1, 'R': 1}\n    dy = {'U': -1, 'D': 1, 'L': 0, 'R': 0}\n    return [dx.get(ch, 0), dy.get(ch, 0)]\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("direction_vector(%s)", pyStr(ch)), expected: pyList(vectorGo(ch[0]))},
+			caseAlias{name: "example-2", call: `direction_vector("U")`, expected: "[0, -1]"},
+		)
+		hidden := cases(
+			caseAlias{name: "unknown-char", call: `direction_vector("X")`, expected: "[0, 0]"},
+			caseAlias{name: "down", call: `direction_vector("D")`, expected: "[0, 1]"},
+			caseAlias{name: "left", call: `direction_vector("L")`, expected: "[-1, 0]"},
+			caseAlias{name: "right", call: `direction_vector("R")`, expected: "[1, 0]"},
+			caseAlias{name: "empty", call: `direction_vector("")`, expected: "[0, 0]"},
+		)
+		stmt := fmt.Sprintf("%s号令翻译：单个方向字符 U/D/L/R 转为位移向量 [dx, dy]（U 为 y−1、R 为 x+1；未知字符返回 [0, 0]）。\n%s", kind, examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 移动 L3·语法：环形回廊行走（循环 + 取模环绕，参考解 5 行；Python 取模恒非负为考点）。
+func moveCorridorL3() question.Template {
+	meta := question.Meta{ID: "move-corridor-L3-move", Topic: question.TopicSyntax,
+		Difficulty: question.L3, Action: question.ActionMove, Form: question.FormComplete,
+		Traps: []string{"empty-input", "negative-steps", "full-loop", "wrap-around"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		length := rng.Int(5, 9)
+		start := rng.Int(0, length-1)
+		steps := rng.IntList(rng.Int(1, 4), -6, 9, question.ListOpts{})
+		sig := "def corridor_end(start: int, steps: list, length: int) -> int:"
+		answer := "def corridor_end(start: int, steps: list, length: int) -> int:\n    total = 0\n    for s in steps:\n        total += s\n    pos = (start + total) % length\n    return pos\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("corridor_end(%d, %s, %d)", start, pyList(steps), length), expected: fmt.Sprintf("%d", corridorGo(start, steps, length))},
+			caseAlias{name: "example-2", call: "corridor_end(4, [2], 5)", expected: "1"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "corridor_end(3, [], 5)", expected: "3"},
+			caseAlias{name: "negative-steps", call: "corridor_end(0, [-1], 5)", expected: "4"},
+			caseAlias{name: "full-loop", call: "corridor_end(0, [7], 7)", expected: "0"},
+			caseAlias{name: "wrap-around", call: "corridor_end(4, [4], 5)", expected: "3"},
+			caseAlias{name: "multi-wrap", call: "corridor_end(2, [3, 9, -4], 7)", expected: "3"},
+			caseAlias{name: "back-to-start", call: "corridor_end(1, [-1, 1], 6)", expected: "1"},
+		)
+		stmt := fmt.Sprintf("环形回廊行军：回廊编号 0..length−1，从 start 出发依次走 steps（负数即后退），返回最终编号。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 移动 L4·语法：行军令解压（多位数字解析 + 展开，参考解 10 行）。
+func moveParseL4() question.Template {
+	meta := question.Meta{ID: "move-parse-L4-move", Topic: question.TopicSyntax,
+		Difficulty: question.L4, Action: question.ActionMove, Form: question.FormComplete,
+		Traps: []string{"empty-input", "no-number", "multi-digit"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		compressed := rng.Pick([]string{"2R3L", "1U2D", "3L1R", "2R1L3U"})
+		kind := rng.Scenario("rune")
+		sig := "def parse_moves(compressed: str) -> list:"
+		answer := "def parse_moves(compressed: str) -> list:\n    moves = []\n    count = 0\n    for ch in compressed:\n        if ch.isdigit():\n            count = count * 10 + int(ch)\n        else:\n            times = max(count, 1)\n            moves.extend([ch] * times)\n            count = 0\n    return moves\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("parse_moves(%s)", pyStr(compressed)), expected: pyStrList(parseMovesGo(compressed))},
+			caseAlias{name: "example-2", call: `parse_moves("2R3L")`, expected: pyStrList([]string{"R", "R", "L", "L", "L"})},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: `parse_moves("")`, expected: pyStrList([]string{})},
+			caseAlias{name: "no-number", call: `parse_moves("RL")`, expected: pyStrList([]string{"R", "L"})},
+			caseAlias{name: "multi-digit", call: `parse_moves("12R3L")`, expected: pyStrList(append(repeatStr("R", 12), "L", "L", "L"))},
+			caseAlias{name: "single", call: `parse_moves("U")`, expected: pyStrList([]string{"U"})},
+			caseAlias{name: "mixed", call: `parse_moves("3DU")`, expected: pyStrList([]string{"D", "D", "D", "U"})},
+		)
+		stmt := fmt.Sprintf("解读%s行军令：形如 '2R3L' 的指令串展开为 ['R','R','L','L','L']（字母前的数字为该字母的重复次数，无数字则重复 1 次；次数可多位；约定指令串以字母结尾），返回指令列表。\n%s", kind, examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 防御 L2·语法：战地抢修（循环 + 上限截断，参考解 4 行）。
+func defendRepairL2() question.Template {
+	meta := question.Meta{ID: "defend-repair-L2-defend", Topic: question.TopicSyntax,
+		Difficulty: question.L2, Action: question.ActionDefend, Form: question.FormComplete,
+		Traps: []string{"over-cap", "empty-input"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		current := rng.Int(0, 20)
+		repairs := rng.IntList(rng.Int(1, 4), 3, 15, question.ListOpts{})
+		shieldCap := rng.Int(25, 40)
+		sig := "def repaired_shield(current: int, repairs: list, cap: int) -> int:"
+		answer := "def repaired_shield(current: int, repairs: list, cap: int) -> int:\n    shield = current\n    for r in repairs:\n        shield = min(shield + r, cap)\n    return shield\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("repaired_shield(%d, %s, %d)", current, pyList(repairs), shieldCap), expected: fmt.Sprintf("%d", repairedGo(current, repairs, shieldCap))},
+			caseAlias{name: "example-2", call: "repaired_shield(10, [20], 30)", expected: "30"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "repaired_shield(10, [], 30)", expected: "10"},
+			caseAlias{name: "over-cap", call: "repaired_shield(10, [50], 30)", expected: "30"},
+			caseAlias{name: "exact-cap", call: "repaired_shield(10, [20], 30)", expected: "30"},
+			caseAlias{name: "accumulate", call: "repaired_shield(5, [10, 10, 10], 25)", expected: "25"},
+			caseAlias{name: "at-cap", call: "repaired_shield(30, [5], 30)", expected: "30"},
+		)
+		stmt := fmt.Sprintf("战地抢修：护盾自 current 起，依次吸收 repairs 中每笔修复（不超过 cap 即截断），返回最终护盾值。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 防御 L3·语法：攻防结算（护盾优先吸收 + 溢出扣血，参考解 7 行）。
+func defendHpAfterL3() question.Template {
+	meta := question.Meta{ID: "defend-hp-after-L3-defend", Topic: question.TopicSyntax,
+		Difficulty: question.L3, Action: question.ActionDefend, Form: question.FormComplete,
+		Traps: []string{"empty-input", "shield-eats-all", "overkill", "exact-zero"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		hp := rng.Int(15, 30)
+		shield := rng.Int(0, 8)
+		hits := rng.IntList(rng.Int(1, 4), 1, 12, question.ListOpts{})
+		sig := "def hp_after(hp: int, shield: int, hits: list) -> int:"
+		answer := "def hp_after(hp: int, shield: int, hits: list) -> int:\n    for h in hits:\n        absorbed = min(h, shield)\n        shield -= absorbed\n        hp -= h - absorbed\n    if hp < 0:\n        hp = 0\n    return hp\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("hp_after(%d, %d, %s)", hp, shield, pyList(hits)), expected: fmt.Sprintf("%d", hpAfterGo(hp, shield, hits))},
+			caseAlias{name: "example-2", call: "hp_after(10, 3, [5, 9])", expected: "0"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "hp_after(20, 5, [])", expected: "20"},
+			caseAlias{name: "shield-eats-all", call: "hp_after(20, 5, [3])", expected: "20"},
+			caseAlias{name: "overkill", call: "hp_after(10, 0, [12])", expected: "0"},
+			caseAlias{name: "exact-zero", call: "hp_after(10, 0, [10])", expected: "0"},
+			caseAlias{name: "partial-absorb", call: "hp_after(20, 3, [4, 4])", expected: "15"},
+			caseAlias{name: "shield-depletes", call: "hp_after(15, 6, [4, 4, 4])", expected: "9"},
+		)
+		stmt := fmt.Sprintf("攻防结算：每击先由护盾等额吸收（护盾不回复），溢出部分扣血；血量下限 0，返回战后血量。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 防御 L4·语法：护甲消耗战（减伤 + 逐击衰减 + 阵亡短路，参考解 9 行）。
+func defendSiegeL4() question.Template {
+	meta := question.Meta{ID: "defend-siege-L4-defend", Topic: question.TopicSyntax,
+		Difficulty: question.L4, Action: question.ActionDefend, Form: question.FormComplete,
+		Traps: []string{"empty-input", "full-block", "degrade-chain", "lethal"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		hp := rng.Int(20, 40)
+		armor := rng.Int(2, 10)
+		hits := rng.IntList(rng.Int(2, 4), 3, 15, question.ListOpts{})
+		sig := "def siege_endure(hp: int, armor: int, hits: list) -> int:"
+		answer := "def siege_endure(hp: int, armor: int, hits: list) -> int:\n    for h in hits:\n        taken = h - armor\n        if taken < 0:\n            taken = 0\n        hp -= taken\n        armor = armor // 2\n        if hp <= 0:\n            return 0\n    return hp\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("siege_endure(%d, %d, %s)", hp, armor, pyList(hits)), expected: fmt.Sprintf("%d", siegeGo(hp, armor, hits))},
+			caseAlias{name: "example-2", call: "siege_endure(30, 8, [10, 9, 8])", expected: "17"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "siege_endure(30, 8, [])", expected: "30"},
+			caseAlias{name: "full-block", call: "siege_endure(30, 8, [5])", expected: "30"},
+			caseAlias{name: "lethal", call: "siege_endure(10, 0, [12])", expected: "0"},
+			caseAlias{name: "exact-lethal", call: "siege_endure(10, 0, [10])", expected: "0"},
+			caseAlias{name: "degrade-chain", call: "siege_endure(20, 3, [4, 4])", expected: "16"},
+			caseAlias{name: "mid-death", call: "siege_endure(9, 2, [8, 8])", expected: "0"},
+		)
+		stmt := fmt.Sprintf("护甲消耗战：每次受击先抵扣当前护甲（承伤 = max(0, 伤害 − 护甲)），受击后护甲减半（向下取整）；血量归零立即阵亡（返回 0），否则返回战后血量。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 技能 L2·语法：奥术涌动（算术 + 上限截断，参考解 4 行）。
+func skillManaL2() question.Template {
+	meta := question.Meta{ID: "skill-mana-L2-skill", Topic: question.TopicSyntax,
+		Difficulty: question.L2, Action: question.ActionSkill, Form: question.FormComplete,
+		Traps: []string{"over-cap"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		start := rng.Int(0, 30)
+		casts := rng.Int(0, 6)
+		manaCap := rng.Int(35, 60)
+		sig := "def mana_after(start: int, casts: int, cap: int) -> int:"
+		answer := "def mana_after(start: int, casts: int, cap: int) -> int:\n    mana = start + casts * 3\n    if mana > cap:\n        mana = cap\n    return mana\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("mana_after(%d, %d, %d)", start, casts, manaCap), expected: fmt.Sprintf("%d", manaAfterGo(start, casts, manaCap))},
+			caseAlias{name: "example-2", call: "mana_after(10, 5, 50)", expected: "25"},
+		)
+		hidden := cases(
+			caseAlias{name: "no-cast", call: "mana_after(10, 0, 50)", expected: "10"},
+			caseAlias{name: "over-cap", call: "mana_after(40, 5, 50)", expected: "50"},
+			caseAlias{name: "exact-cap", call: "mana_after(0, 2, 6)", expected: "6"},
+			caseAlias{name: "single-cast", call: "mana_after(5, 1, 30)", expected: "8"},
+			caseAlias{name: "small-cap", call: "mana_after(4, 4, 10)", expected: "10"},
+		)
+		stmt := fmt.Sprintf("奥术涌动：每次施法回复 3 点法力，casts 次施法后法力不超过 cap（超出截断），返回最终法力。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
+// 技能 L4·语法：连锁奥术（衰减链 + 下限钳制 + 总量截断，参考解 10 行）。
+func skillArcanaL4() question.Template {
+	meta := question.Meta{ID: "skill-arcana-L4-skill", Topic: question.TopicSyntax,
+		Difficulty: question.L4, Action: question.ActionSkill, Form: question.FormComplete,
+		Traps: []string{"zero-targets", "decay-floor", "overcap"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		base := rng.Int(5, 40)
+		targets := rng.Int(1, 6)
+		sig := "def chain_arcana(base: int, targets: int) -> int:"
+		answer := "def chain_arcana(base: int, targets: int) -> int:\n    total = 0\n    damage = base\n    for _ in range(targets):\n        total += damage\n        damage = damage // 2\n        if damage == 0:\n            damage = 1\n    if total > 99:\n        total = 99\n    return total\n"
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("chain_arcana(%d, %d)", base, targets), expected: fmt.Sprintf("%d", chainArcanaGo(base, targets))},
+			caseAlias{name: "example-2", call: "chain_arcana(16, 5)", expected: "31"},
+		)
+		hidden := cases(
+			caseAlias{name: "zero-targets", call: "chain_arcana(8, 0)", expected: "0"},
+			caseAlias{name: "single-target", call: "chain_arcana(8, 1)", expected: "8"},
+			caseAlias{name: "decay-floor", call: "chain_arcana(64, 8)", expected: "99"},
+			caseAlias{name: "overcap", call: "chain_arcana(50, 30)", expected: "99"},
+			caseAlias{name: "two-targets", call: "chain_arcana(50, 2)", expected: "75"},
+			caseAlias{name: "small-base", call: "chain_arcana(1, 3)", expected: "3"},
+		)
+		stmt := fmt.Sprintf("连锁奥术：首发伤害 = base，其后每个目标伤害减半（向下取整，至少 1）；总伤上限 99（超出截断），返回总伤害（targets=0 时为 0）。\n%s", examplesText(visible))
+		return bareInstance(meta, stmt, sig, answer, visible, hidden)
+	}}
+}
+
 // ---- 小型纯函数（期望值计算，与参考解同语义） ----
 
 func absGo(v int) int {
@@ -376,6 +595,123 @@ func chainHealGo(power int, missing []int) int {
 		} else {
 			total += power
 		}
+	}
+	return total
+}
+
+// vectorGo：期望值计算（与参考解同语义：未知字符 [0,0]）。
+func vectorGo(ch byte) []int {
+	dx := map[byte]int{'U': 0, 'D': 0, 'L': -1, 'R': 1}
+	dy := map[byte]int{'U': -1, 'D': 1, 'L': 0, 'R': 0}
+	return []int{dx[ch], dy[ch]}
+}
+
+// corridorGo：期望值计算（Python 取模恒非负语义，Go 需两次取模矫正）。
+func corridorGo(start int, steps []int, length int) int {
+	total := 0
+	for _, s := range steps {
+		total += s
+	}
+	return ((start+total)%length + length) % length
+}
+
+// parseMovesGo：期望值计算（与参考解同语义：无数字前缀重复 1 次）。
+func parseMovesGo(s string) []string {
+	var moves []string
+	count := 0
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch >= '0' && ch <= '9' {
+			count = count*10 + int(ch-'0')
+		} else {
+			times := count
+			if times <= 0 {
+				times = 1
+			}
+			for k := 0; k < times; k++ {
+				moves = append(moves, string(ch))
+			}
+			count = 0
+		}
+	}
+	return moves
+}
+
+// repeatStr：字符串重复（用例期望值构造）。
+func repeatStr(s string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = s
+	}
+	return out
+}
+
+// repairedGo：期望值计算（与参考解同语义：逐笔回复、上限截断）。
+func repairedGo(current int, repairs []int, cap int) int {
+	shield := current
+	for _, r := range repairs {
+		shield += r
+		if shield > cap {
+			shield = cap
+		}
+	}
+	return shield
+}
+
+// hpAfterGo：期望值计算（与参考解同语义：护盾优先吸收、溢出扣血、下限 0）。
+func hpAfterGo(hp, shield int, hits []int) int {
+	for _, h := range hits {
+		absorbed := h
+		if shield < absorbed {
+			absorbed = shield
+		}
+		shield -= absorbed
+		hp -= h - absorbed
+	}
+	if hp < 0 {
+		hp = 0
+	}
+	return hp
+}
+
+// siegeGo：期望值计算（与参考解同语义：减伤 + 护甲减半 + 阵亡短路）。
+func siegeGo(hp, armor int, hits []int) int {
+	for _, h := range hits {
+		taken := h - armor
+		if taken < 0 {
+			taken = 0
+		}
+		hp -= taken
+		armor /= 2
+		if hp <= 0 {
+			return 0
+		}
+	}
+	return hp
+}
+
+// manaAfterGo：期望值计算（与参考解同语义）。
+func manaAfterGo(start, casts, cap int) int {
+	mana := start + casts*3
+	if mana > cap {
+		mana = cap
+	}
+	return mana
+}
+
+// chainArcanaGo：期望值计算（与参考解同语义：减半衰减、下限 1、总量截断 99）。
+func chainArcanaGo(base, targets int) int {
+	total := 0
+	damage := base
+	for i := 0; i < targets; i++ {
+		total += damage
+		damage /= 2
+		if damage == 0 {
+			damage = 1
+		}
+	}
+	if total > 99 {
+		total = 99
 	}
 	return total
 }

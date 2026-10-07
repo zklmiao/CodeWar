@@ -14,6 +14,8 @@ func All() []question.Template {
 		syntaxSumEvensL2(),
 		syntaxCountDivL3(),
 		syntaxBracketsL4(),
+		syntaxReverseDigitsL3(),
+		syntaxBigAddL4(),
 		// 字符串处理
 		stringPalindromeL2(),
 		stringVowelCountL3(),
@@ -48,5 +50,14 @@ func All() []question.Template {
 		skillChainHealL2(),
 		skillBlastL3(),
 		skillHealL3(),
+		// 语法主题私有题（12 号票批 2）
+		moveVectorL2(),
+		moveCorridorL3(),
+		moveParseL4(),
+		defendRepairL2(),
+		defendHpAfterL3(),
+		defendSiegeL4(),
+		skillManaL2(),
+		skillArcanaL4(),
 	}
 }
