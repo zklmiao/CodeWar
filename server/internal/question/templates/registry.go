@@ -21,6 +21,10 @@ func All() []question.Template {
 		stringVowelCountL3(),
 		stringRunLengthL4(),
 		stringPalindromeSubstrL5(),
+		stringShoutL1(),
+		stringReverseWordsL3(),
+		stringVersionCompareL4(),
+		stringUniqueWindowL5(),
 		// 数组与列表
 		arrayDedupL2(),
 		arrayTwoSumL3(),
@@ -50,6 +54,11 @@ func All() []question.Template {
 		skillChainHealL2(),
 		skillBlastL3(),
 		skillHealL3(),
+		// 字符串主题私有题（12 号票批 3）
+		moveFirstStepL1(),
+		moveCountForwardL2(),
+		moveFacingL4(),
+		moveBeaconL5(),
 		// 语法主题私有题（12 号票批 2）
 		moveVectorL2(),
 		moveCorridorL3(),
