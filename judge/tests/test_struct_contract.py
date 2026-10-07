@@ -16,7 +16,7 @@ import pytest
 from judgesvc import executor
 
 needs_docker = pytest.mark.skipif(
-    not executor.docker_available(), reason="需要 docker 沙箱",
+    not executor.docker_ready(), reason="需要可用的 docker daemon（沙箱判题）",
 )
 
 # ===== 纯函数段：构造辅助库与卫兵（无需容器） =====

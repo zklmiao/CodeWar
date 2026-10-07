@@ -49,8 +49,27 @@ def _judge_error(duration_ms: int = 0) -> dict:
 
 
 def docker_available() -> bool:
-    """宿主 docker CLI 是否可用（测试 skip 探针与 server 启动预检共用）。"""
+    """宿主 docker CLI 是否存在（判题 fail-closed 快速判断，不探针 daemon）。"""
     return shutil.which("docker") is not None
+
+
+def docker_ready() -> bool:
+    """CLI 存在且 daemon 可达——仅测试门控用（收集期一次 `docker info`）。
+
+    区别于 docker_available：CLI 在而 daemon 宕（Docker Desktop 重启窗口/
+    服务挂掉）时，沙箱判题只会 fail-closed 返回 judge-error，测试必然失败。
+    该形态下应 skip 而非误报 19 连挂（本轮回归审查第二次踩中）。
+    """
+    if not docker_available():
+        return False
+    try:
+        proc = subprocess.run(
+            ["docker", "info", "--format", "{{.ServerVersion}}"],
+            capture_output=True, timeout=10,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def ensure_sandbox_image() -> bool:
