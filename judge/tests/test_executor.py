@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from judgesvc import executor  # noqa: E402
 
 needs_docker = pytest.mark.skipif(
-    not executor.docker_available(), reason="需要 docker 沙箱",
+    not executor.docker_ready(), reason="需要可用的 docker daemon（沙箱判题）",
 )
 
 CASES = [
@@ -194,12 +194,24 @@ def test_snoop_cannot_read_cases_from_disk():
 
 
 def test_calls_payload_has_no_expected():
-    # 进容器的 stdin 载荷 = 解法源码 + worker 脚本 + calls（只含 name/call）：
-    # 键白名单断言（多一个键都算泄漏——尤其不允许出现 expected）
-    payload = json.loads(executor.build_stdin_payload(GOOD, CASES, ""))
-    assert set(payload) == {"solution", "worker", "calls"}
-    assert all(set(c) == {"name", "call"} for c in payload["calls"])
-    assert "expected" not in payload["solution"]  # 期望值一秒都不进容器
+    # 进容器的 stdin 载荷 = 解法源码 + worker 脚本 + 构造辅助库 + calls：
+    # 键白名单断言（多一个键都算泄漏——尤其不允许出现 expected）。
+    # 15 号票 v2：calls 条目携带 setup/compare（题作者声明，非秘密），
+    # 但 expected 依旧一秒都不进容器——删除任何一行实现本测试必须变红。
+    payload = json.loads(executor.build_stdin_payload(GOOD, CASES, "", executor._HELPERS))
+    assert set(payload) == {"solution", "worker", "helpers", "calls"}
+    assert all(set(c) == {"name", "call", "setup", "compare"} for c in payload["calls"])
+    assert "expected" not in payload["solution"]
+    assert '"expected"' not in payload  # 整个载荷字符串级不含期望值键名
+
+    # v2 传播：声明了 setup/compare 的用例，声明内容逐字进载荷
+    cases_v2 = [{"name": "t", "call": "f(head)", "expected": "X",
+                 "setup": "head = list_to_nodes([1,2])",
+                 "compare": "def _normalize(got): return nodes_repr(got)"}]
+    p2 = json.loads(executor.build_stdin_payload(GOOD, cases_v2, "", executor._HELPERS))
+    assert p2["calls"][0]["setup"] == "head = list_to_nodes([1,2])"
+    assert p2["calls"][0]["compare"].startswith("def _normalize")
+    assert "X" not in p2  # 期望值绝不随载荷进容器
 
 
 def test_harness_prefailure_maps_to_judge_error():

@@ -25,7 +25,8 @@ func NewGRPCJudge(client judgepb.JudgeServiceClient, defaultTimeoutMs int32) *GR
 func (g *GRPCJudge) Judge(ctx context.Context, code string, tests []match.TestCase) match.JudgeResult {
 	cases := make([]*judgepb.TestCase, len(tests))
 	for i, t := range tests {
-		cases[i] = &judgepb.TestCase{Name: t.Name, Call: t.Call, Expected: t.Expected}
+		cases[i] = &judgepb.TestCase{Name: t.Name, Call: t.Call, Expected: t.Expected,
+			Setup: t.Setup, Compare: t.Compare}
 	}
 	// RPC 预算 = 执行超时 × 2（留出传输与排队余量）；判题失败即 judge-error，引擎不罚不锁
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(g.timeoutMs)*time.Millisecond*2)
