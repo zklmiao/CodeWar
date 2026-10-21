@@ -23,6 +23,12 @@ const user = useUserStore();
 const classesStore = useClassesStore();
 const route = useRoute();
 const disconnected = ref(false);
+// 09 号票：PvE 模式（?mode=pve&bot=easy|normal|hard）。必须在 playerFromUrl()
+// 之前初始化——viewer 的初值会读 isPve（const TDZ 会导致整个组件渲染失败）。
+const isPve = route.query.mode === "pve";
+const botDifficulty = ref(
+  BOT_OPTIONS.some((b) => b.key === route.query.bot) ? (route.query.bot as string) : "normal",
+);
 const viewer = ref(playerFromUrl());
 // 盲选暂存（choose 屏用；进入对局后由 URL query 权威）
 const pickedClass = ref((route.query.class as string) || "");
@@ -40,12 +46,6 @@ const cfgStrategy = ref(
     ? (route.query.strategy as string)
     : "climb",
 );
-// 09 号票：PvE 模式（?mode=pve&bot=easy|normal|hard）。人类固定 p1，对手为服务端 Bot。
-const isPve = route.query.mode === "pve";
-const botDifficulty = ref(
-  BOT_OPTIONS.some((b) => b.key === route.query.bot) ? (route.query.bot as string) : "normal",
-);
-
 function playerFromUrl(): string {
   // PvE 人机练习人类固定 p1（链接里 player 可省略）
   if (isPve) return "p1";

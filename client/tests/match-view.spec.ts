@@ -1,0 +1,62 @@
+// 09 号票：入口页挂载级回归——客户端 store 测试捕获不到组件 setup 期的
+// 运行时错误（曾因 playerFromUrl 早于 isPve 初始化触发 const TDZ，导致
+// router-view 整体空白）。这里真实挂载 MatchView，钉住 PvE 区块与链接生成。
+// @vitest-environment jsdom
+import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import { createMemoryHistory, createRouter } from "vue-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import MatchView from "../src/views/MatchView.vue";
+
+beforeEach(() => {
+  setActivePinia(createPinia());
+  // 职业数据在 onMounted 拉取；入口页测试不需要真实后端
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ json: async () => ({ classes: [] }) })),
+  );
+});
+
+async function mountAt(path: string) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/", component: MatchView }],
+  });
+  await router.push(path);
+  await router.isReady();
+  return mount(MatchView, { global: { plugins: [router] } });
+}
+
+describe("09 人机练习入口", () => {
+  it("渲染难度选择与 PvE 链接（默认普通）", async () => {
+    const wrapper = await mountAt("/");
+    expect(wrapper.find('[data-testid="pve-entry"]').exists()).toBe(true);
+    const link = wrapper.find('[data-testid="join-pve"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("href")).toContain("mode=pve");
+    expect(link.attributes("href")).toContain("bot=normal");
+    expect(link.attributes("href")).toContain("player=1");
+    wrapper.unmount();
+  });
+
+  it("切换难度后链接随选择更新", async () => {
+    const wrapper = await mountAt("/");
+    await wrapper.find('[data-testid="bot-difficulty"]').setValue("hard");
+    const href = wrapper.find('[data-testid="join-pve"]').attributes("href") ?? "";
+    expect(href).toContain("bot=hard");
+    expect(wrapper.find('[data-testid="join-pve"]').text()).toContain("困难");
+    wrapper.unmount();
+  });
+
+  it("PvE 链接沿用题型/难度上限/抽题策略；PvP 链接不带 mode", async () => {
+    const wrapper = await mountAt("/?topic=hash&cap=L5&strategy=uniform");
+    const pve = wrapper.find('[data-testid="join-pve"]').attributes("href") ?? "";
+    expect(pve).toContain("topic=hash");
+    expect(pve).toContain("cap=L5");
+    expect(pve).toContain("strategy=uniform");
+    const pvp = wrapper.find('[data-testid="join-p1"]').attributes("href") ?? "";
+    expect(pvp).not.toContain("mode=");
+    expect(pvp).toContain("player=1");
+    wrapper.unmount();
+  });
+});
