@@ -172,9 +172,10 @@ func TestCoverageGapReport(t *testing.T) {
 func TestRubricAndFormGates(t *testing.T) {
 	for _, tm := range All() {
 		m := tm.Meta()
-		// 形式约定：攻击 = both（双渲染），私有动作 = complete（引擎以 complete 消费）。
-		if m.Action == question.ActionAttack && m.Form != question.FormBoth {
-			t.Errorf("模板 %s：攻击题必须 Form=both", m.ID)
+		// 形式约定：攻击 = both（双渲染）或 complete（结构体/类题：答案内嵌 class
+		// 定义，单行签名无法承载骨架，故 complete-only；见批 7 说明）；私有动作 = complete。
+		if m.Action == question.ActionAttack && m.Form != question.FormBoth && m.Form != question.FormComplete {
+			t.Errorf("模板 %s：攻击题必须 Form=both 或 complete", m.ID)
 		}
 		if m.Action != question.ActionAttack && m.Form != question.FormComplete {
 			t.Errorf("模板 %s：私有动作题必须 Form=complete", m.ID)

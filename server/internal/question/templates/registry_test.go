@@ -198,7 +198,9 @@ func TestSmokeAnswerKeyPassesOwnTests(t *testing.T) {
 func runExecutor(py, judgeDir, code string, tests []match.TestCase) error {
 	triples := make([]map[string]string, len(tests))
 	for i, tc := range tests {
-		triples[i] = map[string]string{"name": tc.Name, "call": tc.Call, "expected": tc.Expected}
+		// 15 号票契约 v2：setup/compare 为空串时与旧路径字节级一致。
+		triples[i] = map[string]string{"name": tc.Name, "call": tc.Call, "expected": tc.Expected,
+			"setup": tc.Setup, "compare": tc.Compare}
 	}
 	payload, _ := json.Marshal(map[string]any{"code": code, "cases": triples})
 	script := `import json, sys

@@ -53,6 +53,31 @@
 
 注：递归题型 L1/L5 在 Rubric 下无语义（矩阵空语义格），归 12 号票。
 
+## 结构体类攻击题（17，形式 complete-only，15 号票契约四件套；12 号票批 7）
+
+> 矩阵之外的增量内容（124 目标已由批 1-6b 达成）：链表/树/LRU/调用序列按设计 002 附录 E 实现。
+> setup 构造入参、compare 规范化 got、expected 永不进容器；答案内嵌 class 定义，故不做双渲染。
+
+| 模板 ID | 题型 | 难度 | setup | compare | 陷阱 |
+|---|---|---|---|---|---|
+| struct-reverse-list-L3-attack | 数组与列表 | L3 | list_to_nodes | nodes_repr | empty-input, single-node, duplicates |
+| struct-delete-dups-L3-attack | 数组与列表 | L3 | list_to_nodes | nodes_repr | empty-input, all-same, last-pair |
+| struct-merge-lists-L5-attack | 数组与列表 | L5 | list_to_nodes ×2 | nodes_repr | empty-input, different-length, duplicates |
+| struct-has-cycle-L4-attack | 数组与列表 | L4 | list_to_nodes + make_cycle | —（bool） | empty-input, single-node, no-cycle |
+| struct-detect-cycle-L5-attack | 数组与列表 | L5 | list_to_nodes + make_cycle | nodes_repr | empty-input, no-cycle, cycle-at-head, single-cycle |
+| struct-add-two-L5-attack | 数组与列表 | L5 | list_to_nodes ×2 | nodes_repr | carry-chain, different-length, zero-value |
+| struct-sort-list-L4-attack | 数组与列表 | L4 | list_to_nodes | nodes_repr | empty-input, single-element, duplicates |
+| struct-remove-nth-L4-attack | 数组与列表 | L4 | list_to_nodes + n | nodes_repr | remove-head, remove-tail, single-element |
+| struct-reorder-L5-attack | 数组与列表 | L5 | list_to_nodes | nodes_repr | empty-input, single-element, even-length, odd-length |
+| struct-max-depth-L2-attack | 递归与简单 DP | L2 | build_tree | —（int） | empty-input, single-node |
+| struct-inorder-L3-attack | 递归与简单 DP | L3 | build_tree | —（list） | empty-input, single-node, skew |
+| struct-invert-tree-L3-attack | 递归与简单 DP | L3 | build_tree | tree_repr | empty-input, single-node, skew |
+| struct-level-order-L4-attack | 递归与简单 DP | L4 | build_tree | —（nested list） | empty-input, single-node, skew |
+| struct-right-view-L4-attack | 递归与简单 DP | L4 | build_tree | —（list） | empty-input, single-node, skew |
+| struct-lca-L4-attack | 递归与简单 DP | L4 | build_tree + p/q | tree_repr | root-is-lca, left-subtree, right-subtree |
+| struct-lru-L5-attack | 哈希与计数 | L5 | 构造 LRUCache | —（调用序列） | capacity-one, evict-order, miss |
+| struct-myqueue-L4-attack | 语法与运算 | L4 | 构造 MyQueue | —（调用序列） | fifo-order, empty-after |
+
 ## 移动题（6，私有，形式 complete；12 批 2 起带题型标注）
 
 | 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
