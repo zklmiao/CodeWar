@@ -24,9 +24,19 @@
 | array-dedup-L2-attack | 数组与列表 | L2 | both | 是 | empty-input, all-same |
 | array-two-sum-L3-attack | 数组与列表 | L3 | both | 是 | duplicates, negative |
 | array-window-sum-L4-attack | 数组与列表 | L4 | both | 是 | empty-input, single-element, all-negative, full-window |
+| array-sum-L1-attack | 数组与列表 | L1 | both | 否 | — |
+| array-max-index-L3-attack | 数组与列表 | L3 | both | 否 | duplicates, single-element, all-negative |
+| array-rotate-L4-attack | 数组与列表 | L4 | both | 否 | empty-input, k-larger-than-n, k-zero |
+| array-kadane-L5-attack | 数组与列表 | L5 | both | 否 | empty-input, single-negative, all-negative, all-positive |
+| array-subarray-sum-L5-attack | 数组与列表 | L5 | both | 否 | empty-input, negative-numbers, zero-k, no-match |
 | hash-count-L2-attack | 哈希与计数 | L2 | both | 是 | empty-input, absent |
 | hash-word-frequency-L3-attack | 哈希与计数 | L3 | both | 是 | repeated-max, single-distinct |
 | hash-top-k-L4-attack | 哈希与计数 | L4 | both | 是 | tie-order, single-distinct, k-equals-distinct |
+| hash-contains-L1-attack | 哈希与计数 | L1 | both | 否 | — |
+| hash-pair-sum-L3-attack | 哈希与计数 | L3 | both | 否 | empty-input, no-pair, duplicates |
+| hash-anagram-L4-attack | 哈希与计数 | L4 | both | 否 | different-length, empty-input, repeated-chars, no-match |
+| hash-longest-consecutive-L5-attack | 哈希与计数 | L5 | both | 否 | empty-input, all-same, no-consecutive, negative |
+| hash-min-steps-L5-attack | 哈希与计数 | L5 | both | 否 | empty-input, identical, no-overlap, one-empty |
 | sort-parity-L2-attack | 排序与贪心 | L2 | both | 是 | empty-input |
 | sort-kth-L3-attack | 排序与贪心 | L3 | both | 是 | single-element, duplicates |
 | sort-insertion-L4-attack | 排序与贪心 | L4 | both | 是 | empty-input, single-element, already-sorted, reverse-sorted |
@@ -50,6 +60,15 @@
 | move-count-forward-L2-move | 字符串处理 | L2 | 否 | empty-input, none-forward |
 | move-facing-L4-move | 字符串处理 | L4 | 否 | empty-input, full-circle, unknown-char |
 | move-beacon-L5-move | 字符串处理 | L5 | 否 | empty-input, undo-empty, undo-back, all-back |
+| move-nearest-L1-move | 数组与列表 | L1 | 否 | — |
+| move-clamp-L3-move | 数组与列表 | L3 | 否 | empty-input, clamp-high, clamp-low |
+| move-jump-L4-move | 数组与列表 | L4 | 否 | empty-input, stuck-zero, single-element |
+| move-paths-L5-move | 数组与列表 | L5 | 否 | zero-input, single-row, one-by-one, single-col |
+| move-lookup-L1-move | 哈希与计数 | L1 | 否 | — |
+| move-keycount-L2-move | 哈希与计数 | L2 | 否 | empty-input, absent |
+| move-first-repeat-L3-move | 哈希与计数 | L3 | 否 | empty-input, no-repeat, repeat-adjacent |
+| move-favorite-L4-move | 哈希与计数 | L4 | 否 | empty-input, tie-order, single-distinct |
+| move-schedule-L5-move | 哈希与计数 | L5 | 否 | empty-input, cooldown-zero, single-task, all-same |
 
 ## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
 
@@ -66,6 +85,14 @@
 | defend-censor-L3-defend | 字符串处理 | L3 | 否 | empty-input, no-match, all-match |
 | defend-scroll-L4-defend | 字符串处理 | L4 | 否 | empty-input, punctuation-only, mixed-case, odd-length |
 | defend-barrier-L5-defend | 字符串处理 | L5 | 否 | empty-input, all-open, all-close, concatenated |
+| defend-lowest-L1-defend | 数组与列表 | L1 | 否 | — |
+| defend-count-L3-defend | 数组与列表 | L3 | 否 | empty-input, no-match, all-match |
+| defend-bucket-L4-defend | 数组与列表 | L4 | 否 | empty-input, boundary-five, boundary-ten |
+| defend-window-L5-defend | 数组与列表 | L5 | 否 | empty-input, k-larger-than-n, all-negative, k-equals-n |
+| defend-membership-L1-defend | 哈希与计数 | L1 | 否 | — |
+| defend-duplicate-L2-defend | 哈希与计数 | L2 | 否 | empty-input, all-same |
+| defend-shared-L4-defend | 哈希与计数 | L4 | 否 | empty-input, no-overlap, duplicates-in-b |
+| defend-majority-L5-defend | 哈希与计数 | L5 | 否 | empty-input, no-majority, all-same, exactly-half |
 
 ## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
@@ -82,8 +109,16 @@
 | skill-draw-L3-skill | 字符串处理 | L3 | empty-input, no-digits |
 | skill-decompress-L4-skill | 字符串处理 | L4 | empty-input, multi-digit-count, no-count |
 | skill-ward-L5-skill | 字符串处理 | L5 | empty-input, single-char, all-same, whole-palindrome, worst-case |
+| skill-orb-L1-skill | 数组与列表 | L1 | — |
+| skill-charge-L3-skill | 数组与列表 | L3 | empty-input, below-threshold |
+| skill-merge-L4-skill | 数组与列表 | L4 | empty-input, single-element, no-adjacent |
+| skill-rob-L5-skill | 数组与列表 | L5 | empty-input, single-house, two-houses, all-zero |
+| skill-ingredient-L1-skill | 哈希与计数 | L1 | — |
+| skill-cost-L2-skill | 哈希与计数 | L2 | empty-input |
+| skill-stockdiff-L4-skill | 哈希与计数 | L4 | empty-input, only-left, only-right |
+| skill-craftreport-L5-skill | 哈希与计数 | L5 | empty-input, exact-match, deficit, surplus |
 
 ## 档位覆盖
 
-- 攻击：L1×1、L2×6、L3×6、L4×6（12 批1 +语法 L4）、L5×1（12 批1 +字符串）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
-- 移动/防御：L1~L4 各题型推进中（12 批 2 补语法主题）；技能：L1/L2（12 批1）+ L3 样板 + L4（12 批 2）（技能题难度=所选上限档，06 号票消费）。
+- 攻击：12 号票批 1-5 推进中（语法/字符串/数组/哈希题型已完成攻击矩阵，含关键格副本）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
+- 移动/防御/技能：语法/字符串/数组/哈希主题 L1-L5 已补齐（12 批 2-5）；剩余排序与递归主题（批 6）。

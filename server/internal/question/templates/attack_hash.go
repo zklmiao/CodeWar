@@ -151,3 +151,312 @@ func topKGo(nums []int, k int) []int {
 	out := append([]int{}, items[:k]...)
 	return out
 }
+
+// 哈希 L1：命中判定（单语法点：成员判断，参考解 1 行；12 号票批 5）。
+func hashContainsL1() question.Template {
+	meta := question.Meta{ID: "hash-contains-L1-attack", Topic: question.TopicHash,
+		Difficulty: question.L1, Action: question.ActionAttack, Form: question.FormBoth}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(2, 5), -5, 9, question.ListOpts{})
+		target := rng.Int(-5, 9)
+		kind := rng.Scenario("arena")
+		sig := "def contains(nums: list, target: int) -> bool:"
+		answer := "def contains(nums: list, target: int) -> bool:\n    return target in nums\n"
+		body := []string{"    return target in nums"}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("contains(%s, %d)", pyList(nums), target), expected: pyBool(hasIntGo(nums, target))},
+			caseAlias{name: "example-2", call: "contains([3, 1, 4], 4)", expected: "True"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "contains([], 3)", expected: "False"},
+			caseAlias{name: "single-hit", call: "contains([7], 7)", expected: "True"},
+			caseAlias{name: "single-miss", call: "contains([7], 8)", expected: "False"},
+			caseAlias{name: "duplicates", call: "contains([2, 2, 2], 2)", expected: "True"},
+			caseAlias{name: "negative", call: "contains([-3, 5], -3)", expected: "True"},
+		)
+		stmt := fmt.Sprintf("%s命中判定：判断目标值是否在列表中（空列表为 False）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{0: true}, visible, hidden, answer)
+	}}
+}
+
+// 哈希 L3（关键格副本）：两数配对存在性（集合 + 补数查找，参考解 6 行；12 号票批 5，
+// 算法内核参考 codetop59 两数之和，题面经情境池重包装）。
+func hashPairSumL3() question.Template {
+	meta := question.Meta{ID: "hash-pair-sum-L3-attack", Topic: question.TopicHash,
+		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "no-pair", "duplicates"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(3, 6), -9, 9, question.ListOpts{})
+		target := rng.Int(-8, 12)
+		kind := rng.Scenario("arena")
+		sig := "def has_pair(nums: list, target: int) -> bool:"
+		answer := "def has_pair(nums: list, target: int) -> bool:\n    seen = set()\n    for x in nums:\n        if target - x in seen:\n            return True\n        seen.add(x)\n    return False\n"
+		body := []string{
+			"    seen = set()",
+			"    for x in nums:",
+			"        if target - x in seen:",
+			"            return True",
+			"        seen.add(x)",
+			"    return False",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("has_pair(%s, %d)", pyList(nums), target), expected: pyBool(hasPairGo(nums, target))},
+			caseAlias{name: "example-2", call: "has_pair([1, 2, 3], 5)", expected: "True"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "has_pair([], 0)", expected: "False"},
+			caseAlias{name: "no-pair", call: "has_pair([1, 2, 3], 6)", expected: "False"},
+			caseAlias{name: "duplicates", call: "has_pair([3, 3], 6)", expected: "True"},
+			caseAlias{name: "single-element", call: "has_pair([5], 10)", expected: "False"},
+			caseAlias{name: "negatives", call: "has_pair([-1, 1], 0)", expected: "True"},
+		)
+		stmt := fmt.Sprintf("%s双人合击：判断列表中是否存在两个不同下标元素之和等于 target（空列表为 False）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{2: true, 4: true}, visible, hidden, answer)
+	}}
+}
+
+// 哈希 L4（关键格副本）：异位词判定（长度守卫 + 计数增减，参考解 10 行；12 号票批 5）。
+func hashAnagramL4() question.Template {
+	meta := question.Meta{ID: "hash-anagram-L4-attack", Topic: question.TopicHash,
+		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"different-length", "empty-input", "repeated-chars", "no-match"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		word := rng.Str(rng.Int(3, 5), "alpha")
+		kind := rng.Scenario("rune")
+		sig := "def is_anagram(a: str, b: str) -> bool:"
+		answer := "def is_anagram(a: str, b: str) -> bool:\n" +
+			"    if len(a) != len(b):\n" +
+			"        return False\n" +
+			"    counts = {}\n" +
+			"    for ch in a:\n" +
+			"        counts[ch] = counts.get(ch, 0) + 1\n" +
+			"    for ch in b:\n" +
+			"        if ch not in counts or counts[ch] == 0:\n" +
+			"            return False\n" +
+			"        counts[ch] -= 1\n" +
+			"    return True\n"
+		body := []string{
+			"    if len(a) != len(b):",
+			"        return False",
+			"    counts = {}",
+			"    for ch in a:",
+			"        counts[ch] = counts.get(ch, 0) + 1",
+			"    for ch in b:",
+			"        if ch not in counts or counts[ch] == 0:",
+			"            return False",
+			"        counts[ch] -= 1",
+			"    return True",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("is_anagram(%s, %s)", pyStr(word), pyStr(reverseStr(word))), expected: pyBool(isAnagramGo(word, reverseStr(word)))},
+			caseAlias{name: "example-2", call: `is_anagram("rat", "car")`, expected: "False"},
+		)
+		hidden := cases(
+			caseAlias{name: "different-length", call: `is_anagram("a", "ab")`, expected: "False"},
+			caseAlias{name: "empty-input", call: `is_anagram("", "")`, expected: "True"},
+			caseAlias{name: "repeated-chars", call: `is_anagram("aab", "aba")`, expected: "True"},
+			caseAlias{name: "no-match", call: `is_anagram("aacc", "ccac")`, expected: "False"},
+			caseAlias{name: "classic", call: `is_anagram("abc", "cba")`, expected: "True"},
+		)
+		stmt := fmt.Sprintf("%s铭文异位：判断两个字符串是否为异位词（字符种类与数量完全一致；空串为 True）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{4: true, 6: true}, visible, hidden, answer)
+	}}
+}
+
+// 哈希 L5：最长连续序列（集合去重 + 起点扩展，参考解 13 行；12 号票批 5，
+// 算法内核参考 codetop59 最长连续序列，题面经情境池重包装）。
+func hashLongestConsecutiveL5() question.Template {
+	meta := question.Meta{ID: "hash-longest-consecutive-L5-attack", Topic: question.TopicHash,
+		Difficulty: question.L5, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "all-same", "no-consecutive", "negative"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(4, 7), -5, 9, question.ListOpts{})
+		kind := rng.Scenario("arena")
+		sig := "def longest_consecutive(nums: list) -> int:"
+		answer := "def longest_consecutive(nums: list) -> int:\n" +
+			"    values = set(nums)\n" +
+			"    best = 0\n" +
+			"    for x in values:\n" +
+			"        if x - 1 in values:\n" +
+			"            continue\n" +
+			"        current = x\n" +
+			"        length = 1\n" +
+			"        while current + 1 in values:\n" +
+			"            current += 1\n" +
+			"            length += 1\n" +
+			"        if length > best:\n" +
+			"            best = length\n" +
+			"    return best\n"
+		body := []string{
+			"    values = set(nums)",
+			"    best = 0",
+			"    for x in values:",
+			"        if x - 1 in values:",
+			"            continue",
+			"        current = x",
+			"        length = 1",
+			"        while current + 1 in values:",
+			"            current += 1",
+			"            length += 1",
+			"        if length > best:",
+			"            best = length",
+			"    return best",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("longest_consecutive(%s)", pyList(nums)), expected: fmt.Sprintf("%d", longestConsecutiveGo(nums))},
+			caseAlias{name: "example-2", call: "longest_consecutive([100, 4, 200, 1, 3, 2])", expected: "4"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "longest_consecutive([])", expected: "0"},
+			caseAlias{name: "all-same", call: "longest_consecutive([1, 1, 1])", expected: "1"},
+			caseAlias{name: "no-consecutive", call: "longest_consecutive([10, 5, 20])", expected: "1"},
+			caseAlias{name: "negative", call: "longest_consecutive([-2, -1, 0, 5])", expected: "3"},
+			caseAlias{name: "unsorted", call: "longest_consecutive([1, 2, 0, 1])", expected: "3"},
+			caseAlias{name: "gap", call: "longest_consecutive([1, 2, 4, 5, 6])", expected: "3"},
+		)
+		stmt := fmt.Sprintf("%s连续序列：求数组中最长连续整数序列的长度（不要求原序相邻；空数组为 0）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{3: true, 7: true}, visible, hidden, answer)
+	}}
+}
+
+// 哈希 L5（关键格副本）：异位词最少删除（双向计数差 + 绝对值汇总，参考解 12 行；12 号票批 5，
+// 算法内核参考 codetop59 两个字符串的删除操作，题面经情境池重包装）。
+func hashMinStepsL5() question.Template {
+	meta := question.Meta{ID: "hash-min-steps-L5-attack", Topic: question.TopicHash,
+		Difficulty: question.L5, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "identical", "no-overlap", "one-empty"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		word := rng.Str(rng.Int(3, 5), "alpha")
+		kind := rng.Scenario("rune")
+		sig := "def min_steps(a: str, b: str) -> int:"
+		answer := "def min_steps(a: str, b: str) -> int:\n" +
+			"    counts = {}\n" +
+			"    for ch in a:\n" +
+			"        counts[ch] = counts.get(ch, 0) + 1\n" +
+			"    for ch in b:\n" +
+			"        counts[ch] = counts.get(ch, 0) - 1\n" +
+			"    steps = 0\n" +
+			"    for v in counts.values():\n" +
+			"        if v > 0:\n" +
+			"            steps += v\n" +
+			"        elif v < 0:\n" +
+			"            steps -= v\n" +
+			"    return steps\n"
+		body := []string{
+			"    counts = {}",
+			"    for ch in a:",
+			"        counts[ch] = counts.get(ch, 0) + 1",
+			"    for ch in b:",
+			"        counts[ch] = counts.get(ch, 0) - 1",
+			"    steps = 0",
+			"    for v in counts.values():",
+			"        if v > 0:",
+			"            steps += v",
+			"        elif v < 0:",
+			"            steps -= v",
+			"    return steps",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("min_steps(%s, %s)", pyStr(word), pyStr(reverseStr(word))), expected: fmt.Sprintf("%d", minStepsGo(word, reverseStr(word)))},
+			caseAlias{name: "example-2", call: `min_steps("aab", "abb")`, expected: "2"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: `min_steps("", "")`, expected: "0"},
+			caseAlias{name: "identical", call: `min_steps("a", "a")`, expected: "0"},
+			caseAlias{name: "no-overlap", call: `min_steps("a", "b")`, expected: "2"},
+			caseAlias{name: "one-empty", call: `min_steps("", "ab")`, expected: "2"},
+			caseAlias{name: "classic", call: `min_steps("abc", "cba")`, expected: "0"},
+			caseAlias{name: "count-diff", call: `min_steps("aaa", "a")`, expected: "2"},
+		)
+		stmt := fmt.Sprintf("%s铭文对齐：最少删除多少个字符能使两串互为异位词（只能删字符）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{2: true, 4: true}, visible, hidden, answer)
+	}}
+}
+
+// ---- 期望值计算（与参考解同语义） ----
+
+func hasIntGo(nums []int, t int) bool {
+	for _, v := range nums {
+		if v == t {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPairGo(nums []int, target int) bool {
+	seen := map[int]bool{}
+	for _, x := range nums {
+		if seen[target-x] {
+			return true
+		}
+		seen[x] = true
+	}
+	return false
+}
+
+func reverseStr(s string) string {
+	b := []byte(s)
+	for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
+		b[i], b[j] = b[j], b[i]
+	}
+	return string(b)
+}
+
+func isAnagramGo(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := map[byte]int{}
+	for i := 0; i < len(a); i++ {
+		counts[a[i]]++
+	}
+	for i := 0; i < len(b); i++ {
+		if counts[b[i]] == 0 {
+			return false
+		}
+		counts[b[i]]--
+	}
+	return true
+}
+
+func longestConsecutiveGo(nums []int) int {
+	values := map[int]bool{}
+	for _, v := range nums {
+		values[v] = true
+	}
+	best := 0
+	for x := range values {
+		if values[x-1] {
+			continue
+		}
+		current, length := x, 1
+		for values[current+1] {
+			current++
+			length++
+		}
+		if length > best {
+			best = length
+		}
+	}
+	return best
+}
+
+func minStepsGo(a, b string) int {
+	counts := map[byte]int{}
+	for i := 0; i < len(a); i++ {
+		counts[a[i]]++
+	}
+	for i := 0; i < len(b); i++ {
+		counts[b[i]]--
+	}
+	steps := 0
+	for _, v := range counts {
+		if v > 0 {
+			steps += v
+		} else {
+			steps -= v
+		}
+	}
+	return steps
+}
