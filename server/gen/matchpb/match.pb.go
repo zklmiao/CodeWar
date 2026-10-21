@@ -169,7 +169,10 @@ type Snapshot struct {
 	// 三题面板（03 号票）：attack 镜像 + 查看者私有 move/defend。
 	// 快照按连接下发，私有题只带查看者自己的（与事件流的 PanelReady 不同——
 	// 共享事件流必须对所有连接一致以保序号单调，故 PanelReady 同时携带双方私有面板）。
-	Panel         *Panel `protobuf:"bytes,9,opt,name=panel,proto3" json:"panel,omitempty"`
+	Panel *Panel `protobuf:"bytes,9,opt,name=panel,proto3" json:"panel,omitempty"`
+	// 本场对局配置（05 号票，首个 join 锁定后整场不变；对局内只读展示——
+	// 展示服务端锁定的权威值而非本窗口 URL 参数，两窗口参数冲突时不撒谎）。
+	MatchConfig   *MatchConfig `protobuf:"bytes,10,opt,name=match_config,json=matchConfig,proto3" json:"match_config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -260,6 +263,77 @@ func (x *Snapshot) GetPanel() *Panel {
 	return nil
 }
 
+func (x *Snapshot) GetMatchConfig() *MatchConfig {
+	if x != nil {
+		return x.MatchConfig
+	}
+	return nil
+}
+
+// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。
+type MatchConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型
+	Topic string `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	// 难度上限档 1..5（L1..L5，即出题区间 [L1, cap] 的上限，也是风险系数档位）
+	Cap uint32 `protobuf:"varint,2,opt,name=cap,proto3" json:"cap,omitempty"`
+	// 抽题策略 uniform（均匀随机）| climb（对局爬坡）
+	Strategy      string `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MatchConfig) Reset() {
+	*x = MatchConfig{}
+	mi := &file_codewar_match_v1_match_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MatchConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MatchConfig) ProtoMessage() {}
+
+func (x *MatchConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_codewar_match_v1_match_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MatchConfig.ProtoReflect.Descriptor instead.
+func (*MatchConfig) Descriptor() ([]byte, []int) {
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MatchConfig) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *MatchConfig) GetCap() uint32 {
+	if x != nil {
+		return x.Cap
+	}
+	return 0
+}
+
+func (x *MatchConfig) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
 type PlayerView struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // "p1" | "p2"
@@ -281,7 +355,7 @@ type PlayerView struct {
 
 func (x *PlayerView) Reset() {
 	*x = PlayerView{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[2]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +367,7 @@ func (x *PlayerView) String() string {
 func (*PlayerView) ProtoMessage() {}
 
 func (x *PlayerView) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[2]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,7 +380,7 @@ func (x *PlayerView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayerView.ProtoReflect.Descriptor instead.
 func (*PlayerView) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{2}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PlayerView) GetId() string {
@@ -369,7 +443,7 @@ type Position struct {
 
 func (x *Position) Reset() {
 	*x = Position{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[3]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +455,7 @@ func (x *Position) String() string {
 func (*Position) ProtoMessage() {}
 
 func (x *Position) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[3]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +468,7 @@ func (x *Position) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Position.ProtoReflect.Descriptor instead.
 func (*Position) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{3}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Position) GetRow() int32 {
@@ -423,7 +497,7 @@ type Problem struct {
 
 func (x *Problem) Reset() {
 	*x = Problem{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[4]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +509,7 @@ func (x *Problem) String() string {
 func (*Problem) ProtoMessage() {}
 
 func (x *Problem) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[4]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +522,7 @@ func (x *Problem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Problem.ProtoReflect.Descriptor instead.
 func (*Problem) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{4}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Problem) GetId() string {
@@ -491,7 +565,7 @@ type PrivatePanel struct {
 
 func (x *PrivatePanel) Reset() {
 	*x = PrivatePanel{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[5]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +577,7 @@ func (x *PrivatePanel) String() string {
 func (*PrivatePanel) ProtoMessage() {}
 
 func (x *PrivatePanel) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[5]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +590,7 @@ func (x *PrivatePanel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrivatePanel.ProtoReflect.Descriptor instead.
 func (*PrivatePanel) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{5}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PrivatePanel) GetMove() *Problem {
@@ -554,7 +628,7 @@ type PanelReady struct {
 
 func (x *PanelReady) Reset() {
 	*x = PanelReady{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[6]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -566,7 +640,7 @@ func (x *PanelReady) String() string {
 func (*PanelReady) ProtoMessage() {}
 
 func (x *PanelReady) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[6]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -579,7 +653,7 @@ func (x *PanelReady) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PanelReady.ProtoReflect.Descriptor instead.
 func (*PanelReady) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{6}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PanelReady) GetAttack() *Problem {
@@ -617,7 +691,7 @@ type Panel struct {
 
 func (x *Panel) Reset() {
 	*x = Panel{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[7]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +703,7 @@ func (x *Panel) String() string {
 func (*Panel) ProtoMessage() {}
 
 func (x *Panel) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[7]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +716,7 @@ func (x *Panel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Panel.ProtoReflect.Descriptor instead.
 func (*Panel) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{7}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Panel) GetAttack() *Problem {
@@ -685,7 +759,7 @@ type MatchResult struct {
 
 func (x *MatchResult) Reset() {
 	*x = MatchResult{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[8]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -697,7 +771,7 @@ func (x *MatchResult) String() string {
 func (*MatchResult) ProtoMessage() {}
 
 func (x *MatchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[8]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -710,7 +784,7 @@ func (x *MatchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MatchResult.ProtoReflect.Descriptor instead.
 func (*MatchResult) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{8}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MatchResult) GetWinner() string {
@@ -747,7 +821,7 @@ type Envelope struct {
 
 func (x *Envelope) Reset() {
 	*x = Envelope{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[9]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -759,7 +833,7 @@ func (x *Envelope) String() string {
 func (*Envelope) ProtoMessage() {}
 
 func (x *Envelope) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[9]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -772,7 +846,7 @@ func (x *Envelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Envelope.ProtoReflect.Descriptor instead.
 func (*Envelope) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{9}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Envelope) GetSeq() uint32 {
@@ -916,7 +990,7 @@ type RoundStarted struct {
 
 func (x *RoundStarted) Reset() {
 	*x = RoundStarted{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[10]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -928,7 +1002,7 @@ func (x *RoundStarted) String() string {
 func (*RoundStarted) ProtoMessage() {}
 
 func (x *RoundStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[10]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -941,7 +1015,7 @@ func (x *RoundStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoundStarted.ProtoReflect.Descriptor instead.
 func (*RoundStarted) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{10}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RoundStarted) GetRound() uint32 {
@@ -978,7 +1052,7 @@ type SubmissionJudged struct {
 
 func (x *SubmissionJudged) Reset() {
 	*x = SubmissionJudged{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[11]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -990,7 +1064,7 @@ func (x *SubmissionJudged) String() string {
 func (*SubmissionJudged) ProtoMessage() {}
 
 func (x *SubmissionJudged) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[11]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1003,7 +1077,7 @@ func (x *SubmissionJudged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmissionJudged.ProtoReflect.Descriptor instead.
 func (*SubmissionJudged) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{11}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SubmissionJudged) GetPlayer() string {
@@ -1078,7 +1152,7 @@ type ActionResolved struct {
 
 func (x *ActionResolved) Reset() {
 	*x = ActionResolved{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1090,7 +1164,7 @@ func (x *ActionResolved) String() string {
 func (*ActionResolved) ProtoMessage() {}
 
 func (x *ActionResolved) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[12]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1177,7 @@ func (x *ActionResolved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionResolved.ProtoReflect.Descriptor instead.
 func (*ActionResolved) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{12}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ActionResolved) GetAttacker() string {
@@ -1175,7 +1249,7 @@ type HpChanged struct {
 
 func (x *HpChanged) Reset() {
 	*x = HpChanged{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1187,7 +1261,7 @@ func (x *HpChanged) String() string {
 func (*HpChanged) ProtoMessage() {}
 
 func (x *HpChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[13]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1200,7 +1274,7 @@ func (x *HpChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HpChanged.ProtoReflect.Descriptor instead.
 func (*HpChanged) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{13}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HpChanged) GetPlayer() string {
@@ -1246,7 +1320,7 @@ type MatchEnded struct {
 
 func (x *MatchEnded) Reset() {
 	*x = MatchEnded{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1258,7 +1332,7 @@ func (x *MatchEnded) String() string {
 func (*MatchEnded) ProtoMessage() {}
 
 func (x *MatchEnded) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[14]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1271,7 +1345,7 @@ func (x *MatchEnded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MatchEnded.ProtoReflect.Descriptor instead.
 func (*MatchEnded) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{14}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MatchEnded) GetWinner() string {
@@ -1308,7 +1382,7 @@ type PlayerElo struct {
 
 func (x *PlayerElo) Reset() {
 	*x = PlayerElo{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1320,7 +1394,7 @@ func (x *PlayerElo) String() string {
 func (*PlayerElo) ProtoMessage() {}
 
 func (x *PlayerElo) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[15]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,7 +1407,7 @@ func (x *PlayerElo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlayerElo.ProtoReflect.Descriptor instead.
 func (*PlayerElo) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{15}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PlayerElo) GetPlayer() string {
@@ -1377,7 +1451,7 @@ type SubmissionRejected struct {
 
 func (x *SubmissionRejected) Reset() {
 	*x = SubmissionRejected{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[16]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1389,7 +1463,7 @@ func (x *SubmissionRejected) String() string {
 func (*SubmissionRejected) ProtoMessage() {}
 
 func (x *SubmissionRejected) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[16]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1402,7 +1476,7 @@ func (x *SubmissionRejected) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmissionRejected.ProtoReflect.Descriptor instead.
 func (*SubmissionRejected) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{16}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SubmissionRejected) GetPlayer() string {
@@ -1433,7 +1507,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[17]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1445,7 +1519,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[17]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1458,7 +1532,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{17}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ClientMessage) GetPayload() isClientMessage_Payload {
@@ -1528,7 +1602,7 @@ type SetTargeting struct {
 
 func (x *SetTargeting) Reset() {
 	*x = SetTargeting{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1540,7 +1614,7 @@ func (x *SetTargeting) String() string {
 func (*SetTargeting) ProtoMessage() {}
 
 func (x *SetTargeting) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[18]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1553,7 +1627,7 @@ func (x *SetTargeting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTargeting.ProtoReflect.Descriptor instead.
 func (*SetTargeting) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{18}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetTargeting) GetTargeting() *Targeting {
@@ -1575,15 +1649,25 @@ type JoinRequest struct {
 	// 对局开始前快照不下发对方职业。缺省/未知值 = legacy 锚点（01~03 号票行为，
 	// HP100/攻22/相邻1格/无技能——既有测试与匿名链路的向后兼容锚点）。
 	// 非法组合（职业不存在/技能不属于该职业）= 建连被拒（fail-closed）。
-	Class         string `protobuf:"bytes,3,opt,name=class,proto3" json:"class,omitempty"`
-	Skill         string `protobuf:"bytes,4,opt,name=skill,proto3" json:"skill,omitempty"`
+	Class string `protobuf:"bytes,3,opt,name=class,proto3" json:"class,omitempty"`
+	Skill string `protobuf:"bytes,4,opt,name=skill,proto3" json:"skill,omitempty"`
+	// ===== 对局配置（05 号票；页面 URL 参数 ?topic=&cap=&strategy= 经 join 注入）=====
+	// 仅首个 join（创建引擎时）被采纳并整场锁定；后续 join 携带的配置参数被
+	// 忽略并记服务端日志（热座第二窗口复制粘贴同一链接，参数天然一致）。
+	// 非法值回退默认并 WARN（配置不是安全边界，不拒连——与职业组合 fail-closed
+	// 不同：错配置只影响体验，错身份会污染战绩）。
+	// 空值 = 默认：题型全部 / cap L3 / climb（匿名缺省链路零行为变化）。
+	// 题型只过滤共享攻击题，行动题跨题型（spec「出题系统」）。
+	Topic         string `protobuf:"bytes,5,opt,name=topic,proto3" json:"topic,omitempty"`       // 题型 key；非法/空 = 全部 6 题型
+	Cap           string `protobuf:"bytes,6,opt,name=cap,proto3" json:"cap,omitempty"`           // "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点）
+	Strategy      string `protobuf:"bytes,7,opt,name=strategy,proto3" json:"strategy,omitempty"` // uniform | climb；非法/空 = climb
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1679,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[19]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1692,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{19}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *JoinRequest) GetPlayer() string {
@@ -1639,6 +1723,27 @@ func (x *JoinRequest) GetSkill() string {
 	return ""
 }
 
+func (x *JoinRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetCap() string {
+	if x != nil {
+		return x.Cap
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
 type SubmitRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -1655,7 +1760,7 @@ type SubmitRequest struct {
 
 func (x *SubmitRequest) Reset() {
 	*x = SubmitRequest{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1667,7 +1772,7 @@ func (x *SubmitRequest) String() string {
 func (*SubmitRequest) ProtoMessage() {}
 
 func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[20]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1680,7 +1785,7 @@ func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRequest) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{20}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SubmitRequest) GetCode() string {
@@ -1730,7 +1835,7 @@ type Targeting struct {
 
 func (x *Targeting) Reset() {
 	*x = Targeting{}
-	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1847,7 @@ func (x *Targeting) String() string {
 func (*Targeting) ProtoMessage() {}
 
 func (x *Targeting) ProtoReflect() protoreflect.Message {
-	mi := &file_codewar_match_v1_match_proto_msgTypes[21]
+	mi := &file_codewar_match_v1_match_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1860,7 @@ func (x *Targeting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Targeting.ProtoReflect.Descriptor instead.
 func (*Targeting) Descriptor() ([]byte, []int) {
-	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{21}
+	return file_codewar_match_v1_match_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Targeting) GetDirection() string {
@@ -1780,7 +1885,7 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\rServerMessage\x128\n" +
 	"\bsnapshot\x18\x01 \x01(\v2\x1a.codewar.match.v1.SnapshotH\x00R\bsnapshot\x122\n" +
 	"\x05event\x18\x02 \x01(\v2\x1a.codewar.match.v1.EnvelopeH\x00R\x05eventB\t\n" +
-	"\apayload\"\xee\x02\n" +
+	"\apayload\"\xb0\x03\n" +
 	"\bSnapshot\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\rR\x03seq\x122\n" +
 	"\x05phase\x18\x02 \x01(\x0e2\x1c.codewar.match.v1.MatchPhaseR\x05phase\x126\n" +
@@ -1789,7 +1894,13 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x05 \x01(\x03R\x0edeadlineUnixMs\x128\n" +
 	"\x19viewer_lock_until_unix_ms\x18\a \x01(\x03R\x15viewerLockUntilUnixMs\x125\n" +
 	"\x06result\x18\b \x01(\v2\x1d.codewar.match.v1.MatchResultR\x06result\x12-\n" +
-	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panelJ\x04\b\x06\x10\a\"\xd4\x01\n" +
+	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panel\x12@\n" +
+	"\fmatch_config\x18\n" +
+	" \x01(\v2\x1d.codewar.match.v1.MatchConfigR\vmatchConfigJ\x04\b\x06\x10\a\"Q\n" +
+	"\vMatchConfig\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x10\n" +
+	"\x03cap\x18\x02 \x01(\rR\x03cap\x12\x1a\n" +
+	"\bstrategy\x18\x03 \x01(\tR\bstrategy\"\xd4\x01\n" +
 	"\n" +
 	"PlayerView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x0e\n" +
@@ -1883,12 +1994,15 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\rset_targeting\x18\x03 \x01(\v2\x1e.codewar.match.v1.SetTargetingH\x00R\fsetTargetingB\t\n" +
 	"\apayload\"I\n" +
 	"\fSetTargeting\x129\n" +
-	"\ttargeting\x18\x01 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"g\n" +
+	"\ttargeting\x18\x01 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"\xab\x01\n" +
 	"\vJoinRequest\x12\x16\n" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x14\n" +
 	"\x05class\x18\x03 \x01(\tR\x05class\x12\x14\n" +
-	"\x05skill\x18\x04 \x01(\tR\x05skill\"\xab\x01\n" +
+	"\x05skill\x18\x04 \x01(\tR\x05skill\x12\x14\n" +
+	"\x05topic\x18\x05 \x01(\tR\x05topic\x12\x10\n" +
+	"\x03cap\x18\x06 \x01(\tR\x03cap\x12\x1a\n" +
+	"\bstrategy\x18\a \x01(\tR\bstrategy\"\xab\x01\n" +
 	"\rSubmitRequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x123\n" +
@@ -1917,70 +2031,72 @@ func file_codewar_match_v1_match_proto_rawDescGZIP() []byte {
 }
 
 var file_codewar_match_v1_match_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_codewar_match_v1_match_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_codewar_match_v1_match_proto_goTypes = []any{
 	(MatchPhase)(0),            // 0: codewar.match.v1.MatchPhase
 	(*ServerMessage)(nil),      // 1: codewar.match.v1.ServerMessage
 	(*Snapshot)(nil),           // 2: codewar.match.v1.Snapshot
-	(*PlayerView)(nil),         // 3: codewar.match.v1.PlayerView
-	(*Position)(nil),           // 4: codewar.match.v1.Position
-	(*Problem)(nil),            // 5: codewar.match.v1.Problem
-	(*PrivatePanel)(nil),       // 6: codewar.match.v1.PrivatePanel
-	(*PanelReady)(nil),         // 7: codewar.match.v1.PanelReady
-	(*Panel)(nil),              // 8: codewar.match.v1.Panel
-	(*MatchResult)(nil),        // 9: codewar.match.v1.MatchResult
-	(*Envelope)(nil),           // 10: codewar.match.v1.Envelope
-	(*RoundStarted)(nil),       // 11: codewar.match.v1.RoundStarted
-	(*SubmissionJudged)(nil),   // 12: codewar.match.v1.SubmissionJudged
-	(*ActionResolved)(nil),     // 13: codewar.match.v1.ActionResolved
-	(*HpChanged)(nil),          // 14: codewar.match.v1.HpChanged
-	(*MatchEnded)(nil),         // 15: codewar.match.v1.MatchEnded
-	(*PlayerElo)(nil),          // 16: codewar.match.v1.PlayerElo
-	(*SubmissionRejected)(nil), // 17: codewar.match.v1.SubmissionRejected
-	(*ClientMessage)(nil),      // 18: codewar.match.v1.ClientMessage
-	(*SetTargeting)(nil),       // 19: codewar.match.v1.SetTargeting
-	(*JoinRequest)(nil),        // 20: codewar.match.v1.JoinRequest
-	(*SubmitRequest)(nil),      // 21: codewar.match.v1.SubmitRequest
-	(*Targeting)(nil),          // 22: codewar.match.v1.Targeting
+	(*MatchConfig)(nil),        // 3: codewar.match.v1.MatchConfig
+	(*PlayerView)(nil),         // 4: codewar.match.v1.PlayerView
+	(*Position)(nil),           // 5: codewar.match.v1.Position
+	(*Problem)(nil),            // 6: codewar.match.v1.Problem
+	(*PrivatePanel)(nil),       // 7: codewar.match.v1.PrivatePanel
+	(*PanelReady)(nil),         // 8: codewar.match.v1.PanelReady
+	(*Panel)(nil),              // 9: codewar.match.v1.Panel
+	(*MatchResult)(nil),        // 10: codewar.match.v1.MatchResult
+	(*Envelope)(nil),           // 11: codewar.match.v1.Envelope
+	(*RoundStarted)(nil),       // 12: codewar.match.v1.RoundStarted
+	(*SubmissionJudged)(nil),   // 13: codewar.match.v1.SubmissionJudged
+	(*ActionResolved)(nil),     // 14: codewar.match.v1.ActionResolved
+	(*HpChanged)(nil),          // 15: codewar.match.v1.HpChanged
+	(*MatchEnded)(nil),         // 16: codewar.match.v1.MatchEnded
+	(*PlayerElo)(nil),          // 17: codewar.match.v1.PlayerElo
+	(*SubmissionRejected)(nil), // 18: codewar.match.v1.SubmissionRejected
+	(*ClientMessage)(nil),      // 19: codewar.match.v1.ClientMessage
+	(*SetTargeting)(nil),       // 20: codewar.match.v1.SetTargeting
+	(*JoinRequest)(nil),        // 21: codewar.match.v1.JoinRequest
+	(*SubmitRequest)(nil),      // 22: codewar.match.v1.SubmitRequest
+	(*Targeting)(nil),          // 23: codewar.match.v1.Targeting
 }
 var file_codewar_match_v1_match_proto_depIdxs = []int32{
 	2,  // 0: codewar.match.v1.ServerMessage.snapshot:type_name -> codewar.match.v1.Snapshot
-	10, // 1: codewar.match.v1.ServerMessage.event:type_name -> codewar.match.v1.Envelope
+	11, // 1: codewar.match.v1.ServerMessage.event:type_name -> codewar.match.v1.Envelope
 	0,  // 2: codewar.match.v1.Snapshot.phase:type_name -> codewar.match.v1.MatchPhase
-	3,  // 3: codewar.match.v1.Snapshot.players:type_name -> codewar.match.v1.PlayerView
-	9,  // 4: codewar.match.v1.Snapshot.result:type_name -> codewar.match.v1.MatchResult
-	8,  // 5: codewar.match.v1.Snapshot.panel:type_name -> codewar.match.v1.Panel
-	4,  // 6: codewar.match.v1.PlayerView.pos:type_name -> codewar.match.v1.Position
-	5,  // 7: codewar.match.v1.PrivatePanel.move:type_name -> codewar.match.v1.Problem
-	5,  // 8: codewar.match.v1.PrivatePanel.defend:type_name -> codewar.match.v1.Problem
-	5,  // 9: codewar.match.v1.PrivatePanel.skill:type_name -> codewar.match.v1.Problem
-	5,  // 10: codewar.match.v1.PanelReady.attack:type_name -> codewar.match.v1.Problem
-	6,  // 11: codewar.match.v1.PanelReady.p1:type_name -> codewar.match.v1.PrivatePanel
-	6,  // 12: codewar.match.v1.PanelReady.p2:type_name -> codewar.match.v1.PrivatePanel
-	5,  // 13: codewar.match.v1.Panel.attack:type_name -> codewar.match.v1.Problem
-	5,  // 14: codewar.match.v1.Panel.move:type_name -> codewar.match.v1.Problem
-	5,  // 15: codewar.match.v1.Panel.defend:type_name -> codewar.match.v1.Problem
-	5,  // 16: codewar.match.v1.Panel.skill:type_name -> codewar.match.v1.Problem
-	11, // 17: codewar.match.v1.Envelope.round_started:type_name -> codewar.match.v1.RoundStarted
-	7,  // 18: codewar.match.v1.Envelope.panel_ready:type_name -> codewar.match.v1.PanelReady
-	12, // 19: codewar.match.v1.Envelope.submission_judged:type_name -> codewar.match.v1.SubmissionJudged
-	13, // 20: codewar.match.v1.Envelope.action_resolved:type_name -> codewar.match.v1.ActionResolved
-	14, // 21: codewar.match.v1.Envelope.hp_changed:type_name -> codewar.match.v1.HpChanged
-	15, // 22: codewar.match.v1.Envelope.match_ended:type_name -> codewar.match.v1.MatchEnded
-	17, // 23: codewar.match.v1.Envelope.submission_rejected:type_name -> codewar.match.v1.SubmissionRejected
-	4,  // 24: codewar.match.v1.ActionResolved.move_to:type_name -> codewar.match.v1.Position
-	16, // 25: codewar.match.v1.MatchEnded.elo:type_name -> codewar.match.v1.PlayerElo
-	20, // 26: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
-	21, // 27: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
-	19, // 28: codewar.match.v1.ClientMessage.set_targeting:type_name -> codewar.match.v1.SetTargeting
-	22, // 29: codewar.match.v1.SetTargeting.targeting:type_name -> codewar.match.v1.Targeting
-	4,  // 30: codewar.match.v1.SubmitRequest.move_to:type_name -> codewar.match.v1.Position
-	22, // 31: codewar.match.v1.SubmitRequest.targeting:type_name -> codewar.match.v1.Targeting
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	4,  // 3: codewar.match.v1.Snapshot.players:type_name -> codewar.match.v1.PlayerView
+	10, // 4: codewar.match.v1.Snapshot.result:type_name -> codewar.match.v1.MatchResult
+	9,  // 5: codewar.match.v1.Snapshot.panel:type_name -> codewar.match.v1.Panel
+	3,  // 6: codewar.match.v1.Snapshot.match_config:type_name -> codewar.match.v1.MatchConfig
+	5,  // 7: codewar.match.v1.PlayerView.pos:type_name -> codewar.match.v1.Position
+	6,  // 8: codewar.match.v1.PrivatePanel.move:type_name -> codewar.match.v1.Problem
+	6,  // 9: codewar.match.v1.PrivatePanel.defend:type_name -> codewar.match.v1.Problem
+	6,  // 10: codewar.match.v1.PrivatePanel.skill:type_name -> codewar.match.v1.Problem
+	6,  // 11: codewar.match.v1.PanelReady.attack:type_name -> codewar.match.v1.Problem
+	7,  // 12: codewar.match.v1.PanelReady.p1:type_name -> codewar.match.v1.PrivatePanel
+	7,  // 13: codewar.match.v1.PanelReady.p2:type_name -> codewar.match.v1.PrivatePanel
+	6,  // 14: codewar.match.v1.Panel.attack:type_name -> codewar.match.v1.Problem
+	6,  // 15: codewar.match.v1.Panel.move:type_name -> codewar.match.v1.Problem
+	6,  // 16: codewar.match.v1.Panel.defend:type_name -> codewar.match.v1.Problem
+	6,  // 17: codewar.match.v1.Panel.skill:type_name -> codewar.match.v1.Problem
+	12, // 18: codewar.match.v1.Envelope.round_started:type_name -> codewar.match.v1.RoundStarted
+	8,  // 19: codewar.match.v1.Envelope.panel_ready:type_name -> codewar.match.v1.PanelReady
+	13, // 20: codewar.match.v1.Envelope.submission_judged:type_name -> codewar.match.v1.SubmissionJudged
+	14, // 21: codewar.match.v1.Envelope.action_resolved:type_name -> codewar.match.v1.ActionResolved
+	15, // 22: codewar.match.v1.Envelope.hp_changed:type_name -> codewar.match.v1.HpChanged
+	16, // 23: codewar.match.v1.Envelope.match_ended:type_name -> codewar.match.v1.MatchEnded
+	18, // 24: codewar.match.v1.Envelope.submission_rejected:type_name -> codewar.match.v1.SubmissionRejected
+	5,  // 25: codewar.match.v1.ActionResolved.move_to:type_name -> codewar.match.v1.Position
+	17, // 26: codewar.match.v1.MatchEnded.elo:type_name -> codewar.match.v1.PlayerElo
+	21, // 27: codewar.match.v1.ClientMessage.join:type_name -> codewar.match.v1.JoinRequest
+	22, // 28: codewar.match.v1.ClientMessage.submit:type_name -> codewar.match.v1.SubmitRequest
+	20, // 29: codewar.match.v1.ClientMessage.set_targeting:type_name -> codewar.match.v1.SetTargeting
+	23, // 30: codewar.match.v1.SetTargeting.targeting:type_name -> codewar.match.v1.Targeting
+	5,  // 31: codewar.match.v1.SubmitRequest.move_to:type_name -> codewar.match.v1.Position
+	23, // 32: codewar.match.v1.SubmitRequest.targeting:type_name -> codewar.match.v1.Targeting
+	33, // [33:33] is the sub-list for method output_type
+	33, // [33:33] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_codewar_match_v1_match_proto_init() }
@@ -1992,7 +2108,7 @@ func file_codewar_match_v1_match_proto_init() {
 		(*ServerMessage_Snapshot)(nil),
 		(*ServerMessage_Event)(nil),
 	}
-	file_codewar_match_v1_match_proto_msgTypes[9].OneofWrappers = []any{
+	file_codewar_match_v1_match_proto_msgTypes[10].OneofWrappers = []any{
 		(*Envelope_RoundStarted)(nil),
 		(*Envelope_PanelReady)(nil),
 		(*Envelope_SubmissionJudged)(nil),
@@ -2001,7 +2117,7 @@ func file_codewar_match_v1_match_proto_init() {
 		(*Envelope_MatchEnded)(nil),
 		(*Envelope_SubmissionRejected)(nil),
 	}
-	file_codewar_match_v1_match_proto_msgTypes[17].OneofWrappers = []any{
+	file_codewar_match_v1_match_proto_msgTypes[18].OneofWrappers = []any{
 		(*ClientMessage_Join)(nil),
 		(*ClientMessage_Submit)(nil),
 		(*ClientMessage_SetTargeting)(nil),
@@ -2012,7 +2128,7 @@ func file_codewar_match_v1_match_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_codewar_match_v1_match_proto_rawDesc), len(file_codewar_match_v1_match_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

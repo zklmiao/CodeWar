@@ -71,6 +71,9 @@ type Hub struct {
 	matchID    uuid.UUID
 	matchStart time.Time
 	seats      map[match.Player]store.User
+	// 05 号票：本场对局配置（首个 join 创建引擎时锁定，快照展示与 ELO 结算
+	// 共用；终局随引擎置空一并复位，下一场由下一条 join 重新锁定）。
+	cfg matchConfig
 }
 
 // accountStore：hub 需要的持久化子集（*store.Store 满足；测试注入桩）。
@@ -99,7 +102,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	player, token, classID, skillID, err := h.readJoin(ws)
+	player, token, classID, skillID, jc, err := h.readJoin(ws)
 	if err != nil {
 		ws.Close()
 		return
@@ -137,14 +140,27 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		h.seats[player] = u
 	}
 	if h.engine == nil {
-		// 04 号票：出题工厂替换硬编码桩（默认配置：全题型、上限 L3、爬坡；
-		// 05 号票从 UI 喂真实 Config）。每局新 MatchSeed，连打两局题目不同。
+		// 05 号票：首个 join 锁定整场配置——题型过滤喂给 04 工厂（question.
+		// NewFactory(Config) 承接面零改动），难度上限档同时决定风险系数
+		// （引擎普攻伤害）与出题区间上限（同源同档）。每局新 MatchSeed。
+		mc := parseMatchConfig(jc, h.logger)
 		questions := question.NewFactory(question.Config{
-			Strategy:  question.StrategyClimb,
-			MatchSeed: question.NewMatchSeed(),
+			Topics:        mc.topics,
+			MaxDifficulty: question.Difficulty(mc.tier),
+			Strategy:      mc.strategy,
+			MatchSeed:     question.NewMatchSeed(),
 		})
 		questions.RegisterAll(templates.All()...)
-		h.engine = match.NewEngine(match.RealClock{}, questions, h.judge, h.broadcast)
+		h.engine = match.NewEngineWithSetup(match.RealClock{}, questions, h.judge, h.broadcast,
+			match.Setup{RiskTier: mc.tier})
+		h.cfg = mc
+		h.logger.Info("对局配置已锁定（首个 join）",
+			"topic", mc.topicDisplay(), "cap", mc.tier, "strategy", mc.strategy)
+	} else if jc.anySet() {
+		// 05 裁决 1：后续 join 的配置参数忽略（本场已按首个 join 锁定）。
+		// 不拒连——第二窗口复制粘贴同一链接是常态路径，参数一致时无感。
+		h.logger.Warn("后续 join 的对局配置参数已忽略（本场按首个 join 锁定）",
+			"ignored_topic", jc.topic, "ignored_cap", jc.cap, "ignored_strategy", jc.strategy)
 	}
 	// 06 号票：职业绑定（仅 WAITING 可绑；join 请求已 fail-closed 校验过组合）。
 	// 第二名玩家 join 时引擎已存在，同样可绑——双方就位开赛前数值与初始 HP 冻结。
@@ -179,24 +195,26 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	h.readLoop(c)
 }
 
-func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string, error) {
+func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string, joinConfig, error) {
 	_, data, err := ws.ReadMessage()
 	if err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", joinConfig{}, err
 	}
 	var msg matchpb.ClientMessage
 	if err := protojson.Unmarshal(data, &msg); err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", joinConfig{}, err
 	}
 	join := msg.GetJoin()
 	if join == nil {
-		return "", "", "", "", fmt.Errorf("首条消息必须是 join")
+		return "", "", "", "", joinConfig{}, fmt.Errorf("首条消息必须是 join")
 	}
 	p := match.Player(join.GetPlayer())
 	if p != match.P1 && p != match.P2 {
-		return "", "", "", "", fmt.Errorf("player 必须是 p1 或 p2")
+		return "", "", "", "", joinConfig{}, fmt.Errorf("player 必须是 p1 或 p2")
 	}
-	return p, join.GetToken(), join.GetClass(), join.GetSkill(), nil
+	// 05 号票：对局配置参数随 join 注入（页面 URL → 客户端 → join 契约）。
+	jc := joinConfig{topic: join.GetTopic(), cap: join.GetCap(), strategy: join.GetStrategy()}
+	return p, join.GetToken(), join.GetClass(), join.GetSkill(), jc, nil
 }
 
 func (h *Hub) reject(ws *websocket.Conn, msg string) {
@@ -276,8 +294,21 @@ func (h *Hub) writePump(c *conn) {
 }
 
 func (h *Hub) sendSnapshot(c *conn, player match.Player) {
+	// 05 号票：快照携带本场锁定的配置（对局内只读展示的权威源——展示服务端
+	// 锁定值而非本窗口 URL 参数，两窗口参数冲突时不撒谎）。
+	// h.mu 只圈配置读取：engine.Snapshot 取引擎锁，持 h.mu 进入会与
+	// broadcast（引擎锁内取 h.mu）构成锁序死锁。
+	h.mu.Lock()
+	cfg := h.cfg
+	h.mu.Unlock()
+	snap := h.engine.Snapshot(player)
+	snap.MatchConfig = &matchpb.MatchConfig{
+		Topic:    cfg.topicKey,
+		Cap:      uint32(cfg.tier),
+		Strategy: cfg.strategy,
+	}
 	b, err := protojson.Marshal(&matchpb.ServerMessage{Payload: &matchpb.ServerMessage_Snapshot{
-		Snapshot: h.engine.Snapshot(player),
+		Snapshot: snap,
 	}})
 	if err != nil {
 		h.logger.Error("快照序列化失败", "err", err)
@@ -300,6 +331,7 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 		// UI 承诺的"刷新两个窗口可再来一局"将落空（浏览器验收发现的 P0）。
 		h.engine = nil
 		h.seats = make(map[match.Player]store.User)
+		h.cfg = matchConfig{} // 05 号票：本场配置一并复位（下一场重新锁定）
 	}
 	b, err := protojson.Marshal(&matchpb.ServerMessage{Payload: &matchpb.ServerMessage_Event{Event: env}})
 	if err != nil {
@@ -341,6 +373,8 @@ func (h *Hub) settleEnded(me *matchpb.MatchEnded) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), settleTimeout)
 	defer cancel()
+	// 05 号票：结算奖励乘难度风险系数（首 join 锁定的 cap 档；h.cfg.tier=0
+	// 的 paranoid 路径由 RiskCoeff(0)=1.0 兜住，07 号票匿名/缺省行为不变）。
 	d1, d2, err := h.st.RecordMatch(ctx, store.MatchResult{
 		MatchID:    h.matchID,
 		Winner:     me.GetWinner(),
@@ -348,6 +382,7 @@ func (h *Hub) settleEnded(me *matchpb.MatchEnded) {
 		DurationMs: durationMs,
 		P1UserID:   u1.ID,
 		P2UserID:   u2.ID,
+		RiskCoeff:  match.RiskCoeff(h.cfg.tier),
 	})
 	if err != nil {
 		// 降级：落库失败不断连、不重发，终局照常展示（无 ELO 区块）。

@@ -151,36 +151,73 @@ func (f *Factory) attackQuestion(round int) (match.Question, error) {
 	spec := Spec{Topic: topic, Difficulty: d, Action: ActionAttack}
 	in, err := f.Create(spec, roundSeed)
 	if err != nil {
-		// 回退：同动作忽略题型再试（行动题跨题型语义；攻击题一般不需要，保底）。
-		spec.Topic = ""
-		in, err = f.Create(spec, roundSeed)
-		if err != nil {
-			return match.Question{}, err
+		// 题型过滤硬语义（05 号票验收 2：攻击题只从所选题型抽取）：策略抽出的
+		// 难度格在本题型下为空时，就近平移难度重试（不放弃题型，seed 流不变、
+		// 确定性保持）；整个 [L1, cap] 区间都没有该题型攻击模板（12 号票补齐
+		// 模板矩阵前的真空格）才退回跨题型——与行动题同语义的最后保底。
+		if in2, ok := f.createNearestDifficulty(spec, d); ok {
+			in = in2
+		} else {
+			spec.Topic = ""
+			in, err = f.Create(spec, roundSeed)
+			if err != nil {
+				return match.Question{}, err
+			}
 		}
 	}
 	return in.ToQuestion(pickForm(rng, in.Meta.Form)), nil
 }
 
+// createNearestDifficulty：题型不变，从 drawn 难度向外螺旋（+1/−1/+2/−2…）
+// 寻找 [L1, cap] 内首个有模板的难度档（平移距离最近，策略语义漂移最小）。
+func (f *Factory) createNearestDifficulty(spec Spec, drawn Difficulty) (Instance, bool) {
+	capD := f.cfg.MaxDifficulty
+	for step := 1; step < int(capD); step++ {
+		for _, d := range []Difficulty{drawn + Difficulty(step), drawn - Difficulty(step)} {
+			if d < L1 || d > capD {
+				continue
+			}
+			spec.Difficulty = d
+			if in, err := f.Create(spec, fmt.Sprintf("%s|near=%d", specKey(spec), int(drawn))); err == nil {
+				return in, true
+			}
+		}
+	}
+	return Instance{}, false
+}
+
 // MoveQuestion：私有移动题（seed = f(matchSeed, player, round)，双方独立）。
+// 05 号票起 cap 可到 L5：策略抽出的难度格无模板时就近平移（见
+// createNearestDifficulty）——行动题与攻击题同规则，不落空成错误占位题。
 func (f *Factory) MoveQuestion(round int, player match.Player) match.Question {
 	seed := fmt.Sprintf("move:%s:round=%d|%s", player, round, f.cfg.MatchSeed)
 	rng := NewRNG(DeriveSeed(f.cfg.MatchSeed, fmt.Sprintf("move:%s:round=%d", player, round)))
 	d := pickDifficulty(rng, round, f.cfg.MaxDifficulty, f.cfg.Strategy)
 	in, err := f.Create(Spec{Difficulty: d, Action: ActionMove}, seed)
 	if err != nil {
-		return match.Question{ID: "error-no-template", Statement: err.Error()}
+		if in2, ok := f.createNearestDifficulty(Spec{Difficulty: d, Action: ActionMove}, d); ok {
+			in, err = in2, nil
+		}
+	}
+	if err != nil {
+		return match.Question{ID: "error-no-template", Statement: "无可用移动题模板"}
 	}
 	return in.ToQuestion(FormComplete)
 }
 
-// DefendQuestion：私有防御题（seed 派生同移动题）。
+// DefendQuestion：私有防御题（seed 派生同移动题，回退规则同上）。
 func (f *Factory) DefendQuestion(round int, player match.Player) match.Question {
 	seed := fmt.Sprintf("defend:%s:round=%d|%s", player, round, f.cfg.MatchSeed)
 	rng := NewRNG(DeriveSeed(f.cfg.MatchSeed, fmt.Sprintf("defend:%s:round=%d", player, round)))
 	d := pickDifficulty(rng, round, f.cfg.MaxDifficulty, f.cfg.Strategy)
 	in, err := f.Create(Spec{Difficulty: d, Action: ActionDefend}, seed)
 	if err != nil {
-		return match.Question{ID: "error-no-template", Statement: err.Error()}
+		if in2, ok := f.createNearestDifficulty(Spec{Difficulty: d, Action: ActionDefend}, d); ok {
+			in, err = in2, nil
+		}
+	}
+	if err != nil {
+		return match.Question{ID: "error-no-template", Statement: "无可用防御题模板"}
 	}
 	return in.ToQuestion(FormComplete)
 }
@@ -268,15 +305,20 @@ func instancesEqual(a, b Instance) bool {
 
 // SkillQuestion：私有技能题（06 号票，裁决 4）——难度 = 所选上限档，
 // 不走爬坡/均匀策略（技能题一律贴上限，"高难高收益"的出题面语义）。
-// 上限档无模板时向低档逐档回退取最近可用（12 号票补齐 L4/L5 技能模板后
-// 该回退仅在 cap>L4 时触发）。
+// 上限档无模板时就近平移回退（05 号票统一四类题的回退规则：从 cap 向外螺旋，
+// 天然先试高档——"贴上限"语义保持；04 review 遗留的"逐档向低/双向二选一"
+// 在此定为双向就近，且对现役/12 号票规划模板矩阵与逐档向低结果一致）。
+// 全区间无模板（cap<L3 且 12 未补 L1/L2）才返回错误占位题（06 占位路径灰置）。
 func (f *Factory) SkillQuestion(round int, player match.Player) match.Question {
 	seed := fmt.Sprintf("skill:%s:round=%d|%s", player, round, f.cfg.MatchSeed)
-	for d := f.cfg.MaxDifficulty; d >= L1; d-- {
-		in, err := f.Create(Spec{Difficulty: d, Action: ActionSkill}, seed)
-		if err == nil {
-			return in.ToQuestion(FormComplete)
+	in, err := f.Create(Spec{Difficulty: f.cfg.MaxDifficulty, Action: ActionSkill}, seed)
+	if err != nil {
+		if in2, ok := f.createNearestDifficulty(Spec{Difficulty: f.cfg.MaxDifficulty, Action: ActionSkill}, f.cfg.MaxDifficulty); ok {
+			in, err = in2, nil
 		}
 	}
-	return match.Question{ID: "error-no-template", Statement: "无可用技能题模板"}
+	if err != nil {
+		return match.Question{ID: "error-no-template", Statement: "无可用技能题模板"}
+	}
+	return in.ToQuestion(FormComplete)
 }

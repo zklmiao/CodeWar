@@ -80,7 +80,24 @@ export interface Snapshot {
    * 快照按连接下发，私有题只带查看者自己的（与事件流的 PanelReady 不同——
    * 共享事件流必须对所有连接一致以保序号单调，故 PanelReady 同时携带双方私有面板）。
    */
-  panel: Panel | undefined;
+  panel:
+    | Panel
+    | undefined;
+  /**
+   * 本场对局配置（05 号票，首个 join 锁定后整场不变；对局内只读展示——
+   * 展示服务端锁定的权威值而非本窗口 URL 参数，两窗口参数冲突时不撒谎）。
+   */
+  matchConfig: MatchConfig | undefined;
+}
+
+/** 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。 */
+export interface MatchConfig {
+  /** 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型 */
+  topic: string;
+  /** 难度上限档 1..5（L1..L5，即出题区间 [L1, cap] 的上限，也是风险系数档位） */
+  cap: number;
+  /** 抽题策略 uniform（均匀随机）| climb（对局爬坡） */
+  strategy: string;
 }
 
 export interface PlayerView {
@@ -308,6 +325,20 @@ export interface JoinRequest {
    */
   class: string;
   skill: string;
+  /**
+   * ===== 对局配置（05 号票；页面 URL 参数 ?topic=&cap=&strategy= 经 join 注入）=====
+   * 仅首个 join（创建引擎时）被采纳并整场锁定；后续 join 携带的配置参数被
+   * 忽略并记服务端日志（热座第二窗口复制粘贴同一链接，参数天然一致）。
+   * 非法值回退默认并 WARN（配置不是安全边界，不拒连——与职业组合 fail-closed
+   * 不同：错配置只影响体验，错身份会污染战绩）。
+   * 空值 = 默认：题型全部 / cap L3 / climb（匿名缺省链路零行为变化）。
+   * 题型只过滤共享攻击题，行动题跨题型（spec「出题系统」）。
+   */
+  topic: string;
+  /** "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点） */
+  cap: string;
+  /** uniform | climb；非法/空 = climb */
+  strategy: string;
 }
 
 export interface SubmitRequest {
@@ -439,6 +470,7 @@ function createBaseSnapshot(): Snapshot {
     viewerLockUntilUnixMs: "0",
     result: undefined,
     panel: undefined,
+    matchConfig: undefined,
   };
 }
 
@@ -467,6 +499,9 @@ export const Snapshot: MessageFns<Snapshot> = {
     }
     if (message.panel !== undefined) {
       Panel.encode(message.panel, writer.uint32(74).fork()).join();
+    }
+    if (message.matchConfig !== undefined) {
+      MatchConfig.encode(message.matchConfig, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -548,6 +583,14 @@ export const Snapshot: MessageFns<Snapshot> = {
             message.panel = Panel.decode(reader, reader.uint32());
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.matchConfig = MatchConfig.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -578,6 +621,11 @@ export const Snapshot: MessageFns<Snapshot> = {
         : "0",
       result: isSet(object.result) ? MatchResult.fromJSON(object.result) : undefined,
       panel: isSet(object.panel) ? Panel.fromJSON(object.panel) : undefined,
+      matchConfig: isSet(object.matchConfig)
+        ? MatchConfig.fromJSON(object.matchConfig)
+        : isSet(object.match_config)
+        ? MatchConfig.fromJSON(object.match_config)
+        : undefined,
     };
   },
 
@@ -607,6 +655,9 @@ export const Snapshot: MessageFns<Snapshot> = {
     if (message.panel !== undefined) {
       obj.panel = Panel.toJSON(message.panel);
     }
+    if (message.matchConfig !== undefined) {
+      obj.matchConfig = MatchConfig.toJSON(message.matchConfig);
+    }
     return obj;
   },
 
@@ -625,6 +676,110 @@ export const Snapshot: MessageFns<Snapshot> = {
       ? MatchResult.fromPartial(object.result)
       : undefined;
     message.panel = (object.panel !== undefined && object.panel !== null) ? Panel.fromPartial(object.panel) : undefined;
+    message.matchConfig = (object.matchConfig !== undefined && object.matchConfig !== null)
+      ? MatchConfig.fromPartial(object.matchConfig)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseMatchConfig(): MatchConfig {
+  return { topic: "", cap: 0, strategy: "" };
+}
+
+export const MatchConfig: MessageFns<MatchConfig> = {
+  encode(message: MatchConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.topic !== "") {
+      writer.uint32(10).string(message.topic);
+    }
+    if (message.cap !== 0) {
+      writer.uint32(16).uint32(message.cap);
+    }
+    if (message.strategy !== "") {
+      writer.uint32(26).string(message.strategy);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MatchConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseMatchConfig();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.topic = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.cap = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.strategy = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): MatchConfig {
+    return {
+      topic: isSet(object.topic) ? globalThis.String(object.topic) : "",
+      cap: isSet(object.cap) ? globalThis.Number(object.cap) : 0,
+      strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
+    };
+  },
+
+  toJSON(message: MatchConfig): unknown {
+    const obj: any = {};
+    if (message.topic !== "") {
+      obj.topic = message.topic;
+    }
+    if (message.cap !== 0) {
+      obj.cap = Math.round(message.cap);
+    }
+    if (message.strategy !== "") {
+      obj.strategy = message.strategy;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MatchConfig>, I>>(base?: I): MatchConfig {
+    return MatchConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MatchConfig>, I>>(object: I): MatchConfig {
+    const message = createBaseMatchConfig();
+    message.topic = object.topic ?? "";
+    message.cap = object.cap ?? 0;
+    message.strategy = object.strategy ?? "";
     return message;
   },
 };
@@ -2768,7 +2923,7 @@ export const SetTargeting: MessageFns<SetTargeting> = {
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { player: "", token: "", class: "", skill: "" };
+  return { player: "", token: "", class: "", skill: "", topic: "", cap: "", strategy: "" };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
@@ -2784,6 +2939,15 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     }
     if (message.skill !== "") {
       writer.uint32(34).string(message.skill);
+    }
+    if (message.topic !== "") {
+      writer.uint32(42).string(message.topic);
+    }
+    if (message.cap !== "") {
+      writer.uint32(50).string(message.cap);
+    }
+    if (message.strategy !== "") {
+      writer.uint32(58).string(message.strategy);
     }
     return writer;
   },
@@ -2833,6 +2997,30 @@ export const JoinRequest: MessageFns<JoinRequest> = {
             message.skill = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.topic = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.cap = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.strategy = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2851,6 +3039,9 @@ export const JoinRequest: MessageFns<JoinRequest> = {
       token: isSet(object.token) ? globalThis.String(object.token) : "",
       class: isSet(object.class) ? globalThis.String(object.class) : "",
       skill: isSet(object.skill) ? globalThis.String(object.skill) : "",
+      topic: isSet(object.topic) ? globalThis.String(object.topic) : "",
+      cap: isSet(object.cap) ? globalThis.String(object.cap) : "",
+      strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
     };
   },
 
@@ -2868,6 +3059,15 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     if (message.skill !== "") {
       obj.skill = message.skill;
     }
+    if (message.topic !== "") {
+      obj.topic = message.topic;
+    }
+    if (message.cap !== "") {
+      obj.cap = message.cap;
+    }
+    if (message.strategy !== "") {
+      obj.strategy = message.strategy;
+    }
     return obj;
   },
 
@@ -2880,6 +3080,9 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     message.token = object.token ?? "";
     message.class = object.class ?? "";
     message.skill = object.skill ?? "";
+    message.topic = object.topic ?? "";
+    message.cap = object.cap ?? "";
+    message.strategy = object.strategy ?? "";
     return message;
   },
 };

@@ -40,6 +40,19 @@ message Snapshot {
   // 快照按连接下发，私有题只带查看者自己的（与事件流的 PanelReady 不同——
   // 共享事件流必须对所有连接一致以保序号单调，故 PanelReady 同时携带双方私有面板）。
   Panel panel = 9;
+  // 本场对局配置（05 号票，首个 join 锁定后整场不变；对局内只读展示——
+  // 展示服务端锁定的权威值而非本窗口 URL 参数，两窗口参数冲突时不撒谎）。
+  MatchConfig match_config = 10;
+}
+
+// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。
+message MatchConfig {
+  // 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型
+  string topic = 1;
+  // 难度上限档 1..5（L1..L5，即出题区间 [L1, cap] 的上限，也是风险系数档位）
+  uint32 cap = 2;
+  // 抽题策略 uniform（均匀随机）| climb（对局爬坡）
+  string strategy = 3;
 }
 
 message PlayerView {
@@ -221,6 +234,16 @@ message JoinRequest {
   // 非法组合（职业不存在/技能不属于该职业）= 建连被拒（fail-closed）。
   string class = 3;
   string skill = 4;
+  // ===== 对局配置（05 号票；页面 URL 参数 ?topic=&cap=&strategy= 经 join 注入）=====
+  // 仅首个 join（创建引擎时）被采纳并整场锁定；后续 join 携带的配置参数被
+  // 忽略并记服务端日志（热座第二窗口复制粘贴同一链接，参数天然一致）。
+  // 非法值回退默认并 WARN（配置不是安全边界，不拒连——与职业组合 fail-closed
+  // 不同：错配置只影响体验，错身份会污染战绩）。
+  // 空值 = 默认：题型全部 / cap L3 / climb（匿名缺省链路零行为变化）。
+  // 题型只过滤共享攻击题，行动题跨题型（spec「出题系统」）。
+  string topic = 5;    // 题型 key；非法/空 = 全部 6 题型
+  string cap = 6;      // "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点）
+  string strategy = 7; // uniform | climb；非法/空 = climb
 }
 
 message SubmitRequest {

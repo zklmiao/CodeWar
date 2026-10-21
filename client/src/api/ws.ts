@@ -14,6 +14,9 @@ export interface JoinOptions {
   token?: string;
   class?: string; // 06 号票：职业盲选（本地选完再 join）
   skill?: string; // 已装备技能（须属于该职业，服务端 fail-closed 校验）
+  topic?: string; // 05 号票：对局配置（URL 参数经 join 注入；服务端首个 join 锁定）
+  cap?: string; // 难度上限档 "L1".."L5"；空 = L3
+  strategy?: string; // uniform | climb；空 = climb
 }
 
 export class MatchSocket {
@@ -40,6 +43,10 @@ export class MatchSocket {
         token: this.joinOpts.token ?? "",
         class: this.joinOpts.class ?? "",
         skill: this.joinOpts.skill ?? "",
+        // 05 号票：对局配置随 join 注入（非法值服务端回退默认并记日志）
+        topic: this.joinOpts.topic ?? "",
+        cap: this.joinOpts.cap ?? "",
+        strategy: this.joinOpts.strategy ?? "",
       }),
     };
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));

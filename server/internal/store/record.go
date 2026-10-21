@@ -18,6 +18,10 @@ type MatchResult struct {
 	DurationMs int32     // 开赛到终局的毫秒数
 	P1UserID   uuid.UUID
 	P2UserID   uuid.UUID
+	// 难度风险系数（05 号票）：结算奖励（ELO delta）按所选难度档放大/缩小
+	// 后再入库——库内历史、快照与终局广播始终同一口径。0 = 未指定 → 按 1.0
+	// 处理（07 号票既有调用方零改动）。
+	RiskCoeff float64
 }
 
 // EloDelta：单名玩家的 ELO 变化（直接对应 proto PlayerElo）。
@@ -56,6 +60,14 @@ func (s *Store) RecordMatch(ctx context.Context, res MatchResult) (p1, p2 EloDel
 	byID := map[uuid.UUID]int32{u1.ID: u1.Elo, u2.ID: u2.Elo}
 
 	after1, after2 := elo.Settle(int(byID[res.P1UserID]), int(byID[res.P2UserID]), res.Winner)
+	// 难度风险系数（05 号票）：delta × coeff 后四舍五入再落库——平局 delta=0
+	// 天然仍 +0；coeff 未指定（0）按 1.0 处理，07 号票行为不变。
+	coeff := res.RiskCoeff
+	if coeff <= 0 {
+		coeff = 1
+	}
+	after1 = int(byID[res.P1UserID]) + elo.ScaleDelta(after1-int(byID[res.P1UserID]), coeff)
+	after2 = int(byID[res.P2UserID]) + elo.ScaleDelta(after2-int(byID[res.P2UserID]), coeff)
 	if err := q.UpdateUserElo(ctx, storedb.UpdateUserEloParams{ID: res.P1UserID, Elo: int32(after1)}); err != nil {
 		return p1, p2, err
 	}
