@@ -171,3 +171,280 @@ func windowSumGo(nums []int, k int) int {
 	}
 	return best
 }
+
+// 数组 L1：力量总和（单语法点：内置求和，参考解 1 行；12 号票批 4）。
+func arraySumL1() question.Template {
+	meta := question.Meta{ID: "array-sum-L1-attack", Topic: question.TopicArray,
+		Difficulty: question.L1, Action: question.ActionAttack, Form: question.FormBoth}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(2, 5), -9, 15, question.ListOpts{})
+		kind := rng.Scenario("words")
+		sig := "def total_power(nums: list) -> int:"
+		answer := "def total_power(nums: list) -> int:\n    return sum(nums)\n"
+		body := []string{"    return sum(nums)"}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("total_power(%s)", pyList(nums)), expected: fmt.Sprintf("%d", sumGo(nums))},
+			caseAlias{name: "example-2", call: "total_power([1, 2, 3])", expected: "6"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "total_power([])", expected: "0"},
+			caseAlias{name: "single", call: "total_power([7])", expected: "7"},
+			caseAlias{name: "negatives", call: "total_power([-2, -3])", expected: "-5"},
+			caseAlias{name: "zeros", call: "total_power([0, 0, 0])", expected: "0"},
+			caseAlias{name: "mixed", call: "total_power([5, -1, 2])", expected: "6"},
+		)
+		stmt := fmt.Sprintf("%s战力合计：求列表所有元素之和（空列表为 0）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{0: true}, visible, hidden, answer)
+	}}
+}
+
+// 数组 L3（关键格副本）：最大值下标（循环 + 严格大于保首个，参考解 5 行；12 号票批 4）。
+func arrayMaxIndexL3() question.Template {
+	meta := question.Meta{ID: "array-max-index-L3-attack", Topic: question.TopicArray,
+		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"duplicates", "single-element", "all-negative"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(3, 6), -9, 9, question.ListOpts{})
+		kind := rng.Scenario("arena")
+		sig := "def max_index(nums: list) -> int:"
+		answer := "def max_index(nums: list) -> int:\n    best = 0\n    for i in range(len(nums)):\n        if nums[i] > nums[best]:\n            best = i\n    return best\n"
+		body := []string{
+			"    best = 0",
+			"    for i in range(len(nums)):",
+			"        if nums[i] > nums[best]:",
+			"            best = i",
+			"    return best",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("max_index(%s)", pyList(nums)), expected: fmt.Sprintf("%d", maxIndexGo(nums))},
+			caseAlias{name: "example-2", call: "max_index([1, 3, 3])", expected: "1"},
+		)
+		hidden := cases(
+			caseAlias{name: "duplicates", call: "max_index([4, 9, 9, 2])", expected: "1"},
+			caseAlias{name: "single-element", call: "max_index([6])", expected: "0"},
+			caseAlias{name: "all-negative", call: "max_index([-5, -2, -8])", expected: "1"},
+			caseAlias{name: "last-max", call: "max_index([1, 2, 5])", expected: "2"},
+			caseAlias{name: "first-max", call: "max_index([9, 1, 2])", expected: "0"},
+		)
+		stmt := fmt.Sprintf("%s定位最强目标：返回列表最大值的下标（并列取最先出现者；约定输入非空）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{2: true, 3: true}, visible, hidden, answer)
+	}}
+}
+
+// 数组 L4（关键格副本）：循环右移（取模 + 哨兵数组，参考解 8 行；12 号票批 4）。
+func arrayRotateL4() question.Template {
+	meta := question.Meta{ID: "array-rotate-L4-attack", Topic: question.TopicArray,
+		Difficulty: question.L4, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "k-larger-than-n", "k-zero"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(3, 6), 1, 9, question.ListOpts{})
+		k := rng.Int(1, 9)
+		kind := rng.Scenario("arena")
+		sig := "def rotate_right(nums: list, k: int) -> list:"
+		answer := "def rotate_right(nums: list, k: int) -> list:\n" +
+			"    n = len(nums)\n" +
+			"    if n == 0:\n" +
+			"        return []\n" +
+			"    k = k % n\n" +
+			"    result = [0] * n\n" +
+			"    for i in range(n):\n" +
+			"        result[(i + k) % n] = nums[i]\n" +
+			"    return result\n"
+		body := []string{
+			"    n = len(nums)",
+			"    if n == 0:",
+			"        return []",
+			"    k = k % n",
+			"    result = [0] * n",
+			"    for i in range(n):",
+			"        result[(i + k) % n] = nums[i]",
+			"    return result",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("rotate_right(%s, %d)", pyList(nums), k), expected: pyList(rotateRightGo(nums, k))},
+			caseAlias{name: "example-2", call: "rotate_right([1, 2, 3, 4, 5], 2)", expected: "[4, 5, 1, 2, 3]"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "rotate_right([], 3)", expected: "[]"},
+			caseAlias{name: "k-larger-than-n", call: "rotate_right([1, 2, 3, 4, 5], 7)", expected: "[4, 5, 1, 2, 3]"},
+			caseAlias{name: "k-zero", call: "rotate_right([1, 2, 3], 0)", expected: "[1, 2, 3]"},
+			caseAlias{name: "k-equals-n", call: "rotate_right([1, 2], 2)", expected: "[1, 2]"},
+			caseAlias{name: "single", call: "rotate_right([1], 3)", expected: "[1]"},
+		)
+		stmt := fmt.Sprintf("%s轮转阵列：把列表循环右移 k 位（k 可超过长度；空列表返回空）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{5: true, 6: true}, visible, hidden, answer)
+	}}
+}
+
+// 数组 L5：最大子数组和（Kadane + 全负边界，参考解 12 行；12 号票批 4，
+// 算法内核参考 codetop59 最大子数组和，题面经情境池重包装）。
+func arrayKadaneL5() question.Template {
+	meta := question.Meta{ID: "array-kadane-L5-attack", Topic: question.TopicArray,
+		Difficulty: question.L5, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "single-negative", "all-negative", "all-positive"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(4, 7), -9, 9, question.ListOpts{})
+		kind := rng.Scenario("arena")
+		sig := "def max_subarray(nums: list) -> int:"
+		answer := "def max_subarray(nums: list) -> int:\n" +
+			"    if not nums:\n" +
+			"        return 0\n" +
+			"    best = nums[0]\n" +
+			"    current = nums[0]\n" +
+			"    for i in range(1, len(nums)):\n" +
+			"        if current < 0:\n" +
+			"            current = nums[i]\n" +
+			"        else:\n" +
+			"            current = current + nums[i]\n" +
+			"        if current > best:\n" +
+			"            best = current\n" +
+			"    return best\n"
+		body := []string{
+			"    if not nums:",
+			"        return 0",
+			"    best = nums[0]",
+			"    current = nums[0]",
+			"    for i in range(1, len(nums)):",
+			"        if current < 0:",
+			"            current = nums[i]",
+			"        else:",
+			"            current = current + nums[i]",
+			"        if current > best:",
+			"            best = current",
+			"    return best",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("max_subarray(%s)", pyList(nums)), expected: fmt.Sprintf("%d", kadaneGo(nums))},
+			caseAlias{name: "example-2", call: "max_subarray([-2, 1, -3, 4, -1, 2, 1, -5, 4])", expected: "6"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "max_subarray([])", expected: "0"},
+			caseAlias{name: "single-negative", call: "max_subarray([-5])", expected: "-5"},
+			caseAlias{name: "all-negative", call: "max_subarray([-3, -1, -7])", expected: "-1"},
+			caseAlias{name: "all-positive", call: "max_subarray([1, 2, 3])", expected: "6"},
+			caseAlias{name: "classic", call: "max_subarray([-2, 1, -3, 4, -1, 2, 1, -5, 4])", expected: "6"},
+			caseAlias{name: "restart-better", call: "max_subarray([5, -1, 2])", expected: "6"},
+		)
+		stmt := fmt.Sprintf("%s能量峰值：求连续子数组的最大和（空列表为 0；元素可全为负）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{6: true, 8: true}, visible, hidden, answer)
+	}}
+}
+
+// 数组 L5（关键格副本）：子数组和等于 k 的个数（前缀和 + 哈希计数，参考解 13 行；12 号票批 4，
+// 算法内核参考 codetop59 和为 K 的子数组，题面经情境池重包装）。
+func arraySubarraySumL5() question.Template {
+	meta := question.Meta{ID: "array-subarray-sum-L5-attack", Topic: question.TopicArray,
+		Difficulty: question.L5, Action: question.ActionAttack, Form: question.FormBoth,
+		Traps: []string{"empty-input", "negative-numbers", "zero-k", "no-match"}}
+	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
+		nums := rng.IntList(rng.Int(3, 6), -5, 5, question.ListOpts{})
+		k := rng.Int(-3, 5)
+		kind := rng.Scenario("arena")
+		sig := "def subarray_sum(nums: list, k: int) -> int:"
+		answer := "def subarray_sum(nums: list, k: int) -> int:\n" +
+			"    counts = {0: 1}\n" +
+			"    total = 0\n" +
+			"    result = 0\n" +
+			"    for x in nums:\n" +
+			"        total += x\n" +
+			"        need = total - k\n" +
+			"        if need in counts:\n" +
+			"            result += counts[need]\n" +
+			"        if total in counts:\n" +
+			"            counts[total] += 1\n" +
+			"        else:\n" +
+			"            counts[total] = 1\n" +
+			"    return result\n"
+		body := []string{
+			"    counts = {0: 1}",
+			"    total = 0",
+			"    result = 0",
+			"    for x in nums:",
+			"        total += x",
+			"        need = total - k",
+			"        if need in counts:",
+			"            result += counts[need]",
+			"        if total in counts:",
+			"            counts[total] += 1",
+			"        else:",
+			"            counts[total] = 1",
+			"    return result",
+		}
+		visible := cases(
+			caseAlias{name: "example-1", call: fmt.Sprintf("subarray_sum(%s, %d)", pyList(nums), k), expected: fmt.Sprintf("%d", subarraySumGo(nums, k))},
+			caseAlias{name: "example-2", call: "subarray_sum([1, 1, 1], 2)", expected: "2"},
+		)
+		hidden := cases(
+			caseAlias{name: "empty-input", call: "subarray_sum([], 0)", expected: "0"},
+			caseAlias{name: "no-match", call: "subarray_sum([1, 2, 3], 7)", expected: "0"},
+			caseAlias{name: "negative-numbers", call: "subarray_sum([1, -1, 0], 0)", expected: "3"},
+			caseAlias{name: "zero-k", call: "subarray_sum([0, 0, 0], 0)", expected: "6"},
+			caseAlias{name: "classic", call: "subarray_sum([3, 4, 7, 2, -3, 1, 4, 2], 7)", expected: "4"},
+		)
+		stmt := fmt.Sprintf("%s连续段计数：统计和恰好为 k 的连续子数组个数（元素可含负数）。\n%s", kind, examplesText(visible))
+		return assemble(meta, "", stmt, sig, body, map[int]bool{5: true, 7: true}, visible, hidden, answer)
+	}}
+}
+
+// ---- 期望值计算（与参考解同语义） ----
+
+func sumGo(nums []int) int {
+	t := 0
+	for _, v := range nums {
+		t += v
+	}
+	return t
+}
+
+func maxIndexGo(nums []int) int {
+	best := 0
+	for i := range nums {
+		if nums[i] > nums[best] {
+			best = i
+		}
+	}
+	return best
+}
+
+func rotateRightGo(nums []int, k int) []int {
+	n := len(nums)
+	if n == 0 {
+		return []int{}
+	}
+	k %= n
+	out := make([]int, n)
+	for i := 0; i < n; i++ {
+		out[(i+k)%n] = nums[i]
+	}
+	return out
+}
+
+func kadaneGo(nums []int) int {
+	if len(nums) == 0 {
+		return 0
+	}
+	best, current := nums[0], nums[0]
+	for i := 1; i < len(nums); i++ {
+		if current < 0 {
+			current = nums[i]
+		} else {
+			current += nums[i]
+		}
+		if current > best {
+			best = current
+		}
+	}
+	return best
+}
+
+func subarraySumGo(nums []int, k int) int {
+	counts := map[int]int{0: 1}
+	total, result := 0, 0
+	for _, x := range nums {
+		total += x
+		need := total - k
+		result += counts[need]
+		counts[total]++
+	}
+	return result
+}

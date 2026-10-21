@@ -100,27 +100,22 @@ func coverageByCell(t *testing.T) map[cellKey]int {
 // expectedGaps：棘轮清单——当前尚未填上的格与关键格副本（12 号票分批收缩至空）。
 // 格缺口 = "<topic>-<L#>-<action>"；关键格副本缺口 = 其后缀 "#2"。
 var expectedGaps = []string{
-	// 攻击格缺口（批3a 后 6）
-	"array-L1-attack", "array-L5-attack",
+	// 攻击格缺口（批4 后 4）
 	"hash-L1-attack", "hash-L5-attack",
 	"sort-L1-attack", "sort-L5-attack",
-	// 攻击关键格副本缺口（批3a 后 11）
-	"array-L3-attack#2", "array-L4-attack#2", "array-L5-attack#2",
+	// 攻击关键格副本缺口（批4 后 8）
 	"hash-L3-attack#2", "hash-L4-attack#2", "hash-L5-attack#2",
 	"sort-L3-attack#2", "sort-L4-attack#2", "sort-L5-attack#2",
 	"recursion-L3-attack#2", "recursion-L4-attack#2",
-	// 移动格缺口（批3a 后 17）
-	"array-L1-move", "array-L3-move", "array-L4-move", "array-L5-move",
+	// 移动格缺口（批4 后 13）
 	"hash-L1-move", "hash-L2-move", "hash-L3-move", "hash-L4-move", "hash-L5-move",
 	"sort-L1-move", "sort-L2-move", "sort-L3-move", "sort-L4-move", "sort-L5-move",
 	"recursion-L2-move", "recursion-L3-move", "recursion-L4-move",
-	// 防御格缺口（批3b 后 16）
-	"array-L1-defend", "array-L3-defend", "array-L4-defend", "array-L5-defend",
+	// 防御格缺口（批4 后 12）
 	"hash-L1-defend", "hash-L2-defend", "hash-L4-defend", "hash-L5-defend",
 	"sort-L1-defend", "sort-L2-defend", "sort-L3-defend", "sort-L4-defend", "sort-L5-defend",
 	"recursion-L2-defend", "recursion-L3-defend", "recursion-L4-defend",
-	// 技能格缺口（批3b 后 17）
-	"array-L1-skill", "array-L3-skill", "array-L4-skill", "array-L5-skill",
+	// 技能格缺口（批4 后 12）
 	"hash-L1-skill", "hash-L2-skill", "hash-L4-skill", "hash-L5-skill",
 	"sort-L1-skill", "sort-L2-skill", "sort-L3-skill", "sort-L4-skill", "sort-L5-skill",
 	"recursion-L2-skill", "recursion-L3-skill", "recursion-L4-skill",
