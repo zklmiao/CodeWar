@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"codewar/server/gen/matchpb"
+	"codewar/server/internal/bot"
 	"codewar/server/internal/classes"
 	"codewar/server/internal/match"
 	"codewar/server/internal/question"
@@ -74,6 +75,11 @@ type Hub struct {
 	// 05 号票：本场对局配置（首个 join 创建引擎时锁定，快照展示与 ELO 结算
 	// 共用；终局随引擎置空一并复位，下一场由下一条 join 重新锁定）。
 	cfg matchConfig
+	// 09 号票：PvE Bot 控制器（仅 pve 局非空）。Bot 不占用 conns 席位——
+	// 对局接入层只有一个人；终局/断线时 Stop 并置空。
+	botCtl *bot.Controller
+	// botClock：Bot 调度时钟的测试注入口（nil = 真实时钟）。
+	botClock bot.Clock
 }
 
 // accountStore：hub 需要的持久化子集（*store.Store 满足；测试注入桩）。
@@ -109,6 +115,35 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mu.Lock()
+	// 09 号票：模式归属本场配置（首个 join 锁定）。引擎已存在时以锁定值为准，
+	// 本窗口携带的 mode/bot 与其余配置参数一样被忽略（日志见下方 anySet 分支）。
+	firstJoin := h.engine == nil
+	mc := h.cfg
+	if firstJoin {
+		mc = parseMatchConfig(jc, h.logger)
+	}
+	pve := mc.mode == modePvE
+	if pve {
+		// PvE 人类固定 p1（player 可省略）；p2 是 Bot 席位，不接受人类接入。
+		if player == "" {
+			player = match.P1
+		}
+		if player != match.P1 {
+			h.mu.Unlock()
+			h.reject(ws, "PvE 模式人类固定为 p1（p2 由机器人占位）")
+			return
+		}
+		if !firstJoin {
+			h.mu.Unlock()
+			h.reject(ws, "PvE 对局进行中，不接受第二名玩家")
+			return
+		}
+	} else if player == "" {
+		// PvP 契约不变：player 必填（空值仅在 PvE 下合法）。
+		h.mu.Unlock()
+		h.reject(ws, "player 必须是 p1 或 p2")
+		return
+	}
 	if _, taken := h.conns[player]; taken {
 		h.mu.Unlock()
 		h.reject(ws, player+" 已有玩家接入（本票不支持重连，08 号票处理）")
@@ -139,33 +174,72 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		}
 		h.seats[player] = u
 	}
-	if h.engine == nil {
+	if firstJoin {
 		// 05 号票：首个 join 锁定整场配置——题型过滤喂给 04 工厂（question.
 		// NewFactory(Config) 承接面零改动），难度上限档同时决定风险系数
 		// （引擎普攻伤害）与出题区间上限（同源同档）。每局新 MatchSeed。
-		mc := parseMatchConfig(jc, h.logger)
-		questions := question.NewFactory(question.Config{
-			Topics:        mc.topics,
-			MaxDifficulty: question.Difficulty(mc.tier),
-			Strategy:      mc.strategy,
-			MatchSeed:     question.NewMatchSeed(),
-		})
-		questions.RegisterAll(templates.All()...)
+		// 09 号票：PvE 与 PvP 走完全相同的 Config 构造与 seed 派生（验收 4）。
+		mc.seed = question.NewMatchSeed()
+		questions := newQuestions(mc)
 		h.engine = match.NewEngineWithSetup(match.RealClock{}, questions, h.judge, h.broadcast,
 			match.Setup{RiskTier: mc.tier})
+		if pve {
+			// Bot 职业按 matchSeed 确定性盲选（开局由快照揭示），技能同职业内随机。
+			botClassID, botSkillID := bot.Loadout(mc.seed)
+			if err := h.engine.BindClass(match.P2, botClassID, botSkillID); err != nil {
+				h.engine.Stop()
+				h.engine = nil
+				h.mu.Unlock()
+				h.reject(ws, "PvE Bot 职业绑定失败："+err.Error())
+				return
+			}
+			ctl, err := bot.New(bot.Config{
+				Seed:       mc.seed,
+				Difficulty: bot.Difficulty(mc.botDifficulty),
+				ClassID:    botClassID,
+				SkillID:    botSkillID,
+				Player:     match.P2,
+				Questions:  questions,
+				Engine:     h.engine,
+				Clock:      h.botClock,
+				Logger:     h.logger,
+			})
+			if err != nil {
+				h.engine.Stop()
+				h.engine = nil
+				h.mu.Unlock()
+				h.reject(ws, "PvE Bot 初始化失败："+err.Error())
+				return
+			}
+			h.botCtl = ctl
+		}
 		h.cfg = mc
 		h.logger.Info("对局配置已锁定（首个 join）",
-			"topic", mc.topicDisplay(), "cap", mc.tier, "strategy", mc.strategy)
+			"topic", mc.topicDisplay(), "cap", mc.tier, "strategy", mc.strategy,
+			"mode", mc.mode, "bot", mc.botDifficulty)
 	} else if jc.anySet() {
 		// 05 裁决 1：后续 join 的配置参数忽略（本场已按首个 join 锁定）。
 		// 不拒连——第二窗口复制粘贴同一链接是常态路径，参数一致时无感。
 		h.logger.Warn("后续 join 的对局配置参数已忽略（本场按首个 join 锁定）",
-			"ignored_topic", jc.topic, "ignored_cap", jc.cap, "ignored_strategy", jc.strategy)
+			"ignored_topic", jc.topic, "ignored_cap", jc.cap, "ignored_strategy", jc.strategy,
+			"ignored_mode", jc.mode, "ignored_bot", jc.bot)
 	}
 	// 06 号票：职业绑定（仅 WAITING 可绑；join 请求已 fail-closed 校验过组合）。
 	// 第二名玩家 join 时引擎已存在，同样可绑——双方就位开赛前数值与初始 HP 冻结。
 	if classID != "" {
 		if err := h.engine.BindClass(player, classID, skillID); err != nil {
+			// 纵深防御：组合已在 join 时校验过，此分支理论上不可达。PvE 首 join
+			// 若走到这里必须整体回滚，否则会在没有人类席位的情况下留下 Bot 局。
+			if pve && firstJoin {
+				if h.botCtl != nil {
+					h.botCtl.Stop()
+					h.botCtl = nil
+				}
+				h.engine.Stop()
+				h.engine = nil
+				h.seats = make(map[match.Player]store.User)
+				h.cfg = matchConfig{}
+			}
 			h.mu.Unlock()
 			h.reject(ws, "职业绑定失败："+err.Error())
 			return
@@ -176,7 +250,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	eng := h.engine
 	// 开赛必须在释放 h.mu 之后：StartMatch 会同步 emit 事件 → broadcast 再次请求 h.mu，
 	// 持锁调用会自死锁（sync.Mutex 不可重入）。
-	shouldStart := len(h.conns) == 2 && eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING
+	// 09 号票：PvE 没有第二个人类窗口——Bot 已就位即开赛（人类接入仅一人）。
+	shouldStart := eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING && (pve || len(h.conns) == 2)
 	if shouldStart {
 		// 07 号票：本场 ID 与开赛时刻（结果落库与时长用）。
 		h.matchID = uuid.New()
@@ -189,10 +264,24 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		go eng.Run() // 计时泵：服务端权威倒计时（ADR-0002）
 	}
 
-	h.logger.Info("玩家接入", "player", player, "match_started", shouldStart)
+	h.logger.Info("玩家接入", "player", player, "match_started", shouldStart, "pve", pve)
 	go h.writePump(c)
 	h.sendSnapshot(c, player)
 	h.readLoop(c)
+}
+
+// newQuestions：PvE/PvP 共用的出题工厂构造（09 验收 4 的单一构造路径）。
+// 模式与 Bot 参数不参与配置——两种模式从同一 question.Config、同一默认值、
+// 同一 seed 派生出题；PvE 只是把 p2 的行动提交者换成 Bot。
+func newQuestions(mc matchConfig) *question.Factory {
+	f := question.NewFactory(question.Config{
+		Topics:        mc.topics,
+		MaxDifficulty: question.Difficulty(mc.tier),
+		Strategy:      mc.strategy,
+		MatchSeed:     mc.seed,
+	})
+	f.RegisterAll(templates.All()...)
+	return f
 }
 
 func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string, joinConfig, error) {
@@ -209,11 +298,17 @@ func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string
 		return "", "", "", "", joinConfig{}, fmt.Errorf("首条消息必须是 join")
 	}
 	p := match.Player(join.GetPlayer())
-	if p != match.P1 && p != match.P2 {
+	// 09 号票：PvE 允许省略 player（人类固定 p1，Bot 占 p2）；空值是否合法
+	// 由 ServeWS 按本场锁定的模式裁决——PvP 的空 player 仍拒绝（契约不变）。
+	if p != match.P1 && p != match.P2 && p != "" {
 		return "", "", "", "", joinConfig{}, fmt.Errorf("player 必须是 p1 或 p2")
 	}
 	// 05 号票：对局配置参数随 join 注入（页面 URL → 客户端 → join 契约）。
-	jc := joinConfig{topic: join.GetTopic(), cap: join.GetCap(), strategy: join.GetStrategy()}
+	// 09 号票：mode/bot 走同一锁定路径。
+	jc := joinConfig{
+		topic: join.GetTopic(), cap: join.GetCap(), strategy: join.GetStrategy(),
+		mode: join.GetMode(), bot: join.GetBot(),
+	}
 	return p, join.GetToken(), join.GetClass(), join.GetSkill(), jc, nil
 }
 
@@ -277,12 +372,31 @@ func (h *Hub) readLoop(c *conn) {
 
 func (h *Hub) removeConn(c *conn) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.conns[c.player] == c {
 		delete(h.conns, c.player)
 	}
 	// 席位绑定一并清除：同席位换身份重连不得沿用旧身份结算（fail-closed）。
 	delete(h.seats, c.player)
+
+	// 09 号票：PvE 单连接断开 = 对局作废（刷新重开）。Bot 与人一起清场，
+	// 不保留"看似还在打、实际 Bot 已停"的僵尸局；通用重连归 08 号票。
+	var eng *match.Engine
+	var ctl *bot.Controller
+	if h.cfg.mode == modePvE {
+		eng, ctl = h.engine, h.botCtl
+		h.engine, h.botCtl = nil, nil
+		h.seats = make(map[match.Player]store.User)
+		h.cfg = matchConfig{}
+	}
+	h.mu.Unlock()
+
+	// Stop 取引擎锁：必须在释放 h.mu 之后（broadcast 的锁序是 engine→h.mu）。
+	if ctl != nil {
+		ctl.Stop()
+	}
+	if eng != nil {
+		eng.Stop()
+	}
 }
 
 func (h *Hub) writePump(c *conn) {
@@ -296,16 +410,31 @@ func (h *Hub) writePump(c *conn) {
 func (h *Hub) sendSnapshot(c *conn, player match.Player) {
 	// 05 号票：快照携带本场锁定的配置（对局内只读展示的权威源——展示服务端
 	// 锁定值而非本窗口 URL 参数，两窗口参数冲突时不撒谎）。
-	// h.mu 只圈配置读取：engine.Snapshot 取引擎锁，持 h.mu 进入会与
+	// h.mu 只圈配置/引擎指针读取：engine.Snapshot 取引擎锁，持 h.mu 进入会与
 	// broadcast（引擎锁内取 h.mu）构成锁序死锁。
 	h.mu.Lock()
-	cfg := h.cfg
+	cfg, eng := h.cfg, h.engine
 	h.mu.Unlock()
-	snap := h.engine.Snapshot(player)
+	if eng == nil {
+		return
+	}
+	snap := eng.Snapshot(player)
+	// 09 号票：PvE 的 p2 是 Bot——在 hub 层标注（引擎对 Bot 零感知）。
+	// 开局后快照才会揭示其职业（引擎的盲选规则），此处只标记席位属性。
+	if cfg.mode == modePvE {
+		for _, pv := range snap.GetPlayers() {
+			if pv.GetId() == string(match.P2) {
+				isBot := true
+				pv.Bot = &isBot
+			}
+		}
+	}
 	snap.MatchConfig = &matchpb.MatchConfig{
 		Topic:    cfg.topicKey,
 		Cap:      uint32(cfg.tier),
 		Strategy: cfg.strategy,
+		Mode:     cfg.mode,
+		Bot:      cfg.botDifficulty,
 	}
 	b, err := protojson.Marshal(&matchpb.ServerMessage{Payload: &matchpb.ServerMessage_Snapshot{
 		Snapshot: snap,
@@ -326,12 +455,21 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 		// MatchEnded 上发出（终局面板即时可见）。任一方匿名/落库失败时
 		// elo 字段为空，行为与 01 号票完全一致（降级不断连）。
 		h.settleEnded(me)
+		// 09 号票：PvE Bot 随终局停止（不残留下一个对局的定时提交）。
+		if h.botCtl != nil {
+			h.botCtl.Stop()
+			h.botCtl = nil
+		}
 		// 对局结束即作废引擎：下一场对局由下一条 join 重新创建。
 		// 否则 ENDED 相位的引擎被永久复用，后续所有接入永远无法开赛——
 		// UI 承诺的"刷新两个窗口可再来一局"将落空（浏览器验收发现的 P0）。
 		h.engine = nil
 		h.seats = make(map[match.Player]store.User)
 		h.cfg = matchConfig{} // 05 号票：本场配置一并复位（下一场重新锁定）
+	} else if h.botCtl != nil {
+		// 09 号票：Bot 仅经广播 observer 获知 RoundStarted（不侵入引擎事件路径）。
+		// OnEvent 只采样与调度，不同步回调引擎（此处仍在引擎锁内）。
+		h.botCtl.OnEvent(env)
 	}
 	b, err := protojson.Marshal(&matchpb.ServerMessage{Payload: &matchpb.ServerMessage_Event{Event: env}})
 	if err != nil {
@@ -348,6 +486,12 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 // 同一用户分饰双方时跳过（防自刷分）。
 func (h *Hub) settleEnded(me *matchpb.MatchEnded) {
 	if h.st == nil {
+		return
+	}
+	// 09 号票：PvE 不落战绩/ELO（Bot 无账号——"双方认证才落库"规则的显式化；
+	// 显式守卫同时钉住未来拓扑演进时不误把 Bot 席位算进结算）。
+	if h.cfg.mode == modePvE {
+		h.logger.Info("PvE 对局不落战绩/ELO（Bot 无账号）")
 		return
 	}
 	u1, ok1 := h.seats[match.P1]

@@ -10,9 +10,13 @@ import (
 	"log/slog"
 	"strings"
 
+	"codewar/server/internal/bot"
 	"codewar/server/internal/match"
 	"codewar/server/internal/question"
 )
+
+// modePvE：单人练习模式（09 号票）。空串 = PvP（01~07 的现行行为）。
+const modePvE = "pve"
 
 // matchConfig：解析并归一后的本场配置（首个 join 锁定；快照展示与 ELO 结算共用）。
 type matchConfig struct {
@@ -20,16 +24,20 @@ type matchConfig struct {
 	topics   []question.Topic // 工厂题型过滤（只约束共享攻击题）；nil = 全部
 	tier     int              // 难度上限档 1..5（出题区间上限 = 风险系数档位，同源）
 	strategy string           // question.StrategyUniform | StrategyClimb
+	// 09 号票：模式与 Bot（与 topic/cap/strategy 同一锁定语义）。
+	mode          string // "" = PvP；modePvE = 单人练习
+	botDifficulty string // "" = 非 PvE；PvE 时 easy|normal|hard
+	seed          string // 本场 matchSeed（首个 join 生成；工厂与 Bot 决策同源）
 }
 
 // joinConfig：join 携带的原始配置参数（未校验）。
 type joinConfig struct {
-	topic, cap, strategy string
+	topic, cap, strategy, mode, bot string
 }
 
 // anySet：是否携带了任一配置参数（后续 join「忽略并记日志」的判定面）。
 func (j joinConfig) anySet() bool {
-	return j.topic != "" || j.cap != "" || j.strategy != ""
+	return j.topic != "" || j.cap != "" || j.strategy != "" || j.mode != "" || j.bot != ""
 }
 
 // parseMatchConfig：非法值回退默认并 WARN（回退语义由 hub_config_test 钉住）。
@@ -58,6 +66,27 @@ func parseMatchConfig(j joinConfig, logger *slog.Logger) matchConfig {
 		} else {
 			logger.Warn("对局配置 strategy 非法，回退默认 climb", "strategy", j.strategy)
 		}
+	}
+	// 09 号票：模式与 Bot 难度（同样回退而非拒连——配置不是安全边界）。
+	switch m := normalize(j.mode); m {
+	case "", "pvp":
+		// 缺省/显式 pvp = 现行 PvP（零行为变化）
+	case modePvE:
+		mc.mode = modePvE
+	default:
+		logger.Warn("对局模式非法，回退 PvP", "mode", j.mode)
+	}
+	if mc.mode == modePvE {
+		if b := normalize(j.bot); b == "" {
+			mc.botDifficulty = string(bot.DefaultDifficulty)
+		} else if d, ok := bot.ParseDifficulty(b); ok {
+			mc.botDifficulty = string(d)
+		} else {
+			logger.Warn("PvE Bot 难度非法，回退 normal", "bot", j.bot)
+			mc.botDifficulty = string(bot.DefaultDifficulty)
+		}
+	} else if normalize(j.bot) != "" {
+		logger.Warn("bot 参数仅在 mode=pve 下生效，已忽略", "bot", j.bot)
 	}
 	return mc
 }
