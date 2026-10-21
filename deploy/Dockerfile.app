@@ -6,6 +6,9 @@ COPY pnpm-workspace.yaml package.json ./
 COPY client/package.json client/
 RUN pnpm install --ignore-scripts
 COPY client/ client/
+# 06 号票起 main.ts 引用 ../../design/tokens.css（token 单一来源）：
+# 构建上下文是仓库根，但 client 阶段必须显式带上 design/ 才能解析。
+COPY design/ design/
 RUN pnpm --dir client build
 
 FROM golang:1.26-alpine AS server
