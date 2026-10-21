@@ -4,10 +4,12 @@ package templates
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
 	"codewar/server/internal/match"
@@ -128,6 +130,8 @@ func TestDualFormRendering(t *testing.T) {
 // 冒烟：每个模板参考解跑自家全部用例（真实 executor，不走 gRPC）。
 // 理由：gRPC 需起服务进程，测试只关心“参考解正确”，子进程直调 executor.run
 // 与生产判题同代码路径；CI 无 python 时跳过，本地必须全过。
+// 并发：每个任务是一次独立容器判题（子进程为主），4 worker 并行把 124 模板的
+// 墙钟压回 go test 默认超时内；首个失败按模板 ID 上报（t.Fatalf 仅主 goroutine 调用）。
 func TestSmokeAnswerKeyPassesOwnTests(t *testing.T) {
 	judgeDir := filepath.Join("..", "..", "..", "..", "judge")
 	if _, err := os.Stat(filepath.Join(judgeDir, "judgesvc", "executor.py")); err != nil {
@@ -140,16 +144,53 @@ func TestSmokeAnswerKeyPassesOwnTests(t *testing.T) {
 			t.Skip("无 python，跳过冒烟")
 		}
 	}
+
+	type smokeJob struct {
+		id    string
+		seed  string
+		code  string
+		tests []match.TestCase
+	}
+	jobs := make([]smokeJob, 0, 128)
 	for _, tm := range testRegistry(t) {
 		for _, seed := range []string{"smoke-1", "smoke-2"} {
 			in, err := tm.Generate(question.NewRNG(question.DeriveSeed(seed, tm.Meta().ID)))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := runExecutor(py, judgeDir, in.AnswerKey, in.Tests()); err != nil {
-				t.Fatalf("模板 %s seed %s 参考解未通过自家用例：%v", tm.Meta().ID, seed, err)
-			}
+			jobs = append(jobs, smokeJob{id: tm.Meta().ID, seed: seed, code: in.AnswerKey, tests: in.Tests()})
 		}
+	}
+
+	const workers = 4
+	ch := make(chan smokeJob)
+	var (
+		mu       sync.Mutex
+		firstErr error
+		wg       sync.WaitGroup
+	)
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range ch {
+				if err := runExecutor(py, judgeDir, job.code, job.tests); err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("模板 %s seed %s 参考解未通过自家用例：%v", job.id, job.seed, err)
+					}
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+	for _, job := range jobs {
+		ch <- job
+	}
+	close(ch)
+	wg.Wait()
+	if firstErr != nil {
+		t.Fatal(firstErr)
 	}
 }
 
