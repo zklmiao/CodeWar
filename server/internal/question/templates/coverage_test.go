@@ -101,14 +101,10 @@ func coverageByCell(t *testing.T) map[cellKey]int {
 // 格缺口 = "<topic>-<L#>-<action>"；关键格副本缺口 = 其后缀 "#2"。
 var expectedGaps = []string{
 	// 攻击格缺口（批6 后 0，仅递归空格白名单）
-	// 攻击关键格副本缺口（批6 后 2）
-	"recursion-L3-attack#2", "recursion-L4-attack#2",
-	// 移动格缺口（批6 后 3）
-	"recursion-L2-move", "recursion-L3-move", "recursion-L4-move",
-	// 防御格缺口（批6 后 3）
-	"recursion-L2-defend", "recursion-L3-defend", "recursion-L4-defend",
-	// 技能格缺口（批6 后 3）
-	"recursion-L2-skill", "recursion-L3-skill", "recursion-L4-skill",
+	// 攻击关键格副本缺口（批6b 后 0）
+	// 移动格缺口（批6b 后 0）
+	// 防御格缺口（批6b 后 0）
+	// 技能格缺口（批6b 后 0）
 }
 
 // TestCoverageGapReport：缺口报告 + 棘轮（验收 1 的证据链）。

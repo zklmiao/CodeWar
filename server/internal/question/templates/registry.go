@@ -56,6 +56,8 @@ func All() []question.Template {
 		recursionFactorialL2(),
 		recursionBinarySearchL3(),
 		recursionPascalL4(),
+		recursionClimbL3(),
+		recursionFastPowerL4(),
 		// 移动（私有题）
 		moveManhattanL1(),
 		moveStepL2(),
@@ -69,6 +71,16 @@ func All() []question.Template {
 		skillChainHealL2(),
 		skillBlastL3(),
 		skillHealL3(),
+		// 递归主题私有题（12 号票批 6b）
+		moveFibL2(),
+		moveRecSumL3(),
+		moveDepthL4(),
+		defendChainL2(),
+		defendOnesL3(),
+		defendMemoL4(),
+		skillComboL2(),
+		skillDrootL3(),
+		skillChooseL4(),
 		// 排序主题私有题（12 号票批 6）
 		moveSortPickL1(),
 		moveCheapestL2(),

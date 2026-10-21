@@ -48,6 +48,8 @@
 | recursion-factorial-L2-attack | 递归与简单 DP | L2 | both | 是 | base-zero, base-one |
 | recursion-binary-search-L3-attack | 递归与简单 DP | L3 | both | 是 | empty-input, single-element, not-found |
 | recursion-pascal-L4-attack | 递归与简单 DP | L4 | both | 是 | row-zero, row-one |
+| recursion-climb-L3-attack | 递归与简单 DP | L3 | both | 否 | base-zero, base-one, memo-hit |
+| recursion-fast-power-L4-attack | 递归与简单 DP | L4 | both | 否 | exp-zero, negative-exp, odd-exp |
 
 注：递归题型 L1/L5 在 Rubric 下无语义（矩阵空语义格），归 12 号票。
 
@@ -79,6 +81,9 @@
 | move-walkall-L3-move | 排序与贪心 | L3 | 否 | empty-input, single-element, gap |
 | move-ranks-L4-move | 排序与贪心 | L4 | 否 | duplicates, single-element, all-same |
 | move-events-L5-move | 排序与贪心 | L5 | 否 | empty-input, chained, disjoint, all-overlapping |
+| move-fib-L2-move | 递归与简单 DP | L2 | 否 | base-zero |
+| move-recsum-L3-move | 递归与简单 DP | L3 | 否 | empty-input, single-element |
+| move-depth-L4-move | 递归与简单 DP | L4 | 否 | empty-input, one-level, deep-nesting |
 
 ## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
 
@@ -108,6 +113,9 @@
 | defend-second-L3-defend | 排序与贪心 | L3 | 否 | single-distinct, empty-input, duplicates |
 | defend-cluster-L4-defend | 排序与贪心 | L4 | 否 | empty-input, single-element, all-one-group, separated |
 | defend-span-L5-defend | 排序与贪心 | L5 | 否 | empty-input, sorted-input, single-element, reverse-sorted |
+| defend-chain-L2-defend | 递归与简单 DP | L2 | 否 | zero-layers |
+| defend-ones-L3-defend | 递归与简单 DP | L3 | 否 | zero-input, single-bit |
+| defend-memo-L4-defend | 递归与简单 DP | L4 | 否 | zero-input, negative-input, memo-hit |
 
 ## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
@@ -137,8 +145,11 @@
 | skill-closepairs-L3-skill | 排序与贪心 | L3 | empty-input, no-close, all-close |
 | skill-medal-L4-skill | 排序与贪心 | L4 | empty-input, fewer-than-three, duplicates |
 | skill-swaps-L5-skill | 排序与贪心 | L5 | empty-input, sorted-input, single-cycle, reverse-sorted |
+| skill-combo-L2-skill | 递归与简单 DP | L2 | zero-power |
+| skill-droot-L3-skill | 递归与简单 DP | L3 | single-digit, zero-input |
+| skill-choose-L4-skill | 递归与简单 DP | L4 | k-zero, k-greater-than-n, full-k |
 
 ## 档位覆盖
 
-- 攻击：12 号票批 1-5 推进中（语法/字符串/数组/哈希题型已完成攻击矩阵，含关键格副本）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
-- 移动/防御/技能：语法/字符串/数组/哈希/排序主题 L1-L5 已补齐（12 批 2-6）；剩余递归主题（批 6b）。
+- 攻击：全题型矩阵完成（批 1-6b），关键格（攻击×L3-L5）均 ≥2 模板；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
+- 移动/防御/技能：全部 6 题型 L1-L5 已补齐（12 批 2-6b）。矩阵 108/108 格、关键格 16/16 双模板、总量 124/124。
