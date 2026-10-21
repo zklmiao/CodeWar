@@ -270,7 +270,8 @@ func (x *Snapshot) GetMatchConfig() *MatchConfig {
 	return nil
 }
 
-// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。
+// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略；
+// 09 号票补充模式（PvP/PvE）与 Bot 难度（服务端锁定值，对局内展示用）。
 type MatchConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型
@@ -278,7 +279,12 @@ type MatchConfig struct {
 	// 难度上限档 1..5（L1..L5，即出题区间 [L1, cap] 的上限，也是风险系数档位）
 	Cap uint32 `protobuf:"varint,2,opt,name=cap,proto3" json:"cap,omitempty"`
 	// 抽题策略 uniform（均匀随机）| climb（对局爬坡）
-	Strategy      string `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	Strategy string `protobuf:"bytes,3,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	// 对局模式（09 号票）：空 = PvP（01~07 行为）；"pve" = 单人练习。
+	Mode string `protobuf:"bytes,4,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Bot 难度（09 号票，仅 mode=pve 时非空）：easy | normal | hard。
+	// 客户端据 PlayerView.bot + 本字段显示"机器人（难度）"。
+	Bot           string `protobuf:"bytes,5,opt,name=bot,proto3" json:"bot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,6 +340,20 @@ func (x *MatchConfig) GetStrategy() string {
 	return ""
 }
 
+func (x *MatchConfig) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *MatchConfig) GetBot() string {
+	if x != nil {
+		return x.Bot
+	}
+	return ""
+}
+
 type PlayerView struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // "p1" | "p2"
@@ -349,6 +369,9 @@ type PlayerView struct {
 	SkillId string `protobuf:"bytes,6,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
 	// 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0）
 	SkillCdRounds int32 `protobuf:"varint,7,opt,name=skill_cd_rounds,json=skillCdRounds,proto3" json:"skill_cd_rounds,omitempty"`
+	// 该席位是否由模拟 Bot 控制（09 号票）：PvE 对局中 p2 行恒为 true；
+	// PvP/匿名链路缺省 false（proto3 optional，旧客户端忽略未知字段）。
+	Bot           *bool `protobuf:"varint,8,opt,name=bot,proto3,oneof" json:"bot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -430,6 +453,13 @@ func (x *PlayerView) GetSkillCdRounds() int32 {
 		return x.SkillCdRounds
 	}
 	return 0
+}
+
+func (x *PlayerView) GetBot() bool {
+	if x != nil && x.Bot != nil {
+		return *x.Bot
+	}
+	return false
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）
@@ -1658,9 +1688,16 @@ type JoinRequest struct {
 	// 不同：错配置只影响体验，错身份会污染战绩）。
 	// 空值 = 默认：题型全部 / cap L3 / climb（匿名缺省链路零行为变化）。
 	// 题型只过滤共享攻击题，行动题跨题型（spec「出题系统」）。
-	Topic         string `protobuf:"bytes,5,opt,name=topic,proto3" json:"topic,omitempty"`       // 题型 key；非法/空 = 全部 6 题型
-	Cap           string `protobuf:"bytes,6,opt,name=cap,proto3" json:"cap,omitempty"`           // "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点）
-	Strategy      string `protobuf:"bytes,7,opt,name=strategy,proto3" json:"strategy,omitempty"` // uniform | climb；非法/空 = climb
+	Topic    string `protobuf:"bytes,5,opt,name=topic,proto3" json:"topic,omitempty"`       // 题型 key；非法/空 = 全部 6 题型
+	Cap      string `protobuf:"bytes,6,opt,name=cap,proto3" json:"cap,omitempty"`           // "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点）
+	Strategy string `protobuf:"bytes,7,opt,name=strategy,proto3" json:"strategy,omitempty"` // uniform | climb；非法/空 = climb
+	// ===== 09 号票：对局模式 =====
+	// mode：空/pvp = 现行 PvP（零行为变化）；pve = 单人练习（人类固定 p1，
+	// 服务端 Bot 占 p2）。与 topic/cap/strategy 一样由首个 join 锁定；
+	// 非法值回退 PvP 并 WARN（配置不是安全边界）。
+	Mode string `protobuf:"bytes,8,opt,name=mode,proto3" json:"mode,omitempty"`
+	// bot：PvE 难度 easy | normal | hard；空 = normal，非法值回退 normal 并 WARN。
+	Bot           string `protobuf:"bytes,9,opt,name=bot,proto3" json:"bot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1740,6 +1777,20 @@ func (x *JoinRequest) GetCap() string {
 func (x *JoinRequest) GetStrategy() string {
 	if x != nil {
 		return x.Strategy
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetBot() string {
+	if x != nil {
+		return x.Bot
 	}
 	return ""
 }
@@ -1896,11 +1947,13 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x06result\x18\b \x01(\v2\x1d.codewar.match.v1.MatchResultR\x06result\x12-\n" +
 	"\x05panel\x18\t \x01(\v2\x17.codewar.match.v1.PanelR\x05panel\x12@\n" +
 	"\fmatch_config\x18\n" +
-	" \x01(\v2\x1d.codewar.match.v1.MatchConfigR\vmatchConfigJ\x04\b\x06\x10\a\"Q\n" +
+	" \x01(\v2\x1d.codewar.match.v1.MatchConfigR\vmatchConfigJ\x04\b\x06\x10\a\"w\n" +
 	"\vMatchConfig\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x10\n" +
 	"\x03cap\x18\x02 \x01(\rR\x03cap\x12\x1a\n" +
-	"\bstrategy\x18\x03 \x01(\tR\bstrategy\"\xd4\x01\n" +
+	"\bstrategy\x18\x03 \x01(\tR\bstrategy\x12\x12\n" +
+	"\x04mode\x18\x04 \x01(\tR\x04mode\x12\x10\n" +
+	"\x03bot\x18\x05 \x01(\tR\x03bot\"\xf3\x01\n" +
 	"\n" +
 	"PlayerView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x0e\n" +
@@ -1909,7 +1962,9 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\bshielded\x18\x04 \x01(\bR\bshielded\x12\x19\n" +
 	"\bclass_id\x18\x05 \x01(\tR\aclassId\x12\x19\n" +
 	"\bskill_id\x18\x06 \x01(\tR\askillId\x12&\n" +
-	"\x0fskill_cd_rounds\x18\a \x01(\x05R\rskillCdRounds\".\n" +
+	"\x0fskill_cd_rounds\x18\a \x01(\x05R\rskillCdRounds\x12\x15\n" +
+	"\x03bot\x18\b \x01(\bH\x00R\x03bot\x88\x01\x01B\x06\n" +
+	"\x04_bot\".\n" +
 	"\bPosition\x12\x10\n" +
 	"\x03row\x18\x01 \x01(\x05R\x03row\x12\x10\n" +
 	"\x03col\x18\x02 \x01(\x05R\x03col\"x\n" +
@@ -1994,7 +2049,7 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\rset_targeting\x18\x03 \x01(\v2\x1e.codewar.match.v1.SetTargetingH\x00R\fsetTargetingB\t\n" +
 	"\apayload\"I\n" +
 	"\fSetTargeting\x129\n" +
-	"\ttargeting\x18\x01 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"\xab\x01\n" +
+	"\ttargeting\x18\x01 \x01(\v2\x1b.codewar.match.v1.TargetingR\ttargeting\"\xd1\x01\n" +
 	"\vJoinRequest\x12\x16\n" +
 	"\x06player\x18\x01 \x01(\tR\x06player\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x14\n" +
@@ -2002,7 +2057,9 @@ const file_codewar_match_v1_match_proto_rawDesc = "" +
 	"\x05skill\x18\x04 \x01(\tR\x05skill\x12\x14\n" +
 	"\x05topic\x18\x05 \x01(\tR\x05topic\x12\x10\n" +
 	"\x03cap\x18\x06 \x01(\tR\x03cap\x12\x1a\n" +
-	"\bstrategy\x18\a \x01(\tR\bstrategy\"\xab\x01\n" +
+	"\bstrategy\x18\a \x01(\tR\bstrategy\x12\x12\n" +
+	"\x04mode\x18\b \x01(\tR\x04mode\x12\x10\n" +
+	"\x03bot\x18\t \x01(\tR\x03bot\"\xab\x01\n" +
 	"\rSubmitRequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x123\n" +
@@ -2108,6 +2165,7 @@ func file_codewar_match_v1_match_proto_init() {
 		(*ServerMessage_Snapshot)(nil),
 		(*ServerMessage_Event)(nil),
 	}
+	file_codewar_match_v1_match_proto_msgTypes[3].OneofWrappers = []any{}
 	file_codewar_match_v1_match_proto_msgTypes[10].OneofWrappers = []any{
 		(*Envelope_RoundStarted)(nil),
 		(*Envelope_PanelReady)(nil),

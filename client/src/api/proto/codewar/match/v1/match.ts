@@ -90,7 +90,10 @@ export interface Snapshot {
   matchConfig: MatchConfig | undefined;
 }
 
-/** 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。 */
+/**
+ * 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略；
+ * 09 号票补充模式（PvP/PvE）与 Bot 难度（服务端锁定值，对局内展示用）。
+ */
 export interface MatchConfig {
   /** 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型 */
   topic: string;
@@ -98,6 +101,13 @@ export interface MatchConfig {
   cap: number;
   /** 抽题策略 uniform（均匀随机）| climb（对局爬坡） */
   strategy: string;
+  /** 对局模式（09 号票）：空 = PvP（01~07 行为）；"pve" = 单人练习。 */
+  mode: string;
+  /**
+   * Bot 难度（09 号票，仅 mode=pve 时非空）：easy | normal | hard。
+   * 客户端据 PlayerView.bot + 本字段显示"机器人（难度）"。
+   */
+  bot: string;
 }
 
 export interface PlayerView {
@@ -119,6 +129,11 @@ export interface PlayerView {
   skillId: string;
   /** 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0） */
   skillCdRounds: number;
+  /**
+   * 该席位是否由模拟 Bot 控制（09 号票）：PvE 对局中 p2 行恒为 true；
+   * PvP/匿名链路缺省 false（proto3 optional，旧客户端忽略未知字段）。
+   */
+  bot?: boolean | undefined;
 }
 
 /** 网格格子坐标（行列均从 0 计，5×5） */
@@ -339,6 +354,15 @@ export interface JoinRequest {
   cap: string;
   /** uniform | climb；非法/空 = climb */
   strategy: string;
+  /**
+   * ===== 09 号票：对局模式 =====
+   * mode：空/pvp = 现行 PvP（零行为变化）；pve = 单人练习（人类固定 p1，
+   * 服务端 Bot 占 p2）。与 topic/cap/strategy 一样由首个 join 锁定；
+   * 非法值回退 PvP 并 WARN（配置不是安全边界）。
+   */
+  mode: string;
+  /** bot：PvE 难度 easy | normal | hard；空 = normal，非法值回退 normal 并 WARN。 */
+  bot: string;
 }
 
 export interface SubmitRequest {
@@ -684,7 +708,7 @@ export const Snapshot: MessageFns<Snapshot> = {
 };
 
 function createBaseMatchConfig(): MatchConfig {
-  return { topic: "", cap: 0, strategy: "" };
+  return { topic: "", cap: 0, strategy: "", mode: "", bot: "" };
 }
 
 export const MatchConfig: MessageFns<MatchConfig> = {
@@ -697,6 +721,12 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     }
     if (message.strategy !== "") {
       writer.uint32(26).string(message.strategy);
+    }
+    if (message.mode !== "") {
+      writer.uint32(34).string(message.mode);
+    }
+    if (message.bot !== "") {
+      writer.uint32(42).string(message.bot);
     }
     return writer;
   },
@@ -738,6 +768,22 @@ export const MatchConfig: MessageFns<MatchConfig> = {
             message.strategy = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.bot = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -755,6 +801,8 @@ export const MatchConfig: MessageFns<MatchConfig> = {
       topic: isSet(object.topic) ? globalThis.String(object.topic) : "",
       cap: isSet(object.cap) ? globalThis.Number(object.cap) : 0,
       strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      bot: isSet(object.bot) ? globalThis.String(object.bot) : "",
     };
   },
 
@@ -769,6 +817,12 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     if (message.strategy !== "") {
       obj.strategy = message.strategy;
     }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.bot !== "") {
+      obj.bot = message.bot;
+    }
     return obj;
   },
 
@@ -780,12 +834,14 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     message.topic = object.topic ?? "";
     message.cap = object.cap ?? 0;
     message.strategy = object.strategy ?? "";
+    message.mode = object.mode ?? "";
+    message.bot = object.bot ?? "";
     return message;
   },
 };
 
 function createBasePlayerView(): PlayerView {
-  return { id: "", hp: 0, pos: undefined, shielded: false, classId: "", skillId: "", skillCdRounds: 0 };
+  return { id: "", hp: 0, pos: undefined, shielded: false, classId: "", skillId: "", skillCdRounds: 0, bot: undefined };
 }
 
 export const PlayerView: MessageFns<PlayerView> = {
@@ -810,6 +866,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     }
     if (message.skillCdRounds !== 0) {
       writer.uint32(56).int32(message.skillCdRounds);
+    }
+    if (message.bot !== undefined) {
+      writer.uint32(64).bool(message.bot);
     }
     return writer;
   },
@@ -883,6 +942,14 @@ export const PlayerView: MessageFns<PlayerView> = {
             message.skillCdRounds = reader.int32();
             continue;
           }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.bot = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -916,6 +983,7 @@ export const PlayerView: MessageFns<PlayerView> = {
         : isSet(object.skill_cd_rounds)
         ? globalThis.Number(object.skill_cd_rounds)
         : 0,
+      bot: isSet(object.bot) ? globalThis.Boolean(object.bot) : undefined,
     };
   },
 
@@ -942,6 +1010,9 @@ export const PlayerView: MessageFns<PlayerView> = {
     if (message.skillCdRounds !== 0) {
       obj.skillCdRounds = Math.round(message.skillCdRounds);
     }
+    if (message.bot !== undefined) {
+      obj.bot = message.bot;
+    }
     return obj;
   },
 
@@ -957,6 +1028,7 @@ export const PlayerView: MessageFns<PlayerView> = {
     message.classId = object.classId ?? "";
     message.skillId = object.skillId ?? "";
     message.skillCdRounds = object.skillCdRounds ?? 0;
+    message.bot = object.bot ?? undefined;
     return message;
   },
 };
@@ -2923,7 +2995,7 @@ export const SetTargeting: MessageFns<SetTargeting> = {
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { player: "", token: "", class: "", skill: "", topic: "", cap: "", strategy: "" };
+  return { player: "", token: "", class: "", skill: "", topic: "", cap: "", strategy: "", mode: "", bot: "" };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
@@ -2948,6 +3020,12 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     }
     if (message.strategy !== "") {
       writer.uint32(58).string(message.strategy);
+    }
+    if (message.mode !== "") {
+      writer.uint32(66).string(message.mode);
+    }
+    if (message.bot !== "") {
+      writer.uint32(74).string(message.bot);
     }
     return writer;
   },
@@ -3021,6 +3099,22 @@ export const JoinRequest: MessageFns<JoinRequest> = {
             message.strategy = reader.string();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.mode = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.bot = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3042,6 +3136,8 @@ export const JoinRequest: MessageFns<JoinRequest> = {
       topic: isSet(object.topic) ? globalThis.String(object.topic) : "",
       cap: isSet(object.cap) ? globalThis.String(object.cap) : "",
       strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
+      mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
+      bot: isSet(object.bot) ? globalThis.String(object.bot) : "",
     };
   },
 
@@ -3068,6 +3164,12 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     if (message.strategy !== "") {
       obj.strategy = message.strategy;
     }
+    if (message.mode !== "") {
+      obj.mode = message.mode;
+    }
+    if (message.bot !== "") {
+      obj.bot = message.bot;
+    }
     return obj;
   },
 
@@ -3083,6 +3185,8 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     message.topic = object.topic ?? "";
     message.cap = object.cap ?? "";
     message.strategy = object.strategy ?? "";
+    message.mode = object.mode ?? "";
+    message.bot = object.bot ?? "";
     return message;
   },
 };
