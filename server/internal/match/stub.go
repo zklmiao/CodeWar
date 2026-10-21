@@ -9,6 +9,7 @@ var DemoQuestions = []Question{
 		Statement:   "判断字符串是否为回文（区分大小写，空串视为回文）。\n示例：is_palindrome(\"level\") → True；is_palindrome(\"hello\") → False",
 		Signature:   "def is_palindrome(s: str) -> bool:",
 		StarterCode: "def is_palindrome(s: str) -> bool:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
+		AnswerKey:   "def is_palindrome(s: str) -> bool:\n    return s == s[::-1]\n",
 		Tests: []TestCase{
 			{Name: "odd", Call: `is_palindrome("level")`, Expected: "True"},
 			{Name: "even", Call: `is_palindrome("abba")`, Expected: "True"},
@@ -22,6 +23,13 @@ var DemoQuestions = []Question{
 		Statement:   "在数组中找出和为目标值的两个数的下标（恰好一个解，返回升序下标列表）。\n示例：two_sum([2, 7, 11, 15], 9) → [0, 1]",
 		Signature:   "def two_sum(nums: list, target: int) -> list:",
 		StarterCode: "def two_sum(nums: list, target: int) -> list:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
+		AnswerKey: "def two_sum(nums: list, target: int) -> list:\n" +
+			"    seen = {}\n" +
+			"    for i, v in enumerate(nums):\n" +
+			"        if target - v in seen:\n" +
+			"            return [seen[target - v], i]\n" +
+			"        seen[v] = i\n" +
+			"    return []\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: "two_sum([2, 7, 11, 15], 9)", Expected: "[0, 1]"},
 			{Name: "middle", Call: "two_sum([3, 2, 4], 6)", Expected: "[1, 2]"},
@@ -34,6 +42,21 @@ var DemoQuestions = []Question{
 		Statement:   "字符串压缩：连续字符按「字符+次数」输出（次数为 1 也要输出）。\n示例：compress(\"aabcc\") → \"a2b1c2\"",
 		Signature:   "def compress(s: str) -> str:",
 		StarterCode: "def compress(s: str) -> str:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
+		AnswerKey: "def compress(s: str) -> str:\n" +
+			"    if not s:\n" +
+			"        return \"\"\n" +
+			"    out = []\n" +
+			"    prev = s[0]\n" +
+			"    count = 1\n" +
+			"    for ch in s[1:]:\n" +
+			"        if ch == prev:\n" +
+			"            count += 1\n" +
+			"        else:\n" +
+			"            out.append(prev + str(count))\n" +
+			"            prev = ch\n" +
+			"            count = 1\n" +
+			"    out.append(prev + str(count))\n" +
+			"    return \"\".join(out)\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: `compress("aabcc")`, Expected: `'a2b1c2'`},
 			{Name: "single", Call: `compress("abc")`, Expected: `'a1b1c1'`},
@@ -46,6 +69,12 @@ var DemoQuestions = []Question{
 		Statement:   "列表去重并保持首次出现的顺序。\n示例：dedup([1, 2, 2, 3, 1]) → [1, 2, 3]",
 		Signature:   "def dedup(nums: list) -> list:",
 		StarterCode: "def dedup(nums: list) -> list:\n    # 在这里补全函数体\n    raise NotImplementedError\n",
+		AnswerKey: "def dedup(nums: list) -> list:\n" +
+			"    out = []\n" +
+			"    for v in nums:\n" +
+			"        if v not in out:\n" +
+			"            out.append(v)\n" +
+			"    return out\n",
 		Tests: []TestCase{
 			{Name: "basic", Call: "dedup([1, 2, 2, 3, 1])", Expected: "[1, 2, 3]"},
 			{Name: "empty", Call: "dedup([])", Expected: "[]"},
