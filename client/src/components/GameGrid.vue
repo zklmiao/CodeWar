@@ -41,6 +41,10 @@ function isShielded(row: number, col: number): boolean {
   const o = occupant(row, col);
   return !!o && !!store.shield[o];
 }
+// 09 号票：Bot 棋子悬停标识（PvE 的 p2）
+function titleOf(p: string): string {
+  return store.classes[p]?.bot ? "机器人" : p.toUpperCase();
+}
 // 点选：回合活跃且自己未行动时可设置目标格；点击自己所在格 = 清除选择，
 // 对方占用的格子不可作为目标（合法性最终由服务端校验）
 function pick(row: number, col: number) {
@@ -73,7 +77,7 @@ function pick(row: number, col: number) {
           v-if="occupant(c.row, c.col)"
           class="pawn"
           :class="occupant(c.row, c.col)"
-          :title="occupant(c.row, c.col).toUpperCase()"
+          :title="titleOf(occupant(c.row, c.col))"
           :style="{ background: classColorOf(occupant(c.row, c.col)) || undefined }"
         >
           <img v-if="classArtOf(occupant(c.row, c.col))" :src="classArtOf(occupant(c.row, c.col))" alt="" />

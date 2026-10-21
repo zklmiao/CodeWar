@@ -17,6 +17,8 @@ export interface JoinOptions {
   topic?: string; // 05 号票：对局配置（URL 参数经 join 注入；服务端首个 join 锁定）
   cap?: string; // 难度上限档 "L1".."L5"；空 = L3
   strategy?: string; // uniform | climb；空 = climb
+  mode?: string; // 09 号票：空/pvp = 现行 PvP；pve = 单人练习（人类 p1 + 服务端 Bot p2）
+  bot?: string; // PvE 难度 easy | normal | hard；空 = normal
 }
 
 export class MatchSocket {
@@ -47,6 +49,9 @@ export class MatchSocket {
         topic: this.joinOpts.topic ?? "",
         cap: this.joinOpts.cap ?? "",
         strategy: this.joinOpts.strategy ?? "",
+        // 09 号票：模式与 Bot 难度同走 join 契约（服务端首个 join 锁定）
+        mode: this.joinOpts.mode ?? "",
+        bot: this.joinOpts.bot ?? "",
       }),
     };
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));
@@ -68,7 +73,7 @@ export class MatchSocket {
         moveTo: moveTo ? { row: moveTo.row, col: moveTo.col } : undefined,
         targeting:
           targeting && (targeting.direction || targeting.distance > 0)
-            ? { direction: targeting.direction, distance: String(targeting.distance) }
+            ? { direction: targeting.direction, distance: targeting.distance }
             : undefined,
       }),
     };
@@ -79,7 +84,7 @@ export class MatchSocket {
   setTargeting(t: { direction: string; distance: number }): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const msg: ClientMessage = {
-      setTargeting: { targeting: { direction: t.direction, distance: String(t.distance) } },
+      setTargeting: { targeting: { direction: t.direction, distance: t.distance } },
     };
     this.ws.send(JSON.stringify(ClientMessage.toJSON(msg)));
   }

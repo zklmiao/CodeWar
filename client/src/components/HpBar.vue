@@ -1,17 +1,26 @@
 <script setup lang="ts">
+import { botLabel } from "../topics";
 import { useMatchStore } from "../stores/match";
 
 const store = useMatchStore();
 const players = [
-  { id: "p1", label: "P1", color: "#c2554f" },
-  { id: "p2", label: "P2", color: "#5b7fd4" },
+  { id: "p1", color: "#c2554f" },
+  { id: "p2", color: "#5b7fd4" },
 ];
+
+// 09 号票：PvE 的 p2 是模拟 Bot——显示"机器人（难度）"（难度取服务端锁定配置）。
+function playerLabel(id: string): string {
+  if (store.classes[id]?.bot) {
+    return `${id.toUpperCase()} · 机器人（${botLabel(store.matchConfig?.bot ?? "")}）`;
+  }
+  return id.toUpperCase();
+}
 </script>
 
 <template>
   <div class="bars">
     <div v-for="p in players" :key="p.id" class="bar-row">
-      <span class="name" :class="{ me: store.viewerId === p.id }">{{ p.label }}</span>
+      <span class="name" :class="{ me: store.viewerId === p.id }">{{ playerLabel(p.id) }}</span>
       <div class="bar">
         <div class="fill" :style="{ width: store.hp[p.id] + '%', background: p.color }"></div>
         <span class="num">{{ store.hp[p.id] }}</span>

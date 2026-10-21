@@ -5,13 +5,27 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useMatchStore } from "../src/stores/match";
 
-function baseSnapshot() {
+interface SnapshotFixture {
+  seq: number;
+  phase: string;
+  round: number;
+  deadlineUnixMs: string;
+  matchConfig: { topic: string; cap: number; strategy: string; mode: string; bot: string };
+  players: Array<{ id: string; hp: number; bot?: boolean }>;
+  panel: {
+    attack: { id: string; statement: string; signature: string; starterCode: string };
+    move: { id: string; statement: string; signature: string; starterCode: string };
+    defend: { id: string; statement: string; signature: string; starterCode: string };
+  };
+}
+
+function baseSnapshot(): SnapshotFixture {
   return {
     seq: 0,
     phase: "MATCH_PHASE_ROUND_ACTIVE",
     round: 1,
     deadlineUnixMs: "9999",
-    matchConfig: { topic: "hash", cap: 5, strategy: "climb" },
+    matchConfig: { topic: "hash", cap: 5, strategy: "climb", mode: "", bot: "" },
     players: [
       { id: "p1", hp: 100 },
       { id: "p2", hp: 100 },
@@ -30,15 +44,15 @@ describe("05 对局配置快照", () => {
   it("快照携带题型过滤/难度上限/抽题策略", () => {
     const s = useMatchStore();
     s.applyServerMessage({ snapshot: baseSnapshot() }, "p1");
-    expect(s.matchConfig).toEqual({ topic: "hash", cap: 5, strategy: "climb" });
+    expect(s.matchConfig).toEqual({ topic: "hash", cap: 5, strategy: "climb", mode: "", bot: "" });
   });
 
   it("题型全部 = topic 空（默认锚点全部题型 / L3 / climb）", () => {
     const s = useMatchStore();
     const snap = baseSnapshot();
-    snap.matchConfig = { topic: "", cap: 3, strategy: "climb" };
+    snap.matchConfig = { topic: "", cap: 3, strategy: "climb", mode: "", bot: "" };
     s.applyServerMessage({ snapshot: snap }, "p1");
-    expect(s.matchConfig).toEqual({ topic: "", cap: 3, strategy: "climb" });
+    expect(s.matchConfig).toEqual({ topic: "", cap: 3, strategy: "climb", mode: "", bot: "" });
   });
 
   it("旧快照无配置字段时不崩且为 null（01~04 链路兼容）", () => {
@@ -54,8 +68,42 @@ describe("05 对局配置快照", () => {
     const s = useMatchStore();
     s.applyServerMessage({ snapshot: baseSnapshot() }, "p1");
     const snap = baseSnapshot();
-    snap.matchConfig = { topic: "hash", cap: 5, strategy: "uniform" };
+    snap.matchConfig = { topic: "hash", cap: 5, strategy: "uniform", mode: "", bot: "" };
     s.applyServerMessage({ snapshot: snap }, "p1");
     expect(s.matchConfig?.strategy).toBe("uniform");
+  });
+});
+
+// 09 号票：PvE 快照——PlayerView.bot 标记 + 服务端锁定的模式/难度进入状态。
+describe("09 PvE 人机练习", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("p2 的 bot 标记与锁定难度进入客户端状态（HpBar 显示数据源）", () => {
+    const s = useMatchStore();
+    const snap = baseSnapshot();
+    snap.matchConfig = { topic: "", cap: 3, strategy: "climb", mode: "pve", bot: "hard" };
+    snap.players = [
+      { id: "p1", hp: 110 },
+      { id: "p2", hp: 95, bot: true },
+    ];
+    s.applyServerMessage({ snapshot: snap }, "p1");
+    expect(s.classes.p1.bot).toBe(false);
+    expect(s.classes.p2.bot).toBe(true);
+    expect(s.matchConfig).toEqual({ topic: "", cap: 3, strategy: "climb", mode: "pve", bot: "hard" });
+  });
+
+  it("PvP/旧快照无 bot 字段 → false（向后兼容）", () => {
+    const s = useMatchStore();
+    s.applyServerMessage({ snapshot: baseSnapshot() }, "p1");
+    expect(s.classes.p1.bot).toBe(false);
+    expect(s.classes.p2.bot).toBe(false);
+  });
+
+  it("bot 难度展示名：未知值回退普通", async () => {
+    const { botLabel } = await import("../src/topics");
+    expect(botLabel("easy")).toBe("简单");
+    expect(botLabel("hard")).toBe("困难");
+    expect(botLabel("")).toBe("普通");
+    expect(botLabel("bogus")).toBe("普通");
   });
 });

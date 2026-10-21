@@ -60,6 +60,8 @@ export interface ClassView {
   skillId: string; // 空 = 未装备技能位
   // 查看者自己的技能冷却剩余回合数（0 = 可用）；对手行不携带
   skillCdRounds: number;
+  // 09 号票：该席位是否由模拟 Bot 控制（PvE 的 p2 恒为 true）
+  bot: boolean;
 }
 
 // 本场对局配置（05 号票，首个 join 锁定；快照下发的服务端权威值，
@@ -68,6 +70,8 @@ export interface MatchConfigView {
   topic: string; // 题型 key；空 = 全部 6 题型
   cap: number; // 难度上限档 1..5（L1..L5）
   strategy: string; // uniform | climb
+  mode: string; // 09 号票：空 = PvP；pve = 单人练习
+  bot: string; // 09 号票：PvE 难度 easy | normal | hard（非 PvE 为空）
 }
 
 export interface MatchState {
@@ -161,11 +165,19 @@ export const useMatchStore = defineStore("match", {
           classId: p.classId ?? "",
           skillId: p.skillId ?? "",
           skillCdRounds: p.skillCdRounds ?? 0,
+          bot: p.bot ?? false,
         };
       }
       // 05 号票：本场锁定配置（服务端权威；对局内只读展示的数据源）
+      // 09 号票：mode/bot 同源锁定（PvE 的"机器人（难度）"标识数据源）
       this.matchConfig = s.matchConfig
-        ? { topic: s.matchConfig.topic ?? "", cap: s.matchConfig.cap ?? 0, strategy: s.matchConfig.strategy ?? "" }
+        ? {
+            topic: s.matchConfig.topic ?? "",
+            cap: s.matchConfig.cap ?? 0,
+            strategy: s.matchConfig.strategy ?? "",
+            mode: s.matchConfig.mode ?? "",
+            bot: s.matchConfig.bot ?? "",
+          }
         : null;
       this.panel = s.panel
         ? {

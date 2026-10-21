@@ -23,6 +23,22 @@ export const STRATEGY_OPTIONS = [
   { key: "uniform", label: "均匀随机" },
 ];
 
+// 09 号票：PvE 人机难度（与 server/internal/bot 的三档同名；服务端权威解析）。
+export interface BotOption {
+  key: string;
+  label: string;
+}
+
+export const BOT_OPTIONS: BotOption[] = [
+  { key: "easy", label: "简单" },
+  { key: "normal", label: "普通" },
+  { key: "hard", label: "困难" },
+];
+
+export function botLabel(key: string): string {
+  return BOT_OPTIONS.find((b) => b.key === key)?.label ?? "普通";
+}
+
 export function topicLabel(key: string): string {
   return TOPIC_OPTIONS.find((t) => t.key === key)?.label ?? "全部题型";
 }
