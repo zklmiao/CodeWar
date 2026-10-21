@@ -40,6 +40,11 @@
 | sort-parity-L2-attack | 排序与贪心 | L2 | both | 是 | empty-input |
 | sort-kth-L3-attack | 排序与贪心 | L3 | both | 是 | single-element, duplicates |
 | sort-insertion-L4-attack | 排序与贪心 | L4 | both | 是 | empty-input, single-element, already-sorted, reverse-sorted |
+| sort-smallest-L1-attack | 排序与贪心 | L1 | both | 否 | — |
+| sort-min-gap-L3-attack | 排序与贪心 | L3 | both | 否 | duplicates, adjacent-pair, unsorted-input |
+| sort-merge-intervals-L4-attack | 排序与贪心 | L4 | both | 否 | empty-input, touching, contained, unsorted-input |
+| sort-sorted-squares-L5-attack | 排序与贪心 | L5 | both | 否 | all-negative, all-positive, mixed, single-element |
+| sort-min-arrows-L5-attack | 排序与贪心 | L5 | both | 否 | empty-input, touching-points, disjoint, single-balloon |
 | recursion-factorial-L2-attack | 递归与简单 DP | L2 | both | 是 | base-zero, base-one |
 | recursion-binary-search-L3-attack | 递归与简单 DP | L3 | both | 是 | empty-input, single-element, not-found |
 | recursion-pascal-L4-attack | 递归与简单 DP | L4 | both | 是 | row-zero, row-one |
@@ -69,6 +74,11 @@
 | move-first-repeat-L3-move | 哈希与计数 | L3 | 否 | empty-input, no-repeat, repeat-adjacent |
 | move-favorite-L4-move | 哈希与计数 | L4 | 否 | empty-input, tie-order, single-distinct |
 | move-schedule-L5-move | 哈希与计数 | L5 | 否 | empty-input, cooldown-zero, single-task, all-same |
+| move-sortpick-L1-move | 排序与贪心 | L1 | 否 | — |
+| move-cheapest-L2-move | 排序与贪心 | L2 | 否 | k-zero, empty-input |
+| move-walkall-L3-move | 排序与贪心 | L3 | 否 | empty-input, single-element, gap |
+| move-ranks-L4-move | 排序与贪心 | L4 | 否 | duplicates, single-element, all-same |
+| move-events-L5-move | 排序与贪心 | L5 | 否 | empty-input, chained, disjoint, all-overlapping |
 
 ## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
 
@@ -93,6 +103,11 @@
 | defend-duplicate-L2-defend | 哈希与计数 | L2 | 否 | empty-input, all-same |
 | defend-shared-L4-defend | 哈希与计数 | L4 | 否 | empty-input, no-overlap, duplicates-in-b |
 | defend-majority-L5-defend | 哈希与计数 | L5 | 否 | empty-input, no-majority, all-same, exactly-half |
+| defend-weakest-L1-defend | 排序与贪心 | L1 | 否 | — |
+| defend-topsum-L2-defend | 排序与贪心 | L2 | 否 | k-zero, empty-input |
+| defend-second-L3-defend | 排序与贪心 | L3 | 否 | single-distinct, empty-input, duplicates |
+| defend-cluster-L4-defend | 排序与贪心 | L4 | 否 | empty-input, single-element, all-one-group, separated |
+| defend-span-L5-defend | 排序与贪心 | L5 | 否 | empty-input, sorted-input, single-element, reverse-sorted |
 
 ## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
 
@@ -117,8 +132,13 @@
 | skill-cost-L2-skill | 哈希与计数 | L2 | empty-input |
 | skill-stockdiff-L4-skill | 哈希与计数 | L4 | empty-input, only-left, only-right |
 | skill-craftreport-L5-skill | 哈希与计数 | L5 | empty-input, exact-match, deficit, surplus |
+| skill-strongest-L1-skill | 排序与贪心 | L1 | — |
+| skill-shield-L2-skill | 排序与贪心 | L2 | k-zero, empty-input |
+| skill-closepairs-L3-skill | 排序与贪心 | L3 | empty-input, no-close, all-close |
+| skill-medal-L4-skill | 排序与贪心 | L4 | empty-input, fewer-than-three, duplicates |
+| skill-swaps-L5-skill | 排序与贪心 | L5 | empty-input, sorted-input, single-cycle, reverse-sorted |
 
 ## 档位覆盖
 
 - 攻击：12 号票批 1-5 推进中（语法/字符串/数组/哈希题型已完成攻击矩阵，含关键格副本）；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
-- 移动/防御/技能：语法/字符串/数组/哈希主题 L1-L5 已补齐（12 批 2-5）；剩余排序与递归主题（批 6）。
+- 移动/防御/技能：语法/字符串/数组/哈希/排序主题 L1-L5 已补齐（12 批 2-6）；剩余递归主题（批 6b）。
