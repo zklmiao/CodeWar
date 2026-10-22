@@ -14,6 +14,8 @@ type Decision struct {
 	Action  string // attack | move | defend | skill
 	Correct bool   // true = 提交参考解；false = 提交 starter（真实判题失败）
 	SolveMs int64  // 解题耗时（调度延迟；引擎用同一时钟测量）
+	// Target：脚本模式下可覆盖自动瞄准（普通难度 Bot 恒为 nil，语义不变）。
+	Target *match.Targeting
 }
 
 // Decide：从参数+RNG 采样一次行动（纯函数；调用顺序固定以保证同 seed 可复现：
