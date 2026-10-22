@@ -10,7 +10,10 @@ import (
 // server/ 是独立 Go 模块，go:embed 够不到仓库根，只能放副本——
 // 一旦两边不一致，CI 即红，禁止手改副本（改 db/migrations 后拷过来）。
 func TestMigrationsInSync(t *testing.T) {
-	for _, name := range []string{"000001_init.up.sql", "000001_init.down.sql"} {
+	for _, name := range []string{
+		"000001_init.up.sql", "000001_init.down.sql",
+		"000002_tutorial.up.sql", "000002_tutorial.down.sql",
+	} {
 		embedded, err := migrationFS.ReadFile("migrations/" + name)
 		if err != nil {
 			t.Fatalf("嵌入迁移缺失 %s: %v", name, err)
