@@ -56,6 +56,10 @@ type Question struct {
 	Signature   string
 	StarterCode string
 	Tests       []TestCase
+	// AnswerKey：服务端内部参考解（09 号票，PvE 模拟对手的"正确分支"来源）。
+	// 只存在于引擎内部结构：proto Problem 没有对应字段，problemToPb 不下发，
+	// 客户端永远不可见。引擎本身忽略该字段（任何玩家都不能通过提交它获得特权）。
+	AnswerKey string
 }
 
 // QuestionPort：按回合取题（06 号票扩展技能槽）。

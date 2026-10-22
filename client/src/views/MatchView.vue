@@ -10,7 +10,7 @@ import { useRoute } from "vue-router";
 import { useMatchStore } from "../stores/match";
 import { useUserStore } from "../stores/user";
 import { useClassesStore } from "../stores/classes";
-import { CAP_OPTIONS, STRATEGY_OPTIONS, TOPIC_OPTIONS } from "../topics";
+import { BOT_OPTIONS, CAP_OPTIONS, STRATEGY_OPTIONS, TOPIC_OPTIONS, botLabel } from "../topics";
 import { socket } from "../api/socket";
 import GameGrid from "../components/GameGrid.vue";
 import HpBar from "../components/HpBar.vue";
@@ -23,6 +23,12 @@ const user = useUserStore();
 const classesStore = useClassesStore();
 const route = useRoute();
 const disconnected = ref(false);
+// 09 号票：PvE 模式（?mode=pve&bot=easy|normal|hard）。必须在 playerFromUrl()
+// 之前初始化——viewer 的初值会读 isPve（const TDZ 会导致整个组件渲染失败）。
+const isPve = route.query.mode === "pve";
+const botDifficulty = ref(
+  BOT_OPTIONS.some((b) => b.key === route.query.bot) ? (route.query.bot as string) : "normal",
+);
 const viewer = ref(playerFromUrl());
 // 盲选暂存（choose 屏用；进入对局后由 URL query 权威）
 const pickedClass = ref((route.query.class as string) || "");
@@ -40,21 +46,38 @@ const cfgStrategy = ref(
     ? (route.query.strategy as string)
     : "climb",
 );
-
 function playerFromUrl(): string {
+  // PvE 人机练习人类固定 p1（链接里 player 可省略）
+  if (isPve) return "p1";
   const p = route.query.player;
   return p === "1" ? "p1" : p === "2" ? "p2" : "";
 }
 
-function joinHref(player: string): string {
+// configParams：对局配置的 URL 参数（PvP 双窗口链接与 PvE 人机链接共用，
+// 保证两种模式从同一套配置进入、服务端也走同一 question.Config 构造路径）。
+function configParams(): URLSearchParams {
   const q = new URLSearchParams();
-  q.set("player", player);
   if (pickedClass.value) q.set("class", pickedClass.value);
   if (pickedSkill.value) q.set("skill", pickedSkill.value);
   // 05 号票：配置随链接携带（topic 空 = 全部题型，省参；cap/strategy 恒携带）
   if (cfgTopic.value) q.set("topic", cfgTopic.value);
   q.set("cap", cfgCap.value);
   q.set("strategy", cfgStrategy.value);
+  return q;
+}
+
+function joinHref(player: string): string {
+  const q = configParams();
+  q.set("player", player);
+  return `/?${q.toString()}`;
+}
+
+// pveHref：人机练习接入链接（含当前难度与配置；player=p1 显式携带便于复制）。
+function pveHref(): string {
+  const q = configParams();
+  q.set("player", "1");
+  q.set("mode", "pve");
+  q.set("bot", botDifficulty.value);
   return `/?${q.toString()}`;
 }
 
@@ -92,6 +115,9 @@ function connect() {
       topic: cfgTopic.value,
       cap: cfgCap.value,
       strategy: cfgStrategy.value,
+      // 09 号票：PvE 模式与难度（人类固定 p1；服务端首个 join 锁定）
+      mode: isPve ? "pve" : "",
+      bot: isPve ? botDifficulty.value : "",
     },
   );
 }
@@ -182,6 +208,18 @@ watch(
           </div>
         </button>
       </div>
+      <!-- 09 号票：单人 PvE 练习（人类 p1 + 服务端 Bot；不落战绩/ELO） -->
+      <div class="pve-entry" data-testid="pve-entry">
+        <label>
+          人机练习难度
+          <select v-model="botDifficulty" data-testid="bot-difficulty">
+            <option v-for="b in BOT_OPTIONS" :key="b.key" :value="b.key">{{ b.label }}</option>
+          </select>
+        </label>
+        <a :href="pveHref()" data-testid="join-pve">开始人机练习（{{ botLabel(botDifficulty) }}）</a>
+      </div>
+      <p class="cfg-hint">人机练习使用与 PvP 相同的题型/难度上限/抽题策略；Bot 按难度决定解题速度与正确率。</p>
+
       <div class="links">
         <a :href="joinHref('1')" data-testid="join-p1">以 P1 接入</a>
         <a :href="joinHref('2')" data-testid="join-p2">以 P2 接入</a>
@@ -220,6 +258,26 @@ watch(
 }
 .cfg-form .copy:hover { background: var(--cw-color-bg-raised); }
 .cfg-hint { font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted); margin: var(--cw-space-2) 0 0; }
+/* 09 号票：人机练习入口 */
+.pve-entry {
+  display: flex; gap: var(--cw-space-4); justify-content: center; align-items: flex-end;
+  flex-wrap: wrap; margin: var(--cw-space-4) auto 0; max-width: 720px;
+}
+.pve-entry label {
+  display: flex; flex-direction: column; gap: var(--cw-space-1); text-align: left;
+  font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted);
+}
+.pve-entry select {
+  background: var(--cw-color-bg-inset); color: var(--cw-color-text-primary);
+  border: 1px solid var(--cw-color-border); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-2) var(--cw-space-3); font-size: var(--cw-font-size-sm); cursor: pointer;
+}
+.pve-entry a {
+  color: var(--cw-color-state-success); text-decoration: none; font-size: var(--cw-font-size-sm);
+  border: 1px solid var(--cw-color-state-success); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-2) var(--cw-space-4);
+}
+.pve-entry a:hover { background: var(--cw-color-bg-raised); }
 .class-grid { display: flex; gap: var(--cw-space-3); justify-content: center; margin: var(--cw-space-5) 0; }
 .class-card {
   background: var(--cw-color-bg-surface); border: 2px solid var(--cw-color-border); border-radius: var(--cw-radius-lg);

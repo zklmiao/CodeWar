@@ -34,7 +34,7 @@ describe("06 四槽面板与职业快照", () => {
   it("快照解析职业/技能/冷却与技能槽题面", () => {
     const s = useMatchStore();
     s.applyServerMessage({ snapshot: baseSnapshot() }, "p1");
-    expect(s.classes.p1).toEqual({ classId: "warrior", skillId: "cleave", skillCdRounds: 0 });
+    expect(s.classes.p1).toEqual({ classId: "warrior", skillId: "cleave", skillCdRounds: 0, bot: false });
     expect(s.classes.p2.classId).toBe("mage");
     expect(s.panel?.skill?.id).toBe("k1");
   });

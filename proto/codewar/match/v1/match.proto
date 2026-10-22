@@ -45,7 +45,8 @@ message Snapshot {
   MatchConfig match_config = 10;
 }
 
-// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略。
+// 本场对局配置（05 号票）：题型过滤 + 难度上限档 + 抽题策略；
+// 09 号票补充模式（PvP/PvE）与 Bot 难度（服务端锁定值，对局内展示用）。
 message MatchConfig {
   // 题型过滤 key（syntax|string|array|hash|sort|recursion）；空 = 全部 6 题型
   string topic = 1;
@@ -53,6 +54,11 @@ message MatchConfig {
   uint32 cap = 2;
   // 抽题策略 uniform（均匀随机）| climb（对局爬坡）
   string strategy = 3;
+  // 对局模式（09 号票）：空 = PvP（01~07 行为）；"pve" = 单人练习。
+  string mode = 4;
+  // Bot 难度（09 号票，仅 mode=pve 时非空）：easy | normal | hard。
+  // 客户端据 PlayerView.bot + 本字段显示"机器人（难度）"。
+  string bot = 5;
 }
 
 message PlayerView {
@@ -69,6 +75,9 @@ message PlayerView {
   string skill_id = 6;
   // 查看者自己的技能冷却剩余回合数（0 = 可用；仅查看者一行携带，对方行恒 0）
   int32 skill_cd_rounds = 7;
+  // 该席位是否由模拟 Bot 控制（09 号票）：PvE 对局中 p2 行恒为 true；
+  // PvP/匿名链路缺省 false（proto3 optional，旧客户端忽略未知字段）。
+  optional bool bot = 8;
 }
 
 // 网格格子坐标（行列均从 0 计，5×5）
@@ -244,6 +253,13 @@ message JoinRequest {
   string topic = 5;    // 题型 key；非法/空 = 全部 6 题型
   string cap = 6;      // "L1".."L5"；非法/空 = L3（伤害与 ELO 系数的默认锚点）
   string strategy = 7; // uniform | climb；非法/空 = climb
+  // ===== 09 号票：对局模式 =====
+  // mode：空/pvp = 现行 PvP（零行为变化）；pve = 单人练习（人类固定 p1，
+  // 服务端 Bot 占 p2）。与 topic/cap/strategy 一样由首个 join 锁定；
+  // 非法值回退 PvP 并 WARN（配置不是安全边界）。
+  string mode = 8;
+  // bot：PvE 难度 easy | normal | hard；空 = normal，非法值回退 normal 并 WARN。
+  string bot = 9;
 }
 
 message SubmitRequest {

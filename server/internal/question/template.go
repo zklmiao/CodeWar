@@ -131,6 +131,7 @@ func (in Instance) ToQuestion(form Form) match.Question {
 		Signature:   in.Signature,
 		StarterCode: starter,
 		Tests:       in.Tests(),
+		AnswerKey:   in.AnswerKey, // 服务端内部（PvE Bot 正确分支）；proto Problem 不含此字段
 	}
 }
 

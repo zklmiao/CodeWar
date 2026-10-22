@@ -101,6 +101,7 @@ type Engine struct {
 	timerC         <-chan time.Time
 	resetC         chan struct{} // armTimer 替换 timer 时 close+重建，唤醒阻塞在旧 timerC 上的泵
 	done           chan struct{} // 结束时关闭，停掉计时泵
+	doneOnce       sync.Once     // endMatch 与 Stop 都可能关闭 done（幂等）
 }
 
 func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast func(*matchpb.Envelope)) *Engine {
@@ -116,7 +117,7 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 		actions:   map[Player]*pendingAction{},
 		solveSeq:  map[Player]int64{},
 		// 难度风险系数（05 号票）：缺省 L3 → 1.0（05 之前行为的字节级锚点）
-		riskCoeff:      RiskCoeff(0),
+		riskCoeff: RiskCoeff(0),
 		// 初始站位：垂直相邻（ruling #7 的坐标实例；03 起随移动题动态变化）
 		pos:            map[Player]Pos{P1: {Row: 3, Col: 2}, P2: {Row: 2, Col: 2}},
 		shield:         map[Player]bool{},
@@ -208,10 +209,14 @@ func (e *Engine) StartMatch() {
 // 旧 timerC，若无此信号，提前结算（Submit 路径）后的新回合超时将永远无人消费。
 func (e *Engine) Run() {
 	for {
+		// resetC/timerC 都在持锁路径里被替换；先在锁内取引用再 select，
+		// 避免泵协程与提交/停止协程之间的 data race（旧 resetC 会被 close，
+		// 所以读取后即使立刻被替换，select 也会立即醒来重取）。
+		reset := e.currentResetC()
 		select {
 		case <-e.done:
 			return
-		case <-e.resetC: // timer 被替换，重新取最新 timerC
+		case <-reset: // timer 被替换，重新取最新 timerC
 			continue
 		case <-e.currentTimerC():
 			e.HandleRoundTimeout()
@@ -219,8 +224,14 @@ func (e *Engine) Run() {
 	}
 }
 
-// currentTimerC 只在持锁的 armTimer/resolveRound 里被替换，泵里读取——
+// currentResetC/currentTimerC：只在持锁的 armTimer/Stop 里被替换，泵里读取——
 // 用小函数配锁避免 data race（泵协程与提交协程并发）。
+func (e *Engine) currentResetC() <-chan struct{} {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.resetC
+}
+
 func (e *Engine) currentTimerC() <-chan time.Time {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -564,8 +575,7 @@ func (e *Engine) startRound(n int) {
 
 func (e *Engine) armTimer() {
 	e.stopTimer()
-	close(e.resetC) // 广播"timer 已更换"：唤醒阻塞在旧 timerC 上的泵
-	e.resetC = make(chan struct{})
+	e.wakePump() // 广播"timer 已更换"：唤醒阻塞在旧 timerC 上的泵
 	t := e.clock.NewTimer(RoundDuration)
 	e.timer = t
 	e.timerC = t.C()
@@ -579,13 +589,35 @@ func (e *Engine) stopTimer() {
 	}
 }
 
+// wakePump：唤醒阻塞在旧 timerC 上的计时泵（stopTimer 不会关闭 timer 的 channel）。
+func (e *Engine) wakePump() {
+	close(e.resetC)
+	e.resetC = make(chan struct{})
+}
+
 func (e *Engine) endMatch(winner Player, reason string) {
 	e.phase = matchpb.MatchPhase_MATCH_PHASE_ENDED
 	e.stopTimer()
-	close(e.done)
+	e.closeDone()
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_MatchEnded{MatchEnded: &matchpb.MatchEnded{
 		Winner: winner, Reason: reason,
 	}}})
+}
+
+// Stop：放弃当前对局（不发布 MatchEnded、不产生结算）。用于连接断开导致
+// 对局作废的拓扑（09 号票 PvE 单连接断开 = 刷新重开；通用重连归 08 号票）。
+// 幂等；已结束的对局调用无副作用。引擎内无任何模式特判——由接入层决定是否调用。
+func (e *Engine) Stop() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.phase = matchpb.MatchPhase_MATCH_PHASE_ENDED
+	e.stopTimer()
+	e.closeDone()
+	e.wakePump() // 让 Run 立即看到 done 退出（否则可能挂到旧 timer 到期）
+}
+
+func (e *Engine) closeDone() {
+	e.doneOnce.Do(func() { close(e.done) })
 }
 
 // emitSkillDodged：技能被闪避的统一事件（伤害/汲取的未命中分支共用）。
