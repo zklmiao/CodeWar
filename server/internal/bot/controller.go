@@ -79,11 +79,12 @@ type Controller struct {
 	hasSkill bool
 	logger   *slog.Logger
 
-	mu             sync.Mutex
-	stopped        bool
-	round          int
-	skillReadyFrom int // 技能再度可用回合（第 N 回合释放 → N+CD）
-	pending        Timer
+	mu              sync.Mutex
+	stopped         bool
+	round           int
+	skillReadyFrom  int // 技能再度可用回合（第 N 回合释放 → N+CD）
+	lastSubmitRound int // 最近一次提交所在回合（技能冷却以引擎判题结果为准）
+	pending         Timer
 }
 
 // Loadout：按 matchSeed 确定性随机三职业之一 + 该职业的一个技能（开局前盲选，
@@ -163,9 +164,17 @@ func New(cfg Config) (*Controller, error) {
 	}, nil
 }
 
-// OnEvent：hub 广播 observer——只消费 RoundStarted（其余事件忽略）。
+// OnEvent：hub 广播 observer——消费 RoundStarted（调度本回合行动）与
+// SubmissionJudged（以引擎结果为权威同步技能冷却）。其余事件忽略。
 // 新回合会取消上一回合尚未触发的行动（对局提前结算时防止陈旧提交）。
 func (c *Controller) OnEvent(env *matchpb.Envelope) {
+	// 16 号票：技能冷却必须跟随引擎的判题结果。Bot 自己的 Correct 只是预测——
+	// starter 也可能通过判题（假判题器/边界题），此时引擎已进入冷却而 Bot
+	// 仍以为可用，下一回合重复提交会被 skill-cooldown 拒绝，回合无人行动直到超时。
+	if j := env.GetSubmissionJudged(); j != nil {
+		c.observeJudged(j)
+		return
+	}
 	rs := env.GetRoundStarted()
 	if rs == nil {
 		return
@@ -277,20 +286,30 @@ func (c *Controller) act(round int, d Decision) {
 	if d.Correct && q.AnswerKey != "" {
 		code = q.AnswerKey
 	}
-	// 冷却必须在 Submit 之前登记：Submit 可能同步结算本回合并触发下一回合的
-	// OnEvent，后者要读 skillReadyFrom 决定下一行动；若等 Submit 返回再写，
-	// 下一回合已经按旧值排成技能，必然撞上引擎的 skill-cooldown 并空转到超时
-	// （hub e2e 压力测试复现）。用提交时所在的 round 登记，不依赖 c.round。
-	if d.Action == match.ActionSkill && d.Correct {
-		c.mu.Lock()
-		if !c.stopped {
-			c.skillReadyFrom = round + int(c.skill.Cooldown)
-		}
-		c.mu.Unlock()
+	// 记录本次提交所在回合：SubmissionJudged 在 Submit 内同步到达（早于
+	// resolveRound/下一回合的 RoundStarted），handler 用它登记冷却。
+	c.mu.Lock()
+	if !c.stopped {
+		c.lastSubmitRound = round
 	}
+	c.mu.Unlock()
 	c.logger.Debug("bot 提交", "round", round, "action", d.Action,
 		"correct", d.Correct, "solve_ms", d.SolveMs, "class", c.class.ID)
 	c.cfg.Engine.Submit(c.player, d.Action, code, moveTo)
+}
+
+// observeJudged：技能真正通过判题后，按引擎口径登记冷却（第 N 回合释放 →
+// 第 N+CD 回合起可用）。失败/未装备/冷却拒绝不登记。
+func (c *Controller) observeJudged(j *matchpb.SubmissionJudged) {
+	if j.GetPlayer() != c.player || !j.GetPassed() || j.GetAction() != match.ActionSkill {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.stopped || c.lastSubmitRound <= 0 {
+		return
+	}
+	c.skillReadyFrom = c.lastSubmitRound + int(c.skill.Cooldown)
 }
 
 func posOf(snap *matchpb.Snapshot, p match.Player) (match.Pos, bool) {

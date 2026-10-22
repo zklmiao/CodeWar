@@ -27,3 +27,32 @@
 3. `go test -race -count=500` 诊断版本，取得确定性复现。
 4. 归类：Bot 漏提交（产品 bug，修 bot 调度）或测试实时竞态（改 Hub 测试）。
 5. 修复后按"失败协议"附回归证据：复现失败 → 根因 → 修复点 → 为什么不是改另一边。
+
+## 诊断结论（实现记录，待人工验收）
+
+**复现**：300 次压力运行抓到停滞现场——第 3 回合 Bot 成功释放技能
+（`J3:p2:skill:true`），第 4 回合 Bot 再次提交技能被引擎拒绝
+（`X4:p2:skill-cooldown`），该回合只有玩家行动，Bot 无行动，回合空转到超时。
+
+**根因（产品缺陷，非测试计时问题）**：`Controller.act` 原先按自己的
+`d.Correct` 预测登记 `skillReadyFrom`。预测与实际判题结果可能分叉——假判题器
+（或 starter 恰好通过判题的边界题）会让引擎接受技能并进入冷却，而 Bot 本地
+仍认为技能可用；下一回合重复提交被 `skill-cooldown` 拒绝，回合等满 75s。
+
+**修复**：冷却以引擎判题结果为权威。`OnEvent` 消费 `SubmissionJudged`：
+Bot 的技能 `passed=true` 时，按 `lastSubmitRound + Cooldown` 登记冷却（该事件
+在 `Submit` 内同步到达，早于下一回合的 `RoundStarted`）；删除按 `Correct`
+预测登记的旧逻辑。`act` 只记录 `lastSubmitRound`。
+
+**回归证据**：
+
+- `TestSkillCooldownFollowsEngineJudgement`（新增，确定性）：`passAllJudge` +
+  `Accuracy=0` 强制"starter 通过判题"；删掉 `OnEvent` 的 `SubmissionJudged`
+  处理会立刻出现 `skill-cooldown` 拒绝并变红（已实测）。
+- `go test -race ./internal/bot/... -run TestSkillCooldown -count=100` 绿。
+- `go test -race ./internal/hub/... -run 'TestPve...' -count=200` 绿；
+  修复前同一压力 300 次复现停滞。
+- 引擎 75s 回合超时自愈路径既有覆盖：`server/internal/match/engine_test.go`
+  的 `timeoutRound`/`HandleRoundTimeout`（manual clock），本票未改引擎。
+- 引擎包仍无 bot/tutorial 特判（既有结构测试继续绿）。
+
