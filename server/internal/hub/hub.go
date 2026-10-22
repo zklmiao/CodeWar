@@ -80,6 +80,9 @@ type Hub struct {
 	botCtl *bot.Controller
 	// botClock：Bot 调度时钟的测试注入口（nil = 真实时钟）。
 	botClock bot.Clock
+	// started：当前引擎是否已开赛。废弃大厅回收用它判断，避免持 h.mu 时
+	// 调 Engine.Phase() 取引擎锁（broadcast 的锁序是 engine→h.mu，反向会死锁）。
+	started bool
 }
 
 // accountStore：hub 需要的持久化子集（*store.Store 满足；测试注入桩）。
@@ -115,6 +118,23 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.mu.Lock()
+	// 废弃大厅回收：首个 join 锁定的引擎还没开赛、且当前一个连接都没有时，
+	// 说明上一场没有第二个人来（或首个玩家在开赛前断开）。此时保留旧配置锁
+	// 会让新 URL 的 mode/topic/cap/strategy 全部被忽略（09 手工验收复现：
+	// 残留的 WAITING PvP 局把 PvE 链接吃成了等第二个玩家）。按新 join 重建。
+	if h.engine != nil && len(h.conns) == 0 && !h.started {
+		if h.botCtl != nil {
+			h.botCtl.Stop()
+			h.botCtl = nil
+		}
+		h.engine.Stop()
+		h.engine = nil
+		h.seats = make(map[match.Player]store.User)
+		h.cfg = matchConfig{}
+		h.matchID = uuid.Nil
+		h.matchStart = time.Time{}
+		h.logger.Info("回收废弃大厅（WAITING 且无连接），按新 join 重新锁定配置")
+	}
 	// 09 号票：模式归属本场配置（首个 join 锁定）。引擎已存在时以锁定值为准，
 	// 本窗口携带的 mode/bot 与其余配置参数一样被忽略（日志见下方 anySet 分支）。
 	firstJoin := h.engine == nil
@@ -178,12 +198,14 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		questions := newQuestions(mc)
 		h.engine = match.NewEngineWithSetup(match.RealClock{}, questions, h.judge, h.broadcast,
 			match.Setup{RiskTier: mc.tier})
+		h.started = false
 		if pve {
 			// Bot 职业按 matchSeed 确定性盲选（开局由快照揭示），技能同职业内随机。
 			botClassID, botSkillID := bot.Loadout(mc.seed)
 			if err := h.engine.BindClass(match.P2, botClassID, botSkillID); err != nil {
 				h.engine.Stop()
 				h.engine = nil
+				h.started = false
 				h.mu.Unlock()
 				h.reject(ws, "PvE Bot 职业绑定失败："+err.Error())
 				return
@@ -202,6 +224,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				h.engine.Stop()
 				h.engine = nil
+				h.started = false
 				h.mu.Unlock()
 				h.reject(ws, "PvE Bot 初始化失败："+err.Error())
 				return
@@ -234,6 +257,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 				h.engine = nil
 				h.seats = make(map[match.Player]store.User)
 				h.cfg = matchConfig{}
+				h.started = false
 			}
 			h.mu.Unlock()
 			h.reject(ws, "职业绑定失败："+err.Error())
@@ -249,6 +273,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	shouldStart := eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING && (pve || len(h.conns) == 2)
 	if shouldStart {
 		// 07 号票：本场 ID 与开赛时刻（结果落库与时长用）。
+		h.started = true
 		h.matchID = uuid.New()
 		h.matchStart = time.Now()
 	}
@@ -385,6 +410,7 @@ func (h *Hub) removeConn(c *conn) {
 		h.engine, h.botCtl = nil, nil
 		h.seats = make(map[match.Player]store.User)
 		h.cfg = matchConfig{}
+		h.started = false
 	}
 	h.mu.Unlock()
 
@@ -469,6 +495,7 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 		h.engine = nil
 		h.seats = make(map[match.Player]store.User)
 		h.cfg = matchConfig{} // 05 号票：本场配置一并复位（下一场重新锁定）
+		h.started = false
 	} else if h.botCtl != nil {
 		// 09 号票：Bot 仅经广播 observer 获知 RoundStarted（不侵入引擎事件路径）。
 		// OnEvent 只采样与调度，不同步回调引擎（此处仍在引擎锁内）。

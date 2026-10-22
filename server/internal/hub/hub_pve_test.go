@@ -304,6 +304,87 @@ func TestPveDoesNotRecordMatchOrElo(t *testing.T) {
 	}
 }
 
+// 废弃大厅回收：WAITING 且 0 连接时，新 join 必须能丢弃旧配置锁并按新 URL
+// 重新锁定。复现现场：残留的 PvP WAITING 局把后续 PvE 链接吃成"等第二个玩家"。
+func TestAbandonedLobbyIsResetByNewJoin(t *testing.T) {
+	h := New(passJudge{}, slog.Default(), nil)
+	h.botClock = idleClock{}
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	// 1) 先制造一个 PvP 首 join 的 WAITING 大厅（hash / L1 / uniform）
+	old := dialJoin(t, srv.URL, &matchpb.JoinRequest{
+		Player: "p1", Topic: "hash", Cap: "L1", Strategy: "uniform",
+	})
+	snap := readSnapshot(t, old)
+	if snap.GetPhase() != matchpb.MatchPhase_MATCH_PHASE_WAITING {
+		t.Fatalf("PvP 首 join 应等待第二人，实际 %v", snap.GetPhase())
+	}
+	h.mu.Lock()
+	oldEng := h.engine
+	started := h.started
+	h.mu.Unlock()
+	if oldEng == nil || started {
+		t.Fatalf("WAITING 大厅应有未开赛引擎：engine=%v started=%v", oldEng != nil, started)
+	}
+
+	// 2) 首个玩家断开：PvP 路径不回收引擎（本票不处理在线重连）
+	old.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		h.mu.Lock()
+		n, eng := len(h.conns), h.engine
+		h.mu.Unlock()
+		if n == 0 && eng == oldEng {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("断线后连接未清空，或引擎被意外回收")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// 3) 新 join 带完全不同的配置与模式：应回收旧大厅并按新 URL 锁定
+	ws := dialJoin(t, srv.URL, &matchpb.JoinRequest{
+		Topic: "sort", Cap: "L5", Strategy: "uniform",
+		Mode: "pve", Bot: "easy", Class: "ranger", Skill: "pierce",
+	})
+	defer ws.Close()
+	snap = readSnapshot(t, ws)
+	if snap.GetPhase() != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE || snap.GetRound() != 1 {
+		t.Fatalf("新 PvE join 应立即开赛：phase=%v round=%d", snap.GetPhase(), snap.GetRound())
+	}
+	cfg := snap.GetMatchConfig()
+	if cfg.GetMode() != "pve" || cfg.GetBot() != "easy" ||
+		cfg.GetTopic() != "sort" || cfg.GetCap() != 5 || cfg.GetStrategy() != "uniform" {
+		t.Fatalf("新 join 未重新锁定配置：%v", cfg)
+	}
+	var p1, p2 *matchpb.PlayerView
+	for _, pv := range snap.GetPlayers() {
+		switch pv.GetId() {
+		case "p1":
+			p1 = pv
+		case "p2":
+			p2 = pv
+		}
+	}
+	if p1 == nil || p1.GetClassId() != "ranger" {
+		t.Fatalf("新 join 的人类职业未生效：%v", p1)
+	}
+	if p2 == nil || !p2.GetBot() {
+		t.Fatalf("新 join 的 P2 应为机器人：%v", p2)
+	}
+	h.mu.Lock()
+	newEng, newStarted := h.engine, h.started
+	h.mu.Unlock()
+	if newEng == oldEng || newEng == nil || !newStarted {
+		t.Fatalf("应换新引擎并进入已开赛态：same=%v started=%v", newEng == oldEng, newStarted)
+	}
+	if oldEng.Phase() != matchpb.MatchPhase_MATCH_PHASE_ENDED {
+		t.Fatalf("废弃引擎应被 Stop 到 ENDED，实际 %v", oldEng.Phase())
+	}
+}
+
 // 显式守卫：即使未来拓扑演进把 Bot 席位误当成"双方已认证"，PvE 也不得落库。
 // 只跑端到端（P2 无 seat）时删掉 settleEnded 里的 PvE 守卫测试仍会绿。
 func TestSettleEndedSkipsPveEvenWithBothSeats(t *testing.T) {
