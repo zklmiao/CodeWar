@@ -16,6 +16,17 @@
 - 端口规范：`PORT = 30NN`（NN = 票号），并行 dev server 互不抢占
 - 票合入 main 后：`git worktree remove .worktrees/<NN>-<slug>` 并删除分支
 
+## 测试（本地）
+
+- Go 单元测试：`cd server && go test ./...`（无 DB 时 DB 集成测试自动 skip）。
+- 真实 Postgres 集成测试由 `CODEWAR_TEST_DSN` 门控，源 DSN 的库名必须含 `test`。
+  每个测试包使用独立库（`codewar_test_store` / `codewar_test_accounts` /
+  `codewar_test_hub`），缺失时由 `server/internal/testdb` 自动创建，因此可直接
+  并行跑包，不会互相 TRUNCATE。本地示例（compose 的 postgres 映射在 25432）：
+  `cd server && CODEWAR_TEST_DSN='postgres://codewar:codewar-dev@localhost:25432/codewar_test?sslmode=disable' go test ./...`
+- Judge：`python -m pytest judge/tests -q`。
+- 客户端：`pnpm -C client test`、`pnpm -C client build`。
+
 ## 当前波次
 
 Wave 1 已交付：`01 Tracer（热座最小对局）` + `13 美术占位规范` + `14 霓虹质感精修`（均已合入 main，`Status: resolved`）。
