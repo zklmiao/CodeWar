@@ -138,11 +138,6 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			h.reject(ws, "PvE 对局进行中，不接受第二名玩家")
 			return
 		}
-	} else if player == "" {
-		// PvP 契约不变：player 必填（空值仅在 PvE 下合法）。
-		h.mu.Unlock()
-		h.reject(ws, "player 必须是 p1 或 p2")
-		return
 	}
 	if _, taken := h.conns[player]; taken {
 		h.mu.Unlock()
@@ -298,9 +293,12 @@ func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string
 		return "", "", "", "", joinConfig{}, fmt.Errorf("首条消息必须是 join")
 	}
 	p := match.Player(join.GetPlayer())
-	// 09 号票：PvE 允许省略 player（人类固定 p1，Bot 占 p2）；空值是否合法
-	// 由 ServeWS 按本场锁定的模式裁决——PvP 的空 player 仍拒绝（契约不变）。
-	if p != match.P1 && p != match.P2 && p != "" {
+	// 09 号票：PvE 人类固定 p1，player 参数可省略（Bot 占 p2）。
+	// PvP 契约不变：空 player 仍在 readJoin 阶段拒绝（与 01~07 的拒连路径一致）。
+	if p == "" && normalize(join.GetMode()) == modePvE {
+		p = match.P1
+	}
+	if p != match.P1 && p != match.P2 {
 		return "", "", "", "", joinConfig{}, fmt.Errorf("player 必须是 p1 或 p2")
 	}
 	// 05 号票：对局配置参数随 join 注入（页面 URL → 客户端 → join 契约）。
@@ -450,6 +448,11 @@ func (h *Hub) sendSnapshot(c *conn, player match.Player) {
 func (h *Hub) broadcast(env *matchpb.Envelope) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if r := env.GetSubmissionRejected(); r != nil {
+		// 诊断用（Debug）：PvE Bot 提交非法目标/冷却中技能时，回合可能等到超时，
+		// 这条日志是定位"卡住"原因的最短路径。
+		h.logger.Debug("提交被拒", "player", r.GetPlayer(), "reason", r.GetReason())
+	}
 	if me := env.GetMatchEnded(); me != nil {
 		// 07 号票：引擎终局后、事件广播前完成结算与落库，结果附在同一条
 		// MatchEnded 上发出（终局面板即时可见）。任一方匿名/落库失败时

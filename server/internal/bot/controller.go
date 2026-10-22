@@ -277,18 +277,20 @@ func (c *Controller) act(round int, d Decision) {
 	if d.Correct && q.AnswerKey != "" {
 		code = q.AnswerKey
 	}
-	c.logger.Debug("bot 提交", "round", round, "action", d.Action,
-		"correct", d.Correct, "solve_ms", d.SolveMs, "class", c.class.ID)
-	c.cfg.Engine.Submit(c.player, d.Action, code, moveTo)
-
-	// 冷却只在实际释放成功时登记（错误提交走判题失败，引擎不会进入技能结算）。
+	// 冷却必须在 Submit 之前登记：Submit 可能同步结算本回合并触发下一回合的
+	// OnEvent，后者要读 skillReadyFrom 决定下一行动；若等 Submit 返回再写，
+	// 下一回合已经按旧值排成技能，必然撞上引擎的 skill-cooldown 并空转到超时
+	// （hub e2e 压力测试复现）。用提交时所在的 round 登记，不依赖 c.round。
 	if d.Action == match.ActionSkill && d.Correct {
 		c.mu.Lock()
-		if !c.stopped && c.round == round {
+		if !c.stopped {
 			c.skillReadyFrom = round + int(c.skill.Cooldown)
 		}
 		c.mu.Unlock()
 	}
+	c.logger.Debug("bot 提交", "round", round, "action", d.Action,
+		"correct", d.Correct, "solve_ms", d.SolveMs, "class", c.class.ID)
+	c.cfg.Engine.Submit(c.player, d.Action, code, moveTo)
 }
 
 func posOf(snap *matchpb.Snapshot, p match.Player) (match.Pos, bool) {
