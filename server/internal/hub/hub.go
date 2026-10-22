@@ -445,6 +445,11 @@ func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string
 
 func (h *Hub) reject(ws *websocket.Conn, msg string) {
 	h.logger.Warn("连接被拒", "reason", msg)
+	// 把原因经 WebSocket close frame 返回客户端（浏览器 onclose.reason），
+	// 否则被门禁/会话拒绝的用户只能看到"连接断开"并无限重连。
+	_ = ws.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, msg),
+		time.Now().Add(time.Second))
 	_ = ws.Close()
 }
 

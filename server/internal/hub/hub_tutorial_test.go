@@ -5,6 +5,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -76,11 +77,16 @@ func TestPvpGateTwoStates(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
 	defer srv.Close()
 
-	// 未完成：拒绝（服务端关闭连接，读失败）。
+	// 未完成：拒绝（服务端关闭连接并返回 reason）。
 	ws := dialJoin(t, srv.URL, &matchpb.JoinRequest{Player: "p1", Token: "tok-a"})
 	_ = ws.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if _, _, err := ws.ReadMessage(); err == nil {
 		t.Fatal("未完成教程的登录用户应被拒绝进入 PvP")
+	} else {
+		var ce *websocket.CloseError
+		if !errors.As(err, &ce) || !strings.Contains(ce.Text, "完成新手教程") {
+			t.Fatalf("拒绝应经 close reason 返回原因，实际 %v", err)
+		}
 	}
 	ws.Close()
 	h.mu.Lock()
@@ -127,6 +133,11 @@ func TestTutorialRequiresLogin(t *testing.T) {
 	_ = ws.SetReadDeadline(time.Now().Add(3 * time.Second))
 	if _, _, err := ws.ReadMessage(); err == nil {
 		t.Fatal("未登录用户应被教程拒连（进度无处保存）")
+	} else {
+		var ce *websocket.CloseError
+		if !errors.As(err, &ce) || !strings.Contains(ce.Text, "需要登录") {
+			t.Fatalf("拒绝应经 close reason 返回原因，实际 %v", err)
+		}
 	}
 }
 
