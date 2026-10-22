@@ -5,7 +5,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MatchView from "../src/views/MatchView.vue";
 
 beforeEach(() => {
@@ -16,6 +16,8 @@ beforeEach(() => {
     vi.fn(async () => ({ json: async () => ({ classes: [] }) })),
   );
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 async function mountAt(path: string) {
   const router = createRouter({

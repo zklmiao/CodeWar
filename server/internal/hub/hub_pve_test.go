@@ -20,6 +20,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // fastClock：把 Bot 的解题延迟压缩到 2ms（对局在毫秒内推进；solveMs 语义的
@@ -108,6 +109,17 @@ func TestParseModeAndBot(t *testing.T) {
 // ===== 验收 4：PvE 与 PvP 使用同一套对局配置（同一构造器/默认值/seed 派生） =====
 
 func TestPveAndPvpShareQuestionConfig(t *testing.T) {
+	// 默认值一致：PvE 不得改变题型/cap/策略的缺省锚点。
+	log, _ := captureLogger()
+	a := parseMatchConfig(joinConfig{topic: "hash", cap: "L5", strategy: "uniform"}, log)
+	b := parseMatchConfig(joinConfig{topic: "hash", cap: "L5", strategy: "uniform", mode: "pve", bot: "easy"}, log)
+	if a.topicKey != b.topicKey || a.tier != b.tier || a.strategy != b.strategy ||
+		!reflect.DeepEqual(a.topics, b.topics) {
+		t.Fatalf("PvE/PvP 配置默认值不一致：%+v vs %+v", a, b)
+	}
+
+	// 引擎 seam：两种配置各自构造引擎，逐回合比较实际下发的 PanelReady
+	// （而不是只比较工厂的两个返回值——后者没有走引擎装配路径）。
 	base := matchConfig{
 		topicKey: "hash",
 		topics:   []question.Topic{question.TopicHash},
@@ -119,32 +131,59 @@ func TestPveAndPvpShareQuestionConfig(t *testing.T) {
 	pve := base
 	pve.mode = modePvE
 	pve.botDifficulty = "hard"
-	fa, fb := newQuestions(pvp), newQuestions(pve)
-
-	cmp := func(kind string, round int, a, b match.Question) {
-		if a.ID != b.ID || a.Statement != b.Statement || a.Signature != b.Signature ||
-			a.StarterCode != b.StarterCode || a.AnswerKey != b.AnswerKey ||
-			!reflect.DeepEqual(a.Tests, b.Tests) {
-			t.Fatalf("round %d %s 题在 PvE/PvP 下不一致：\nPvP=%+v\nPvE=%+v", round, kind, a, b)
-		}
-	}
-	for round := 1; round <= match.MaxRounds; round++ {
-		cmp("attack", round, fa.AttackQuestion(round), fb.AttackQuestion(round))
-		for _, p := range []match.Player{match.P1, match.P2} {
-			cmp("move", round, fa.MoveQuestion(round, p), fb.MoveQuestion(round, p))
-			cmp("defend", round, fa.DefendQuestion(round, p), fb.DefendQuestion(round, p))
-			cmp("skill", round, fa.SkillQuestion(round, p), fb.SkillQuestion(round, p))
-		}
+	setup := match.Setup{
+		P1Class: "warrior", P1Skill: "cleave",
+		P2Class: "mage", P2Skill: "firestorm",
+		RiskTier: 5,
 	}
 
-	// 默认值一致：PvE 不得改变题型/cap/策略的缺省锚点。
-	log, _ := captureLogger()
-	a := parseMatchConfig(joinConfig{topic: "hash", cap: "L5", strategy: "uniform"}, log)
-	b := parseMatchConfig(joinConfig{topic: "hash", cap: "L5", strategy: "uniform", mode: "pve", bot: "easy"}, log)
-	if a.topicKey != b.topicKey || a.tier != b.tier || a.strategy != b.strategy ||
-		!reflect.DeepEqual(a.topics, b.topics) {
-		t.Fatalf("PvE/PvP 配置默认值不一致：%+v vs %+v", a, b)
+	panelsPvP, snapPvP := runParityEngine(t, newQuestions(pvp), setup)
+	panelsPvE, snapPvE := runParityEngine(t, newQuestions(pve), setup)
+	if len(panelsPvP) != match.MaxRounds || len(panelsPvE) != match.MaxRounds {
+		t.Fatalf("应各捕获 %d 个 PanelReady，实际 PvP=%d PvE=%d",
+			match.MaxRounds, len(panelsPvP), len(panelsPvE))
 	}
+	for i := range panelsPvP {
+		if !proto.Equal(panelsPvP[i], panelsPvE[i]) {
+			t.Fatalf("round %d 的 PanelReady 在 PvE/PvP 下不一致：\nPvP=%v\nPvE=%v",
+				i+1, panelsPvP[i], panelsPvE[i])
+		}
+	}
+	if snapPvP == nil || snapPvE == nil || !proto.Equal(snapPvP, snapPvE) {
+		t.Fatalf("快照面板（含技能槽）在 PvE/PvP 下不一致：\nPvP=%v\nPvE=%v", snapPvP, snapPvE)
+	}
+}
+
+type parityClock struct{}
+
+func (parityClock) Now() time.Time { return time.Unix(0, 0) }
+func (parityClock) NewTimer(time.Duration) match.Timer {
+	return parityTimer{}
+}
+
+type parityTimer struct{}
+
+func (parityTimer) C() <-chan time.Time { return nil }
+func (parityTimer) Stop() bool          { return true }
+
+// runParityEngine：双方每回合都解防御题（无伤害，可稳定跑满 10 回合），
+// 收集引擎实际发布的 PanelReady 与首回合快照面板（后者含技能槽题）。
+func runParityEngine(t *testing.T, f *question.Factory, setup match.Setup) ([]*matchpb.PanelReady, *matchpb.Panel) {
+	t.Helper()
+	var panels []*matchpb.PanelReady
+	eng := match.NewEngineWithSetup(parityClock{}, f, passJudge{}, func(env *matchpb.Envelope) {
+		if pr := env.GetPanelReady(); pr != nil {
+			panels = append(panels, pr)
+		}
+	}, setup)
+	eng.StartMatch()
+	snap := eng.Snapshot(match.P1).GetPanel()
+	for i := 0; i < match.MaxRounds-1; i++ {
+		eng.Submit(match.P1, match.ActionDefend, "code", match.Pos{})
+		eng.Submit(match.P2, match.ActionDefend, "code", match.Pos{})
+	}
+	eng.Stop()
+	return panels, snap
 }
 
 // ===== 验收 1/3：单连接即开局，快照标记 Bot，整局可终局 =====
@@ -165,7 +204,15 @@ func TestPveSingleJoinStartsAndMarksBot(t *testing.T) {
 	select {
 	case r = <-out:
 	case <-time.After(30 * time.Second):
-		t.Fatal("30s 内 PvE 对局未终局（单连接应直接开赛）")
+		h.mu.Lock()
+		eng, ctl := h.engine, h.botCtl
+		h.mu.Unlock()
+		if eng != nil {
+			snap := eng.Snapshot(match.P1)
+			t.Fatalf("30s 内 PvE 对局未终局：phase=%v round=%d bot=%v",
+				snap.GetPhase(), snap.GetRound(), ctl != nil)
+		}
+		t.Fatal("30s 内 PvE 对局未终局（引擎已清空）")
 	}
 	if r == nil {
 		t.Fatal("对局中连接断裂")
@@ -257,6 +304,22 @@ func TestPveDoesNotRecordMatchOrElo(t *testing.T) {
 	}
 }
 
+// 显式守卫：即使未来拓扑演进把 Bot 席位误当成"双方已认证"，PvE 也不得落库。
+// 只跑端到端（P2 无 seat）时删掉 settleEnded 里的 PvE 守卫测试仍会绿。
+func TestSettleEndedSkipsPveEvenWithBothSeats(t *testing.T) {
+	a, b := testUsers()
+	st := &stubStore{}
+	h := New(nil, slog.Default(), nil)
+	h.st = st
+	h.cfg.mode = modePvE
+	h.seats[match.P1] = a
+	h.seats[match.P2] = b
+	h.settleEnded(&matchpb.MatchEnded{Winner: "p1", Reason: match.ReasonKO})
+	if st.lastRes != nil {
+		t.Fatalf("PvE 即使双方 seat 都在也不得落库：%+v", st.lastRes)
+	}
+}
+
 // ===== PvP 契约不变：player 仍必填（空值仅在 mode=pve 下合法） =====
 
 func TestPvpStillRequiresExplicitPlayer(t *testing.T) {
@@ -309,6 +372,27 @@ func TestPveRejectsSecondPlayer(t *testing.T) {
 	}
 }
 
+// 首个 join 就必须拒绝 p2（不能用"局中第二名玩家"分支代替）：
+// 若删掉 first-join 的 player != p1 检查，人类会占用 Bot 席位并创建引擎。
+func TestPveRejectsBotSeatOnFirstJoin(t *testing.T) {
+	h := New(passJudge{}, slog.Default(), nil)
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	ws := dialJoin(t, srv.URL, &matchpb.JoinRequest{Player: "p2", Mode: "pve"})
+	defer ws.Close()
+	_ = ws.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, _, err := ws.ReadMessage(); err == nil {
+		t.Fatal("PvE 首个 join 为 p2 时应被拒连")
+	}
+	h.mu.Lock()
+	eng, ctl := h.engine, h.botCtl
+	h.mu.Unlock()
+	if eng != nil || ctl != nil {
+		t.Fatal("被拒的首个 p2 join 不得创建引擎/Bot")
+	}
+}
+
 // ===== 断线 = 对局作废（刷新重开） =====
 
 func TestPveDisconnectAbortsAndRefreshRestarts(t *testing.T) {
@@ -342,6 +426,8 @@ func TestPveDisconnectAbortsAndRefreshRestarts(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	// hub 先清引用、再（释放 h.mu 后）调 Stop：ENDED 可能稍晚于引用清空。
+	// 第二个等待重新计时，避免复用上一个循环的 deadline 在高负载下误报。
+	deadline = time.Now().Add(3 * time.Second)
 	for oldEng.Phase() != matchpb.MatchPhase_MATCH_PHASE_ENDED {
 		if time.Now().After(deadline) {
 			t.Fatalf("作废引擎应为 ENDED 态，实际 %v", oldEng.Phase())

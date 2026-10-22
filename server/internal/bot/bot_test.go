@@ -1,10 +1,12 @@
 package bot
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"testing"
 
+	"codewar/server/gen/matchpb"
 	"codewar/server/internal/classes"
 	"codewar/server/internal/match"
 )
@@ -51,6 +53,24 @@ func TestParseDifficulty(t *testing.T) {
 	}
 	if !(Easy.Label() == "简单" && Normal.Label() == "普通" && Hard.Label() == "困难") {
 		t.Fatal("难度展示名不符")
+	}
+}
+
+// 三档参数必须与 spec/架构裁决的字面值一致（独立于实现硬编码，防止调参
+// 时"测试跟着实现一起漂移"）。
+func TestParamsForMatchesSpec(t *testing.T) {
+	want := map[Difficulty]Params{
+		Easy: {MinSolveMs: 45000, MaxSolveMs: 70000, Accuracy: 0.55,
+			Weights: Weights{Attack: 60, Move: 15, Defend: 15, Skill: 10}},
+		Normal: {MinSolveMs: 25000, MaxSolveMs: 45000, Accuracy: 0.75,
+			Weights: Weights{Attack: 70, Move: 10, Defend: 10, Skill: 10}},
+		Hard: {MinSolveMs: 12000, MaxSolveMs: 25000, Accuracy: 0.90,
+			Weights: Weights{Attack: 75, Move: 5, Defend: 10, Skill: 10}},
+	}
+	for d, w := range want {
+		if got := ParamsFor(d); got != w {
+			t.Fatalf("%s 参数与 spec 初稿不一致：got %+v want %+v", d, got, w)
+		}
 	}
 }
 
@@ -175,6 +195,9 @@ func TestPlanTargeting(t *testing.T) {
 		{"点狙向上距离3", match.Pos{Row: 0, Col: 2}, classes.ShapeSnipe, 3, match.Targeting{Direction: classes.DirUp, Distance: 3}, true},
 		{"点狙距离钳到射程", match.Pos{Row: 0, Col: 2}, classes.ShapeSnipe, 2, match.Targeting{Direction: classes.DirUp, Distance: 2}, true},
 		{"点狙至少1格", match.Pos{Row: 3, Col: 2}, classes.ShapeSnipe, 3, match.Targeting{Direction: classes.DirRight, Distance: 1}, true},
+		{"斜向取主轴（行）", match.Pos{Row: 0, Col: 0}, classes.ShapeSnipe, 3, match.Targeting{Direction: classes.DirUp, Distance: 3}, true},
+		{"斜向取主轴（列）", match.Pos{Row: 2, Col: 4}, classes.ShapeSnipe, 3, match.Targeting{Direction: classes.DirRight, Distance: 2}, true},
+		{"斜向平局取行轴", match.Pos{Row: 1, Col: 4}, classes.ShapeSnipe, 3, match.Targeting{Direction: classes.DirUp, Distance: 2}, true},
 		{"线扫向右", match.Pos{Row: 3, Col: 4}, classes.ShapeLine, 0, match.Targeting{Direction: classes.DirRight}, true},
 		{"横带向上", match.Pos{Row: 1, Col: 2}, classes.ShapeBand, 0, match.Targeting{Direction: classes.DirUp}, true},
 		{"近战无需目标", match.Pos{Row: 2, Col: 2}, classes.ShapeMelee, 0, match.Targeting{}, false},
@@ -214,6 +237,63 @@ func TestLegalMovesMirrorEngineRules(t *testing.T) {
 	for _, w := range want {
 		if !has(w) {
 			t.Fatalf("缺少合法落点 %v：%v", w, moves)
+		}
+	}
+}
+
+// 规划器的"合法"必须被引擎接受、"非法"必须被引擎拒绝：纯函数测试只证明
+// 副本内部自洽，这里用引擎 seam 钉住副本与 validateMove 的同语义（漂移即红）。
+type passAllJudge struct{}
+
+func (passAllJudge) Judge(context.Context, string, []match.TestCase) match.JudgeResult {
+	return match.JudgeResult{Passed: true, Category: match.CategoryOK}
+}
+
+func submitMoveOnce(t *testing.T, to match.Pos) []*matchpb.Envelope {
+	t.Helper()
+	var events []*matchpb.Envelope
+	eng := match.NewEngine(match.RealClock{}, match.StubQuestions{}, passAllJudge{}, func(env *matchpb.Envelope) {
+		events = append(events, env)
+	})
+	eng.StartMatch()
+	eng.Submit(match.P1, match.ActionMove, "code", to)
+	eng.Stop()
+	return events
+}
+
+func TestLegalMovesAcceptedByEngine(t *testing.T) {
+	from := match.Pos{Row: 3, Col: 2}
+	opp := match.Pos{Row: 2, Col: 2}
+
+	for _, to := range LegalMoves(from, opp, 2) {
+		for _, env := range submitMoveOnce(t, to) {
+			if r := env.GetSubmissionRejected(); r != nil {
+				t.Fatalf("规划为合法的移动 %v 被引擎拒绝：%s", to, r.GetReason())
+			}
+		}
+	}
+
+	illegal := []struct {
+		to     match.Pos
+		reason string
+	}{
+		{match.Pos{Row: 2, Col: 1}, "diagonal"},
+		{match.Pos{Row: 5, Col: 2}, "out-of-bounds"},
+		{match.Pos{Row: 2, Col: 2}, "dest-occupied"},
+		{match.Pos{Row: 1, Col: 2}, "path-blocked"},
+	}
+	for _, tc := range illegal {
+		found := false
+		for _, env := range submitMoveOnce(t, tc.to) {
+			if r := env.GetSubmissionRejected(); r != nil {
+				found = true
+				if r.GetReason() != tc.reason {
+					t.Fatalf("非法移动 %v 拒绝原因 %q，want %q", tc.to, r.GetReason(), tc.reason)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("非法移动 %v 未被引擎拒绝", tc.to)
 		}
 	}
 }

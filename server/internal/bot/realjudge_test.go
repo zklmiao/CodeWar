@@ -1,8 +1,14 @@
 package bot
 
-// 真 judge 冒烟（09 号票）：Bot 的参考解/错误分支走与生产同代码路径的
-// Python executor（judgesvc.executor.run），证明 AnswerKey 真能通过判题，
-// 不是只在假判题器下成立。CI 无 python/judge 目录时跳过。
+// 真 judge 冒烟（09 号票）：参考解/错误分支走与生产同代码路径的 Python
+// executor（judgesvc.executor.run），证明 AnswerKey 真能通过判题，不是只在
+// 假判题器下成立。
+//
+// 门控与 judge 包测试一致：CLI 在而 docker daemon 宕时 executor 只会
+// fail-closed 返回 judge-error，此时应 skip 而非误报；CI 无 python/judge
+// 目录时同样跳过。冒烟只做一次"参考解通过 + starter 失败"，不再跑整局
+// （整局链路由假判题器的引擎 seam 集成测试覆盖；真判题只需证明参考答案
+// 与真实执行器兼容）。
 
 import (
 	"context"
@@ -10,11 +16,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"codewar/server/internal/match"
+	"codewar/server/internal/question"
+	"codewar/server/internal/question/templates"
 )
 
 type realJudge struct {
@@ -48,6 +55,19 @@ print(json.dumps(run(p["code"], p["cases"], timeout_ms=8000)))
 	return match.JudgeResult{Passed: r.Passed, Category: r.Category}
 }
 
+// dockerReady：与 judge/tests 的 skip 门控同义（CLI + daemon 都可用的探针）。
+func dockerReady(t *testing.T, py, judgeDir string) bool {
+	t.Helper()
+	script := `import sys
+sys.path.insert(0, sys.argv[1])
+from judgesvc.executor import docker_ready
+raise SystemExit(0 if docker_ready() else 1)
+`
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, py, "-c", script, judgeDir).Run() == nil
+}
+
 func TestRealJudgeSmoke(t *testing.T) {
 	judgeDir := filepath.Join("..", "..", "..", "judge")
 	if _, err := os.Stat(filepath.Join(judgeDir, "judgesvc", "executor.py")); err != nil {
@@ -60,25 +80,32 @@ func TestRealJudgeSmoke(t *testing.T) {
 			t.Skip("无 python，跳过真判题冒烟")
 		}
 	}
+	if !dockerReady(t, py, judgeDir) {
+		t.Skip("docker daemon 不可用，跳过真判题冒烟（与 judge 测试同一门控）")
+	}
 
-	h := newMatchHarnessWithJudge(t, "real-judge-smoke", Hard, realJudge{py: py, judgeDir: judgeDir})
-	h.play(30 * time.Second)
+	factory := question.NewFactory(question.Config{
+		MaxDifficulty: question.L3,
+		Strategy:      question.StrategyClimb,
+		MatchSeed:     "real-judge-smoke",
+	})
+	factory.RegisterAll(templates.All()...)
+	q := factory.AttackQuestion(1)
+	if q.AnswerKey == "" {
+		t.Fatalf("攻击题没有参考解：%s", q.ID)
+	}
 
-	if h.ended == nil {
-		t.Fatalf("真判题整局未终局（events=%d）", len(h.events))
+	j := realJudge{py: py, judgeDir: judgeDir}
+	pass := j.Judge(context.Background(), q.AnswerKey, q.Tests)
+	if !pass.Passed || pass.Category != match.CategoryOK {
+		t.Fatalf("参考解未通过真判题：%+v", pass)
 	}
-	if h.botPass == 0 {
-		var cats []string
-		for _, env := range h.events {
-			if j := env.GetSubmissionJudged(); j != nil && j.GetPlayer() == match.P2 {
-				cats = append(cats, j.GetCategory())
-			}
-		}
-		t.Fatalf("Bot 参考解未通过真判题；判题类别序列：%s", strings.Join(cats, ","))
+	bad := j.Judge(context.Background(), q.StarterCode, q.Tests)
+	if bad.Passed {
+		t.Fatal("starter 不应通过真判题")
 	}
-	if h.locked != 0 || h.rejected != 0 {
-		t.Fatalf("Bot 出现锁定/拒绝提交：locked=%d rejected=%d", h.locked, h.rejected)
+	if bad.Category == match.CategoryJudgeError {
+		t.Fatalf("判题基础设施错误（docker 门控应已跳过）：%+v", bad)
 	}
-	t.Logf("真判题冒烟：Bot 通过 %d / 失败 %d，终局 winner=%q reason=%q",
-		h.botPass, h.botFail, h.ended.GetWinner(), h.ended.GetReason())
+	t.Logf("真判题冒烟：%s 参考解通过（%dms），starter 判 %s", q.ID, pass.DurationMs, bad.Category)
 }

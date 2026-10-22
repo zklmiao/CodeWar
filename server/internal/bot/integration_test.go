@@ -6,6 +6,9 @@ package bot
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -118,16 +121,42 @@ func (c *manualClock) Advance(d time.Duration) {
 
 // ===== 假判题器：只把参考解判过（starter 必然失败） =====
 
+// testsFingerprint：判题用例集指纹。keyJudge 必须把"提交的代码"和"本次实际
+// 判的题"绑定起来——只按参考解全集判过会让"拿另一槽/另一回合的答案"也 pass，
+// 掩盖"提交了错题"的实现 bug。
+func testsFingerprint(tests []match.TestCase) string {
+	var b strings.Builder
+	for _, tc := range tests {
+		b.WriteString(tc.Name)
+		b.WriteByte('\x1f')
+		b.WriteString(tc.Call)
+		b.WriteByte('\x1f')
+		b.WriteString(tc.Expected)
+		b.WriteByte('\x1f')
+		b.WriteString(tc.Setup)
+		b.WriteByte('\x1f')
+		b.WriteString(tc.Compare)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 type keyJudge struct {
-	keys map[string]bool
+	answers map[string]string // 用例集指纹 → 该题参考解
 }
 
 func newKeyJudge(f *question.Factory) *keyJudge {
-	j := &keyJudge{keys: map[string]bool{}}
+	j := &keyJudge{answers: map[string]string{}}
 	add := func(q match.Question) {
-		if q.AnswerKey != "" {
-			j.keys[q.AnswerKey] = true
+		if q.AnswerKey == "" {
+			return
 		}
+		k := testsFingerprint(q.Tests)
+		if prev, ok := j.answers[k]; ok && prev != q.AnswerKey {
+			// 用例集相同但参考解不同：判题器无法区分提交对应哪道题，测试前提不成立。
+			panic("keyJudge 用例指纹冲突：同一用例集对应不同参考解")
+		}
+		j.answers[k] = q.AnswerKey
 	}
 	for round := 1; round <= match.MaxRounds; round++ {
 		add(f.AttackQuestion(round))
@@ -140,8 +169,8 @@ func newKeyJudge(f *question.Factory) *keyJudge {
 	return j
 }
 
-func (j *keyJudge) Judge(_ context.Context, code string, _ []match.TestCase) match.JudgeResult {
-	if j.keys[code] {
+func (j *keyJudge) Judge(_ context.Context, code string, tests []match.TestCase) match.JudgeResult {
+	if answer, ok := j.answers[testsFingerprint(tests)]; ok && code == answer {
 		return match.JudgeResult{Passed: true, Category: match.CategoryOK}
 	}
 	return match.JudgeResult{Passed: false, Category: match.CategoryWrongAnswer}
@@ -205,6 +234,36 @@ func newMatchHarnessWithJudge(t *testing.T, seed string, d Difficulty, judge mat
 	ctl, err := New(Config{
 		Seed: seed, Difficulty: d,
 		ClassID: botClass, SkillID: botSkill, Player: match.P2,
+		Questions: factory, Engine: h.count, Clock: clk,
+	})
+	if err != nil {
+		t.Fatalf("构造 Bot 失败：%v", err)
+	}
+	h.ctl = ctl
+	return h
+}
+
+// newConfiguredHarness：指定双方职业/技能与 Bot Params 的 harness（冷却/无技能
+// 等确定性边界用；生产路径仍由 newMatchHarness 覆盖）。
+func newConfiguredHarness(t *testing.T, seed, p1Class, p1Skill, p2Class, p2Skill string, params Params) *matchHarness {
+	t.Helper()
+	clk := newManualClock()
+	factory := question.NewFactory(question.Config{
+		MaxDifficulty: question.L3,
+		Strategy:      question.StrategyClimb,
+		MatchSeed:     seed,
+	})
+	factory.RegisterAll(templates.All()...)
+	h := &matchHarness{clk: clk, factory: factory}
+	h.eng = match.NewEngineWithSetup(clk, factory, newKeyJudge(factory), h.broadcast, match.Setup{
+		P1Class: p1Class, P1Skill: p1Skill,
+		P2Class: p2Class, P2Skill: p2Skill,
+		RiskTier: 3,
+	})
+	h.count = &countingEngine{Engine: h.eng, submits: map[match.Player]int{}}
+	ctl, err := New(Config{
+		Seed: seed, Difficulty: Normal, Params: params,
+		ClassID: p2Class, SkillID: p2Skill, Player: match.P2,
 		Questions: factory, Engine: h.count, Clock: clk,
 	})
 	if err != nil {
@@ -358,6 +417,18 @@ func TestFullPveMatchReachesDecision(t *testing.T) {
 	if h.botPass == 0 {
 		t.Fatal("Bot 从未通过判题（参考解没有走通 SubmissionPort）")
 	}
+	// 正确分支必须提交"当前所选行动"那道题的参考解：只统计总通过数时，
+	// 拿移动题答案去解攻击题会被其他槽位的通过掩盖（假判题器按用例集绑定）。
+	botAttackPass := 0
+	for _, env := range h.events {
+		j := env.GetSubmissionJudged()
+		if j != nil && j.GetPlayer() == match.P2 && j.GetAction() == match.ActionAttack && j.GetPassed() {
+			botAttackPass++
+		}
+	}
+	if botAttackPass == 0 {
+		t.Fatal("Bot 从未通过攻击题（正确分支可能提交了错误槽位/回合的答案）")
+	}
 	// 每次 Bot 提交都产生判题事件：Submit 次数 = passed + failed（含 locked 以外的正常判定）。
 	// locked/judge-error 会破坏"无跳过路径"的语义，单独断言为零。
 	if h.count.submits[match.P2] == 0 {
@@ -369,6 +440,19 @@ func TestFullPveMatchReachesDecision(t *testing.T) {
 	}
 	if h.locked != 0 {
 		t.Fatalf("Bot 出现 %d 次锁定期提交（应等锁过期再行动）", h.locked)
+	}
+	// 逐条检查判题类别：locked/judge-error 等都不是"正常判题"；只断言 locked
+	// 会漏掉 judge-error（它会计入 botFail，从而满足上面的提交/事件对账）。
+	for _, env := range h.events {
+		j := env.GetSubmissionJudged()
+		if j == nil || j.GetPlayer() != match.P2 {
+			continue
+		}
+		switch j.GetCategory() {
+		case match.CategoryOK, match.CategoryWrongAnswer:
+		default:
+			t.Fatalf("Bot 提交产生了非正常判题类别 %q（locked/judge-error 等）", j.GetCategory())
+		}
 	}
 	if h.rejected != 0 {
 		t.Fatalf("Bot 出现 %d 次参数拒绝（规划的目标/移动必须合法）", h.rejected)
@@ -400,10 +484,11 @@ func (s *difficultyStats) avgSolveMs() float64 {
 // 同 seed 配对：easy 与 hard 使用完全相同的 matchSeed（同职业/同题目/同人类脚本），
 // 唯一变量是 Bot 难度。断言 hard 平均 solveMs 至少比 easy 快 2 倍，且胜率更高。
 func TestHardBotFasterAndWinsMoreThanEasy(t *testing.T) {
-	const matches = 12
+	const matches = 30
 	stats := map[Difficulty]*difficultyStats{}
 	for _, d := range []Difficulty{Easy, Normal, Hard} {
 		s := &difficultyStats{}
+		p := ParamsFor(d)
 		for i := 0; i < matches; i++ {
 			seed := fmt.Sprintf("paired-%02d", i)
 			h := newMatchHarness(t, seed, d)
@@ -417,7 +502,14 @@ func TestHardBotFasterAndWinsMoreThanEasy(t *testing.T) {
 			}
 			for _, env := range h.events {
 				if j := env.GetSubmissionJudged(); j != nil && j.GetPlayer() == match.P2 && j.GetPassed() {
-					s.solves = append(s.solves, int64(j.GetSolveMs()))
+					ms := int64(j.GetSolveMs())
+					// 每条实测 solveMs 都必须落在该难度窗内（允许毫秒级调度抖动）。
+					// 只断言平均值会让"整体慢半拍"的调度 bug 逃逸。
+					if ms < p.MinSolveMs-500 || ms > p.MaxSolveMs+2000 {
+						t.Fatalf("%s 实测 solveMs=%d 越出难度窗 [%d,%d]（seed=%s）",
+							d, ms, p.MinSolveMs, p.MaxSolveMs, seed)
+					}
+					s.solves = append(s.solves, ms)
 				}
 			}
 		}
@@ -436,8 +528,10 @@ func TestHardBotFasterAndWinsMoreThanEasy(t *testing.T) {
 	if eAvg < 2*hAvg {
 		t.Fatalf("easy 平均 solveMs（%.0f）应至少为 hard（%.0f）的 2 倍", eAvg, hAvg)
 	}
-	if hard.wins <= easy.wins {
-		t.Fatalf("hard 胜场（%d）应高于 easy（%d）", hard.wins, easy.wins)
+	// 胜率断言要有可辨别的差距，而不是 1 胜 0 也过关：30 局配对样本里
+	// hard 至少比 easy 多赢 3 局（本测试固定 seed，结果可复现）。
+	if hard.wins < easy.wins+3 {
+		t.Fatalf("hard 胜场（%d）应至少比 easy（%d）多 3 局", hard.wins, easy.wins)
 	}
 }
 
@@ -510,6 +604,76 @@ func TestBotSelfKO(t *testing.T) {
 	}
 }
 
+// ===== 技能冷却 / 无技能回退（确定性边界，不靠概率） =====
+
+// 强制每回合都选技能（Skill 权重 100）：战士求生本能 CD3，第 1、4 回合可用；
+// 其余回合冷却中，权重并入攻击。若控制器漏登记冷却，第 2/3 回合会提交技能
+// 并被引擎以 skill-cooldown 拒绝，h.rejected 立刻非零。
+func TestSkillCooldownPreventsRepeatedSkillSubmissions(t *testing.T) {
+	h := newConfiguredHarness(t, "skill-cd", "ranger", "", "warrior", "survive",
+		Params{MinSolveMs: 0, MaxSolveMs: 0, Accuracy: 1, Weights: Weights{Skill: 100}})
+	h.eng.StartMatch()
+	for i := 0; i < 5; i++ {
+		if h.ended != nil || !h.active() {
+			break
+		}
+		round := h.round()
+		// 人类先行动、Bot 后提交：Bot 的技能提交会同时结算本回合，引擎同步
+		// 开启下一回合——这正是"冷却登记被 c.round 推进跳过"的触发现场。
+		h.count.Submit(match.P1, match.ActionDefend, h.factory.DefendQuestion(round, match.P1).AnswerKey, match.Pos{})
+		if h.ended != nil || !h.active() {
+			break
+		}
+		h.clk.Advance(time.Millisecond) // 触发 Bot 的 0ms 提交并结算
+	}
+	h.ctl.Stop()
+	h.eng.Stop()
+
+	skills := 0
+	for _, env := range h.events {
+		j := env.GetSubmissionJudged()
+		if j != nil && j.GetPlayer() == match.P2 && j.GetAction() == match.ActionSkill && j.GetPassed() {
+			skills++
+		}
+	}
+	if skills != 2 {
+		t.Fatalf("5 回合内应恰好 2 次技能（CD3：第 1、4 回合），实际 %d", skills)
+	}
+	if h.rejected != 0 {
+		t.Fatalf("Bot 出现 %d 次拒绝（冷却中仍提交技能，或目标参数非法）", h.rejected)
+	}
+	if h.locked != 0 {
+		t.Fatalf("Bot 出现 %d 次 locked 判定", h.locked)
+	}
+}
+
+// 未装备技能时技能权重并入攻击：hasSkill 门控若被删掉，Bot 会选 skill，
+// 引擎以 no-skill-equipped 拒绝（无判题事件）。
+func TestNoSkillBotNeverSubmitsSkill(t *testing.T) {
+	h := newConfiguredHarness(t, "no-skill", "ranger", "", "warrior", "",
+		Params{MinSolveMs: 0, MaxSolveMs: 0, Accuracy: 1, Weights: Weights{Skill: 100}})
+	h.eng.StartMatch()
+	h.clk.Advance(time.Millisecond)
+	h.ctl.Stop()
+	h.eng.Stop()
+
+	if h.rejected != 0 {
+		t.Fatalf("未装备技能时出现拒绝：%d", h.rejected)
+	}
+	var judged *matchpb.SubmissionJudged
+	for _, env := range h.events {
+		if j := env.GetSubmissionJudged(); j != nil && j.GetPlayer() == match.P2 {
+			judged = j
+		}
+	}
+	if judged == nil {
+		t.Fatal("Bot 未产生判题事件（提交被 no-skill-equipped 拒绝？）")
+	}
+	if judged.GetAction() != match.ActionAttack {
+		t.Fatalf("无技能应回退为攻击，实际 %q", judged.GetAction())
+	}
+}
+
 // ===== 验收 3：引擎包无 Bot 引用（结构断言） =====
 
 func TestMatchPackageHasNoBotReferences(t *testing.T) {
@@ -534,6 +698,20 @@ func TestMatchPackageHasNoBotReferences(t *testing.T) {
 				hits = append(hits, fmt.Sprintf("%s:%d: %s", e.Name(), i+1, strings.TrimSpace(line)))
 			}
 		}
+		// 词边界 regex 抓不到 isBot/pveBot/botSeat 这类驼峰标识符；
+		// 用 AST 再扫一遍所有标识符（大小写不敏感包含 "bot"）。
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, e.Name(), b, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("解析 %s 失败：%v", e.Name(), err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if ok && strings.Contains(strings.ToLower(id.Name), "bot") {
+				hits = append(hits, fmt.Sprintf("%s: identifier %q", e.Name(), id.Name))
+			}
+			return true
+		})
 	}
 	sort.Strings(hits)
 	if len(hits) > 0 {

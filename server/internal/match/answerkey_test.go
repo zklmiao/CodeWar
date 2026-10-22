@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"codewar/server/gen/matchpb"
 
@@ -89,4 +90,21 @@ func TestStopIsIdempotentAndSilent(t *testing.T) {
 	}
 	// 已结束的引擎再次 Stop 不得 panic
 	eng.Stop()
+}
+
+// Stop 必须让 Run 计时泵真正退出（连接断开作废后不能留下挂死的泵）。
+func TestStopWakesRunPump(t *testing.T) {
+	eng := NewEngine(RealClock{}, StubQuestions{}, okJudge{}, nil)
+	eng.StartMatch()
+	done := make(chan struct{})
+	go func() {
+		eng.Run()
+		close(done)
+	}()
+	eng.Stop()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop 后计时泵未在 2s 内退出")
+	}
 }
