@@ -7,7 +7,8 @@ import {
 
 export interface SocketHandlers {
   onMessage: (data: unknown) => void;
-  onClose: () => void;
+  // reason：服务端以 close frame 返回的拒绝原因（空 = 普通断线，可自动重连）。
+  onClose: (reason: string) => void;
 }
 
 export interface JoinOptions {
@@ -36,7 +37,7 @@ export class MatchSocket {
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws.onopen = () => this.sendJoin();
     this.ws.onmessage = (m) => this.handlers?.onMessage(JSON.parse(m.data as string));
-    this.ws.onclose = () => this.handlers?.onClose();
+    this.ws.onclose = (e) => this.handlers?.onClose(e.reason ?? "");
   }
 
   private sendJoin(): void {

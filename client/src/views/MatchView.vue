@@ -25,6 +25,8 @@ const user = useUserStore();
 const classesStore = useClassesStore();
 const route = useRoute();
 const disconnected = ref(false);
+// 服务端 join 拒绝原因（close frame reason）：非空 = 不自动重连，直接展示。
+const joinError = ref("");
 // 09 号票：PvE 模式（?mode=pve&bot=easy|normal|hard）。必须在 playerFromUrl()
 // 之前初始化——viewer 的初值会读 isPve（const TDZ 会导致整个组件渲染失败）。
 // 10 号票：教程模式（?mode=tutorial&level=1..4[&cap=L3|L5]）复用同一单人拓扑。
@@ -132,11 +134,17 @@ function connect() {
     {
       onMessage: (data) => {
         disconnected.value = false;
+        joinError.value = "";
         store.applyServerMessage(data, viewer.value);
       },
-      onClose: () => {
+      onClose: (reason) => {
         disconnected.value = true;
-        setTimeout(connect, 500); // 自动重连：接入即收快照，状态自愈
+        if (reason) {
+          // 被服务端拒绝（教程门禁/会话失效/席位占用）：停止重连并展示原因。
+          joinError.value = `接入被拒绝：${reason}`;
+          return;
+        }
+        setTimeout(connect, 500); // 普通断线：接入即收快照，状态自愈
       },
     },
     {
@@ -190,7 +198,8 @@ watch(
     <HpBar v-if="viewer" />
 
     <main v-if="viewer">
-      <div v-if="disconnected" class="banner">连接断开，重连中…</div>
+      <div v-if="joinError" class="banner error">{{ joinError }}（<a href="/">返回入口</a>）</div>
+      <div v-else-if="disconnected" class="banner">连接断开，重连中…</div>
       <div class="cols">
         <GameGrid />
         <div class="right-col">
@@ -320,6 +329,8 @@ watch(
   background: var(--cw-color-state-warning); color: var(--cw-color-bg-inset); padding: var(--cw-space-2) var(--cw-space-4);
   border-radius: var(--cw-radius-md); margin-bottom: var(--cw-space-3); font-size: var(--cw-font-size-xs);
 }
+.banner.error { background: var(--cw-color-state-danger); color: var(--cw-color-text-primary); }
+.banner a { color: inherit; }
 .choose { text-align: center; color: var(--cw-color-text-secondary); padding: var(--cw-space-6) 0; }
 /* 05 号票：对局配置表单 */
 .cfg-form {
