@@ -170,6 +170,17 @@ func selfDestructLoop(t *testing.T, ws *websocket.Conn, player string, ends chan
 	}
 }
 
+// completeTutorial：10 号票起 PvP 入口要求教程已完成；既有结算集成测试
+// 通过真实 store 把双方进度推到通关（同时覆盖 AdvanceTutorial 的真实 SQL）。
+func completeTutorial(t *testing.T, st *store.Store, users ...store.User) {
+	t.Helper()
+	for _, u := range users {
+		if _, err := st.AdvanceTutorial(context.Background(), u.ID, 4, 4); err != nil {
+			t.Fatalf("推进教程进度失败：%v", err)
+		}
+	}
+}
+
 // TestHubRealStoreKOSettlesEloAndRecords：KO 分胜负的完整真实链路。
 // 断言四层一致：MatchEnded 事件 elo ≡ elo_history ≡ users.elo ≡ GetProfile。
 func TestHubRealStoreKOSettlesEloAndRecords(t *testing.T) {
@@ -182,6 +193,7 @@ func TestHubRealStoreKOSettlesEloAndRecords(t *testing.T) {
 	defer st.Close()
 
 	ua, ub, tokA, tokB := registerPair(t, st, "ko")
+	completeTutorial(t, st, ua, ub)
 	beforeA, beforeB := ua.Elo, ub.Elo
 
 	h := New(contentJudge{okCode: "code"}, slog.Default(), st)
@@ -298,6 +310,7 @@ func TestHubRealStoreDrawKeepsElo(t *testing.T) {
 	defer st.Close()
 
 	ua, ub, tokA, tokB := registerPair(t, st, "draw")
+	completeTutorial(t, st, ua, ub)
 	baseA, baseB := ua.Elo, ub.Elo
 
 	h := New(passJudge{}, slog.Default(), st)

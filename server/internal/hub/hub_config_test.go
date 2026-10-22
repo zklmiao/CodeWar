@@ -16,6 +16,7 @@ import (
 	"codewar/server/internal/question/templates"
 	"codewar/server/internal/store"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -341,10 +342,16 @@ func TestSettleCarriesRiskCoeffByCap(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			a, b := testUsers()
+			now := time.Now()
 			st := &stubStore{
 				userByToken: map[string]store.User{"tok-a": a, "tok-b": b},
 				d1:          store.EloDelta{Player: "p1", UserID: a.ID, Before: 1000, After: 1000},
 				d2:          store.EloDelta{Player: "p2", UserID: b.ID, Before: 1000, After: 1000},
+				// 10 号票起 PvP 入口要求教程已完成（本测试只关心风险系数落库）。
+				tutorial: map[uuid.UUID]store.TutorialProgress{
+					a.ID: {Level: 4, Completed: true, CompletedAt: &now},
+					b.ID: {Level: 4, Completed: true, CompletedAt: &now},
+				},
 			}
 			log, _ := captureLogger()
 			h := New(passJudge{}, log, nil)

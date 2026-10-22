@@ -26,6 +26,9 @@ type stubStore struct {
 	lastRes     *store.MatchResult
 	gotDeadline bool
 	d1, d2      store.EloDelta
+	// 10 号票：教程进度（零值 = 新账号：level 0、未通关）。
+	tutorial map[uuid.UUID]store.TutorialProgress
+	tutErr   error
 }
 
 func (s *stubStore) Authenticate(_ context.Context, token string) (store.User, error) {
@@ -36,6 +39,33 @@ func (s *stubStore) Authenticate(_ context.Context, token string) (store.User, e
 		return u, nil
 	}
 	return store.User{}, store.ErrUnauthorized
+}
+
+func (s *stubStore) GetTutorialProgress(_ context.Context, userID uuid.UUID) (store.TutorialProgress, error) {
+	if s.tutErr != nil {
+		return store.TutorialProgress{}, s.tutErr
+	}
+	return s.tutorial[userID], nil
+}
+
+func (s *stubStore) AdvanceTutorial(_ context.Context, userID uuid.UUID, level, total int32) (store.TutorialProgress, error) {
+	if s.tutErr != nil {
+		return store.TutorialProgress{}, s.tutErr
+	}
+	p := s.tutorial[userID]
+	if level > p.Level {
+		p.Level = level
+	}
+	if level >= total && !p.Completed {
+		now := time.Now()
+		p.CompletedAt = &now
+		p.Completed = true
+	}
+	if s.tutorial == nil {
+		s.tutorial = map[uuid.UUID]store.TutorialProgress{}
+	}
+	s.tutorial[userID] = p
+	return p, nil
 }
 
 func (s *stubStore) RecordMatch(ctx context.Context, res store.MatchResult) (store.EloDelta, store.EloDelta, error) {
@@ -204,10 +234,16 @@ func (passJudge) Judge(_ context.Context, _ string, _ []match.TestCase) match.Ju
 // 完整回路：双认证接入 → 打满 → 终局附 ELO（07 号票主干，CI 可跑，无需真 DB/judge）。
 func TestAuthenticatedMatchSettlesEloEndToEnd(t *testing.T) {
 	a, b := testUsers()
+	now := time.Now()
 	st := &stubStore{
 		userByToken: map[string]store.User{"tok-a": a, "tok-b": b},
 		d1:          store.EloDelta{Player: "p1", UserID: a.ID, Before: 1000, After: 1000},
 		d2:          store.EloDelta{Player: "p2", UserID: b.ID, Before: 1000, After: 1000},
+		// 10 号票起 PvP 入口要求教程已完成（本测试只关心结算链路）。
+		tutorial: map[uuid.UUID]store.TutorialProgress{
+			a.ID: {Level: 4, Completed: true, CompletedAt: &now},
+			b.ID: {Level: 4, Completed: true, CompletedAt: &now},
+		},
 	}
 	h := New(passJudge{}, slog.Default(), nil)
 	h.st = st
@@ -305,7 +341,11 @@ func playLoop(t *testing.T, ws *websocket.Conn, player string, ends chan<- *matc
 // 否则同席位换身份重连会沿用旧身份结算）。
 func TestJoinBindsUserAndCleansUpOnDisconnect(t *testing.T) {
 	a, _ := testUsers()
-	st := &stubStore{userByToken: map[string]store.User{"tok-a": a}}
+	now := time.Now()
+	st := &stubStore{
+		userByToken: map[string]store.User{"tok-a": a},
+		tutorial:    map[uuid.UUID]store.TutorialProgress{a.ID: {Level: 4, Completed: true, CompletedAt: &now}},
+	}
 	h := New(nil, slog.Default(), nil)
 	h.st = st
 	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))

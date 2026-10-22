@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"codewar/server/internal/store"
+	"codewar/server/internal/tutorial"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -32,6 +33,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/login", h.login)
 	r.Get("/api/me", h.me)
 	r.Get("/api/profile", h.profile)
+	// 10 号票：教程进度只读接口（客户端没有任何写入/advance 端点）。
+	r.Get("/api/tutorial", h.tutorial)
 	r.Post("/api/logout", h.logout)
 }
 
@@ -163,6 +166,32 @@ func (h *Handler) profile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+// tutorial：GET /api/tutorial —— 当前用户的教程进度（只读）。
+// 进度由服务端目标判定器在关卡达成后写入；本接口不提供任何推进能力。
+func (h *Handler) tutorial(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.current(w, r)
+	if !ok {
+		return
+	}
+	prog, err := h.st.GetTutorialProgress(r.Context(), u.ID)
+	if err != nil {
+		h.logger.Error("教程进度读取失败", "err", err)
+		writeErr(w, http.StatusInternalServerError, "服务端异常，稍后重试")
+		return
+	}
+	next := int(prog.Level) + 1
+	if prog.Completed || next > tutorial.MaxLevel {
+		next = 0
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"level":        prog.Level,
+		"completed":    prog.Completed,
+		"completed_at": prog.CompletedAt,
+		"total_levels": tutorial.MaxLevel,
+		"next_level":   next,
+	})
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
