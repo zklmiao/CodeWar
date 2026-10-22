@@ -88,41 +88,46 @@ func moveJumpL4() question.Template {
 	}}
 }
 
-// 移动 L5·数组：路径计数（二维 DP + 单行/单列边界，参考解 13 行）。
+// 移动 L5·数组：带障碍路径计数（二维 DP + 障碍分支，参考解 14 行）。
 func movePathsL5() question.Template {
 	meta := question.Meta{ID: "move-paths-L5-move", Topic: question.TopicArray,
 		Difficulty: question.L5, Action: question.ActionMove, Form: question.FormComplete,
-		Traps: []string{"zero-input", "single-row", "one-by-one", "single-col"}}
+		Traps: []string{"zero-input", "blocked-start", "blocked-middle", "single-row"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
-		rows, cols := rng.Int(1, 4), rng.Int(1, 5)
-		kind := rng.Scenario("arena")
-		sig := "def unique_paths(rows: int, cols: int) -> int:"
-		answer := "def unique_paths(rows: int, cols: int) -> int:\n" +
+		rows, cols := rng.Int(2, 4), rng.Int(2, 4)
+		blocked := [][2]int{}
+		for i := 0; i < rng.Int(0, 2); i++ {
+			blocked = append(blocked, [2]int{rng.Int(0, rows-1), rng.Int(0, cols-1)})
+		}
+		kind := rng.Scenario("dungeon")
+		sig := "def unique_paths(rows: int, cols: int, blocked: list) -> int:"
+		answer := "def unique_paths(rows: int, cols: int, blocked: list) -> int:\n" +
 			"    if rows <= 0 or cols <= 0:\n" +
 			"        return 0\n" +
-			"    grid = [[1] * cols for _ in range(rows)]\n" +
+			"    grid = [[0] * cols for _ in range(rows)]\n" +
 			"    for r in range(rows):\n" +
-			"        grid[r][0] = 1\n" +
-			"    for c in range(cols):\n" +
-			"        grid[0][c] = 1\n" +
-			"    for r in range(1, rows):\n" +
-			"        for c in range(1, cols):\n" +
-			"            top = grid[r - 1][c]\n" +
-			"            left = grid[r][c - 1]\n" +
-			"            grid[r][c] = top + left\n" +
+			"        for c in range(cols):\n" +
+			"            if [r, c] in blocked:\n" +
+			"                grid[r][c] = 0\n" +
+			"            elif r == 0 and c == 0:\n" +
+			"                grid[r][c] = 1\n" +
+			"            else:\n" +
+			"                up = grid[r - 1][c] if r > 0 else 0\n" +
+			"                left = grid[r][c - 1] if c > 0 else 0\n" +
+			"                grid[r][c] = up + left\n" +
 			"    return grid[rows - 1][cols - 1]\n"
 		visible := cases(
-			caseAlias{name: "example-1", call: fmt.Sprintf("unique_paths(%d, %d)", rows, cols), expected: fmt.Sprintf("%d", uniquePathsGo(rows, cols))},
-			caseAlias{name: "example-2", call: "unique_paths(3, 3)", expected: "6"},
+			caseAlias{name: "example-1", call: fmt.Sprintf("unique_paths(%d, %d, %s)", rows, cols, pyRanges(blocked)), expected: fmt.Sprintf("%d", uniquePathsGo(rows, cols, blocked))},
+			caseAlias{name: "example-2", call: "unique_paths(3, 3, [])", expected: "6"},
 		)
 		hidden := cases(
-			caseAlias{name: "zero-input", call: "unique_paths(0, 5)", expected: "0"},
-			caseAlias{name: "single-row", call: "unique_paths(1, 5)", expected: "1"},
-			caseAlias{name: "single-col", call: "unique_paths(4, 1)", expected: "1"},
-			caseAlias{name: "one-by-one", call: "unique_paths(1, 1)", expected: "1"},
-			caseAlias{name: "grid-3x7", call: "unique_paths(3, 7)", expected: "28"},
+			caseAlias{name: "zero-input", call: "unique_paths(0, 5, [])", expected: "0"},
+			caseAlias{name: "single-row", call: "unique_paths(1, 5, [])", expected: "1"},
+			caseAlias{name: "blocked-start", call: "unique_paths(3, 3, [[0, 0]])", expected: "0"},
+			caseAlias{name: "blocked-middle", call: "unique_paths(3, 3, [[1, 1]])", expected: fmt.Sprintf("%d", uniquePathsGo(3, 3, [][2]int{{1, 1}}))},
+			caseAlias{name: "single-row-blocked", call: "unique_paths(1, 5, [[0, 2]])", expected: "0"},
 		)
-		stmt := fmt.Sprintf("%s路径计数：在 rows×cols 网格中从左上到右下、每步只能向右或向下，求不同路径数（行列非正为 0）。\n%s", kind, examplesText(visible))
+		stmt := fmt.Sprintf("%s路径计数：rows×cols 网格从左上到右下，每步只能向右或向下；blocked 为障碍格列表（不可通行），返回不同路径数（行列非正为 0）。\n%s", kind, examplesText(visible))
 		return bareInstance(meta, stmt, sig, answer, visible, hidden)
 	}}
 }
@@ -416,20 +421,34 @@ func canReachGo(jumps []int) bool {
 	return true
 }
 
-func uniquePathsGo(rows, cols int) int {
+func uniquePathsGo(rows, cols int, blocked [][2]int) int {
 	if rows <= 0 || cols <= 0 {
 		return 0
+	}
+	blockedSet := map[[2]int]bool{}
+	for _, b := range blocked {
+		blockedSet[b] = true
 	}
 	grid := make([][]int, rows)
 	for r := range grid {
 		grid[r] = make([]int, cols)
-		for c := range grid[r] {
-			grid[r][c] = 1
-		}
 	}
-	for r := 1; r < rows; r++ {
-		for c := 1; c < cols; c++ {
-			grid[r][c] = grid[r-1][c] + grid[r][c-1]
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			if blockedSet[[2]int{r, c}] {
+				grid[r][c] = 0
+			} else if r == 0 && c == 0 {
+				grid[r][c] = 1
+			} else {
+				up, left := 0, 0
+				if r > 0 {
+					up = grid[r-1][c]
+				}
+				if c > 0 {
+					left = grid[r][c-1]
+				}
+				grid[r][c] = up + left
+			}
 		}
 	}
 	return grid[rows-1][cols-1]

@@ -3,7 +3,7 @@
 > 四维 = 题型 × 难度档 × 动作类型 × 题面形式；陷阱清单与隐藏用例一一对应（`checks.invariants` 强制）。
 > 黄金样板 20 个（攻击 18 全覆盖 + 移动/防御各 1 模式样板）+ 仿写 6 个（移动 2、防御 2、技能 2）。
 
-## 攻击题（18，形式 both：同一 Instance 双渲染）
+## 攻击题（43，形式 both：同一 Instance 双渲染）
 
 | 模板 ID | 题型 | 难度 | 形式 | 黄金 | 陷阱 |
 |---|---|---|---|---|---|
@@ -13,13 +13,13 @@
 | syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
 | syntax-reverse-digits-L3-attack | 语法与运算 | L3 | both | 是 | trailing-zero, negative, single-digit, zero |
 | syntax-big-add-L4-attack | 语法与运算 | L4 | both | 是 | carry-chain, different-length, zero-value |
-| syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
-| syntax-reverse-digits-L3-attack | 语法与运算 | L3 | both | 是 | trailing-zero, negative, single-digit, zero |
-| syntax-big-add-L4-attack | 语法与运算 | L4 | both | 是 | carry-chain, different-length, zero-value |
 | string-palindrome-L2-attack | 字符串处理 | L2 | both | 是 | empty-input, case-sensitive |
 | string-vowel-count-L3-attack | 字符串处理 | L3 | both | 是 | empty-input, no-vowel |
 | string-run-length-L4-attack | 字符串处理 | L4 | both | 是 | empty-input, single-char, long-run |
-| string-palindrome-substr-L5-attack | 字符串处理 | L5 | both | 是 | empty-input, single-char, all-same, tie-first |
+| string-shout-L1-attack | 字符串处理 | L1 | both | 否 | — |
+| string-reverse-words-L3-attack | 字符串处理 | L3 | both | 否 | multi-space, single-word, empty-input |
+| string-version-compare-L4-attack | 字符串处理 | L4 | both | 否 | equal, leading-zeros, different-length, less-than |
+| string-unique-window-L5-attack | 字符串处理 | L5 | both | 否 | empty-input, single-char, all-same, all-distinct |
 | string-palindrome-substr-L5-attack | 字符串处理 | L5 | both | 是 | empty-input, single-char, all-same, tie-first |
 | array-dedup-L2-attack | 数组与列表 | L2 | both | 是 | empty-input, all-same |
 | array-two-sum-L3-attack | 数组与列表 | L3 | both | 是 | duplicates, negative |
@@ -78,7 +78,7 @@
 | struct-lru-L5-attack | 哈希与计数 | L5 | 构造 LRUCache | —（调用序列） | capacity-one, evict-order, miss |
 | struct-myqueue-L4-attack | 语法与运算 | L4 | 构造 MyQueue | —（调用序列） | fifo-order, empty-after |
 
-## 移动题（6，私有，形式 complete；12 批 2 起带题型标注）
+## 移动题（27，私有，形式 complete；12 批 2 起带题型标注）
 
 | 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
 |---|---|---|---|---|
@@ -95,7 +95,7 @@
 | move-nearest-L1-move | 数组与列表 | L1 | 否 | — |
 | move-clamp-L3-move | 数组与列表 | L3 | 否 | empty-input, clamp-high, clamp-low |
 | move-jump-L4-move | 数组与列表 | L4 | 否 | empty-input, stuck-zero, single-element |
-| move-paths-L5-move | 数组与列表 | L5 | 否 | zero-input, single-row, one-by-one, single-col |
+| move-paths-L5-move | 数组与列表 | L5 | 否 | zero-input, blocked-start, blocked-middle, single-row |
 | move-lookup-L1-move | 哈希与计数 | L1 | 否 | — |
 | move-keycount-L2-move | 哈希与计数 | L2 | 否 | empty-input, absent |
 | move-first-repeat-L3-move | 哈希与计数 | L3 | 否 | empty-input, no-repeat, repeat-adjacent |
@@ -110,7 +110,7 @@
 | move-recsum-L3-move | 递归与简单 DP | L3 | 否 | empty-input, single-element |
 | move-depth-L4-move | 递归与简单 DP | L4 | 否 | empty-input, one-level, deep-nesting |
 
-## 防御题（6，私有，形式 complete；12 批 2 起带题型标注）
+## 防御题（27，私有，形式 complete；12 批 2 起带题型标注）
 
 | 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
 |---|---|---|---|---|
@@ -142,7 +142,7 @@
 | defend-ones-L3-defend | 递归与简单 DP | L3 | 否 | zero-input, single-bit |
 | defend-memo-L4-defend | 递归与简单 DP | L4 | 否 | zero-input, negative-input, memo-hit |
 
-## 技能题（6，06 号票消费，形式 complete；L1/L2 为 12 号票批 1 补 cap<L3 缺口）
+## 技能题（27，06 号票消费，形式 complete）
 
 | 模板 ID | 题型 | 难度 | 陷阱 |
 |---|---|---|---|
@@ -168,7 +168,7 @@
 | skill-strongest-L1-skill | 排序与贪心 | L1 | — |
 | skill-shield-L2-skill | 排序与贪心 | L2 | k-zero, empty-input |
 | skill-closepairs-L3-skill | 排序与贪心 | L3 | empty-input, no-close, all-close |
-| skill-medal-L4-skill | 排序与贪心 | L4 | empty-input, fewer-than-three, duplicates |
+| skill-rank-L4-skill | 排序与贪心 | L4 | duplicates, tie-at-top, single-element |
 | skill-swaps-L5-skill | 排序与贪心 | L5 | empty-input, sorted-input, single-cycle, reverse-sorted |
 | skill-combo-L2-skill | 递归与简单 DP | L2 | zero-power |
 | skill-droot-L3-skill | 递归与简单 DP | L3 | single-digit, zero-input |
@@ -176,5 +176,7 @@
 
 ## 档位覆盖
 
-- 攻击：全题型矩阵完成（批 1-6b），关键格（攻击×L3-L5）均 ≥2 模板；矩阵口径见 templates/coverage_test.go（108 有效格 / 关键格双模板 / 总量 124）。
-- 移动/防御/技能：全部 6 题型 L1-L5 已补齐（12 批 2-6b）。矩阵 108/108 格、关键格 16/16 双模板、总量 124/124。
+- 攻击：全题型矩阵完成（批 1-6b），关键格（攻击 × L3-L5）均 ≥2 模板；再加批 7 的 17 个结构体增量。
+- 移动/防御/技能：全部 6 题型 L1-L5 已补齐（批 2-6b）。
+- 矩阵 108/108 有效格、关键格 16/16 双模板、基线 124/124（+17 结构体增量 = 141）；口径见 templates/coverage_test.go。
+- 形式：攻击题 both（批 7 结构体类 complete-only，见该节说明）；私有题 complete。

@@ -113,7 +113,7 @@ func All() []question.Template {
 		skillStrongestL1(),
 		skillShieldL2(),
 		skillClosePairsL3(),
-		skillMedalL4(),
+		skillRankL4(),
 		skillSwapsL5(),
 		// 哈希主题私有题（12 号票批 5）
 		moveLookupL1(),

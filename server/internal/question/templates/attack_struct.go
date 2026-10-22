@@ -589,6 +589,7 @@ func structLcaL4() question.Template {
 		{[]any{3, 5, 1, 6, 2, 0, 8, nil, nil, 7, 4}, "root.left", "root.left.right.right", 5, 4},
 		{[]any{3, 5, 1, 6, 2, 0, 8, nil, nil, 7, 4}, "root.left.right.left", "root.left.right.right", 7, 4},
 		{[]any{1, 2, 3}, "root.left", "root.right", 2, 3},
+		{[]any{3, 5, 1, 6, 2, 0, 8, nil, nil, 7, 4}, "root.right", "root.right.right", 1, 8},
 	}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		e := entries[rng.Int(0, len(entries)-1)]
@@ -622,7 +623,7 @@ func structLcaL4() question.Template {
 			{name: "left-subtree", call: call, expected: expectedOf(entries[1]), setup: setupOf(entries[1]), compare: treeCompare()},
 			{name: "deep-nodes", call: call, expected: expectedOf(entries[2]), setup: setupOf(entries[2]), compare: treeCompare()},
 			{name: "small-tree", call: call, expected: expectedOf(entries[3]), setup: setupOf(entries[3]), compare: treeCompare()},
-			{name: "right-subtree", call: call, expected: expectedOf(entries[2]), setup: setupOf(entries[2]), compare: treeCompare()},
+			{name: "right-subtree", call: call, expected: expectedOf(entries[4]), setup: setupOf(entries[4]), compare: treeCompare()},
 		}
 		stmt := fmt.Sprintf("%s树脉溯源：返回二叉树中节点 p 与 q 的最近公共祖先（按节点身份；p、q 保证存在）。\n%s", kind, structExamplesText(visible))
 		return customInstance(meta, stmt, sig, "def lowest_common_ancestor(root, p, q):\n    # 在这里补全实现\n    raise NotImplementedError\n", answer,
@@ -677,7 +678,7 @@ func structLruL5() question.Template {
 		}
 		hidden := []matchCase{
 			{name: "capacity-one", call: callOf(1, 1, 2, 3), expected: expectedOf(1, 1, 1, 2, 3), setup: "obj = LRUCache(1)"},
-			{name: "evict-order", call: callOf(1, 1, 2, 3), expected: expectedOf(2, 1, 1, 2, 3), setup: "obj = LRUCache(2)"},
+			{name: "evict-order", call: callOf(5, 1, 2, 3), expected: expectedOf(2, 5, 1, 2, 3), setup: "obj = LRUCache(2)"},
 			{name: "miss", call: "[obj.get(9), obj.get(8)]", expected: "[-1, -1]", setup: "obj = LRUCache(2)"},
 			{name: "update-existing", call: "[obj.put(1, 5), obj.put(1, 6), obj.get(1)]", expected: "[None, None, 6]", setup: "obj = LRUCache(2)"},
 			{name: "capacity-three", call: callOf(2, 4, 5, 6), expected: expectedOf(3, 2, 4, 5, 6), setup: "obj = LRUCache(3)"},

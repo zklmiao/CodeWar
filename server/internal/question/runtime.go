@@ -102,9 +102,12 @@ func (g *RNG) Str(length int, alphabet string) string {
 var scenarioPools = map[string][]string{
 	"words": {"arena", "battle", "code", "spell", "quest", "tower", "blade", "storm"},
 	// 12 号票扩容：按题材域扩充（text.scenario 原语不变，MVP 静态池；LLM 皮肤后续只替换本池）。
-	"rune":  {"符文", "咒文", "铭文"},
-	"spell": {"法力", "奥术", "元素"},
-	"heal":  {"圣光", "生命之泉", "治疗波"},
+	"rune":    {"符文", "咒文", "铭文"},
+	"spell":   {"法力", "奥术", "元素"},
+	"heal":    {"圣光", "生命之泉", "治疗波"},
+	"arena":   {"竞技场", "角斗场", "演武场"},
+	"dungeon": {"地下城", "遗迹回廊", "迷雾深渊"},
+	"alchemy": {"炼金实验室", "药剂工房", "草药铺"},
 }
 
 // Scenario：取随机情境词。

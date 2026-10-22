@@ -394,40 +394,37 @@ func skillClosePairsL3() question.Template {
 	}}
 }
 
-// 技能 L4·排序：奖牌榜（去重 + 降序取前三，参考解 12 行）。
-func skillMedalL4() question.Template {
-	meta := question.Meta{ID: "skill-medal-L4-skill", Topic: question.TopicSort,
+// 技能 L4·排序：名次榜（降序排序 + 并列名次处理，参考解 8 行）。
+func skillRankL4() question.Template {
+	meta := question.Meta{ID: "skill-rank-L4-skill", Topic: question.TopicSort,
 		Difficulty: question.L4, Action: question.ActionSkill, Form: question.FormComplete,
-		Traps: []string{"empty-input", "fewer-than-three", "duplicates"}}
+		Traps: []string{"duplicates", "tie-at-top", "single-element"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		scores := rng.IntList(rng.Int(2, 6), 1, 9, question.ListOpts{})
 		kind := rng.Scenario("spell")
-		sig := "def medalists(scores: list) -> list:"
-		answer := "def medalists(scores: list) -> list:\n" +
-			"    unique = []\n" +
-			"    for s in scores:\n" +
-			"        if s not in unique:\n" +
-			"            unique.append(s)\n" +
-			"    unique.sort(reverse=True)\n" +
-			"    result = []\n" +
-			"    limit = 3\n" +
-			"    if len(unique) < limit:\n" +
-			"        limit = len(unique)\n" +
-			"    for i in range(limit):\n" +
-			"        result.append(unique[i])\n" +
-			"    return result\n"
+		sig := "def rank_scores(scores: list) -> list:"
+		answer := "def rank_scores(scores: list) -> list:\n" +
+			"    ordered = sorted(scores, reverse=True)\n" +
+			"    ranks = []\n" +
+			"    for i in range(len(ordered)):\n" +
+			"        if i > 0 and ordered[i] == ordered[i - 1]:\n" +
+			"            ranks.append(ranks[-1])\n" +
+			"        else:\n" +
+			"            ranks.append(i + 1)\n" +
+			"    return ranks\n"
 		visible := cases(
-			caseAlias{name: "example-1", call: fmt.Sprintf("medalists(%s)", pyList(scores)), expected: pyList(medalistsGo(scores))},
-			caseAlias{name: "example-2", call: "medalists([9, 2, 7, 4])", expected: "[9, 7, 4]"},
+			caseAlias{name: "example-1", call: fmt.Sprintf("rank_scores(%s)", pyList(scores)), expected: pyList(rankScoresGo(scores))},
+			caseAlias{name: "example-2", call: "rank_scores([90, 90, 80])", expected: "[1, 1, 3]"},
 		)
 		hidden := cases(
-			caseAlias{name: "empty-input", call: "medalists([])", expected: "[]"},
-			caseAlias{name: "fewer-than-three", call: "medalists([5])", expected: "[5]"},
-			caseAlias{name: "duplicates", call: "medalists([5, 5, 3, 1])", expected: "[5, 3, 1]"},
-			caseAlias{name: "single-distinct", call: "medalists([1, 1, 1])", expected: "[1]"},
-			caseAlias{name: "exact-three", call: "medalists([5, 3, 1])", expected: "[5, 3, 1]"},
+			caseAlias{name: "duplicates", call: "rank_scores([90, 90, 80])", expected: "[1, 1, 3]"},
+			caseAlias{name: "tie-at-top", call: "rank_scores([5, 5, 5])", expected: "[1, 1, 1]"},
+			caseAlias{name: "single-element", call: "rank_scores([100])", expected: "[1]"},
+			caseAlias{name: "all-distinct", call: "rank_scores([1, 2, 3])", expected: pyList(rankScoresGo([]int{1, 2, 3}))},
+			caseAlias{name: "mixed", call: "rank_scores([10, 20, 20, 30])", expected: pyList(rankScoresGo([]int{10, 20, 20, 30}))},
+			caseAlias{name: "two-ties", call: "rank_scores([7, 7])", expected: "[1, 1]"},
 		)
-		stmt := fmt.Sprintf("%s奖牌榜：去重后按降序返回前三名分数（不足三名则全部返回）。\n%s", kind, examplesText(visible))
+		stmt := fmt.Sprintf("%s名次榜：返回每个成绩的名次（降序排名；并列取相同名次，其后名次按位次跳过，如 [90, 90, 80] → [1, 1, 3]）。\n%s", kind, examplesText(visible))
 		return bareInstance(meta, stmt, sig, answer, visible, hidden)
 	}}
 }
@@ -611,20 +608,18 @@ func closePairsGo(nums []int, limit int) int {
 	return count
 }
 
-func medalistsGo(scores []int) []int {
-	seen := map[int]bool{}
-	uniq := []int{}
-	for _, s := range scores {
-		if !seen[s] {
-			seen[s] = true
-			uniq = append(uniq, s)
+func rankScoresGo(scores []int) []int {
+	ordered := append([]int{}, scores...)
+	sort.Sort(sort.Reverse(sort.IntSlice(ordered)))
+	ranks := make([]int, len(ordered))
+	for i, v := range ordered {
+		if i > 0 && v == ordered[i-1] {
+			ranks[i] = ranks[i-1]
+		} else {
+			ranks[i] = i + 1
 		}
 	}
-	sort.Sort(sort.Reverse(sort.IntSlice(uniq)))
-	if len(uniq) > 3 {
-		uniq = uniq[:3]
-	}
-	return uniq
+	return ranks
 }
 
 func minSwapsGo(nums []int) int {

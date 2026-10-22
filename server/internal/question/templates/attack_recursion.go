@@ -133,7 +133,7 @@ func pascalGo(n int) []int {
 func recursionClimbL3() question.Template {
 	meta := question.Meta{ID: "recursion-climb-L3-attack", Topic: question.TopicRecursion,
 		Difficulty: question.L3, Action: question.ActionAttack, Form: question.FormBoth,
-		Traps: []string{"base-zero", "base-one", "memo-hit"}}
+		Traps: []string{"base-zero", "base-one", "base-two"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(0, 8)
 		kind := rng.Scenario("dungeon")
@@ -162,8 +162,8 @@ func recursionClimbL3() question.Template {
 		hidden := cases(
 			caseAlias{name: "base-zero", call: "climb(0, {})", expected: "0"},
 			caseAlias{name: "base-one", call: "climb(1, {})", expected: "1"},
-			caseAlias{name: "memo-hit", call: "climb(3, {})", expected: "3"},
-			caseAlias{name: "stairs-5", call: "climb(5, {})", expected: "8"},
+			caseAlias{name: "base-two", call: "climb(2, {})", expected: "2"},
+			caseAlias{name: "stairs-6", call: "climb(6, {})", expected: "13"},
 			caseAlias{name: "stairs-10", call: "climb(10, {})", expected: "89"},
 		)
 		stmt := fmt.Sprintf("%s阶梯步法：每次可跨 1 或 2 级，求到达第 n 级的不同走法数（n≤2 时返回 n；memo 为记忆化缓存）。\n%s", kind, examplesText(visible))

@@ -458,7 +458,7 @@ func skillDecompressL4() question.Template {
 		hidden := cases(
 			caseAlias{name: "empty-input", call: `decompress("")`, expected: pyStr("")},
 			caseAlias{name: "no-count", call: `decompress("ab")`, expected: pyStr("ab")},
-			caseAlias{name: "multi-digit-count", call: `decompress("3xy")`, expected: pyStr("xxxy")},
+			caseAlias{name: "multi-digit-count", call: `decompress("12z")`, expected: pyStr(decompressGo("12z"))},
 			caseAlias{name: "drawn", call: `decompress("2b3a")`, expected: pyStr(decompressGo("2b3a"))},
 			caseAlias{name: "single", call: `decompress("z")`, expected: pyStr("z")},
 		)

@@ -91,7 +91,7 @@ func syntaxCountDivL3() question.Template {
 		)
 		hidden := cases(
 			caseAlias{name: "empty-input", call: fmt.Sprintf("count_divisible([], %d)", k), expected: "0"},
-			caseAlias{name: "no-match", call: fmt.Sprintf("count_divisible([1, 3, 5], %d)", k), expected: fmt.Sprintf("%d", countDiv([]int{1, 3, 5}, k))},
+			caseAlias{name: "no-match", call: "count_divisible([1, 3, 5], 2)", expected: "0"},
 			caseAlias{name: "all-match", call: fmt.Sprintf("count_divisible([%d, %d], %d)", k, 2*k, k), expected: "2"},
 			caseAlias{name: "negative-div", call: fmt.Sprintf("count_divisible([-6, -4, 3], %d)", k), expected: fmt.Sprintf("%d", countDiv([]int{-6, -4, 3}, k))},
 			caseAlias{name: "with-zero", call: fmt.Sprintf("count_divisible([0, 1, 2], %d)", k), expected: fmt.Sprintf("%d", countDiv([]int{0, 1, 2}, k))},

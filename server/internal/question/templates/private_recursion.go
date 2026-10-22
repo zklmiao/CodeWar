@@ -29,7 +29,7 @@ func moveFibL2() question.Template {
 			caseAlias{name: "base-zero", call: "fib(0)", expected: "0"},
 			caseAlias{name: "base-one", call: "fib(1)", expected: "1"},
 			caseAlias{name: "two", call: "fib(2)", expected: "1"},
-			caseAlias{name: "five", call: "fib(5)", expected: "5"},
+			caseAlias{name: "seven", call: "fib(7)", expected: "13"},
 			caseAlias{name: "ten", call: "fib(10)", expected: "55"},
 		)
 		stmt := fmt.Sprintf("%s步法数列：第 n 项满足 F(0)=0、F(1)=1、F(n)=F(n−1)+F(n−2)。\n%s", kind, examplesText(visible))
@@ -162,7 +162,7 @@ func defendOnesL3() question.Template {
 func defendMemoL4() question.Template {
 	meta := question.Meta{ID: "defend-memo-L4-defend", Topic: question.TopicRecursion,
 		Difficulty: question.L4, Action: question.ActionDefend, Form: question.FormComplete,
-		Traps: []string{"zero-input", "negative-input", "memo-hit"}}
+		Traps: []string{"zero-input", "negative-input", "base-one"}}
 	return funcTemplate{meta: meta, gen: func(rng *question.RNG) (question.Instance, error) {
 		n := rng.Int(0, 20)
 		kind := rng.Scenario("dungeon")
@@ -184,9 +184,9 @@ func defendMemoL4() question.Template {
 		hidden := cases(
 			caseAlias{name: "zero-input", call: "fib_memo(0, {})", expected: "0"},
 			caseAlias{name: "negative-input", call: "fib_memo(-1, {})", expected: "0"},
-			caseAlias{name: "memo-hit", call: "fib_memo(2, {})", expected: "1"},
+			caseAlias{name: "base-one", call: "fib_memo(1, {})", expected: "1"},
 			caseAlias{name: "twenty", call: "fib_memo(20, {})", expected: "6765"},
-			caseAlias{name: "ten", call: "fib_memo(10, {})", expected: "55"},
+			caseAlias{name: "fifteen", call: "fib_memo(15, {})", expected: "610"},
 		)
 		stmt := fmt.Sprintf("%s记忆回廊：用带缓存（memo）的递归计算斐波那契第 n 项（负输入返回 0；memo 由调用方传入空字典）。\n%s", kind, examplesText(visible))
 		return bareInstance(meta, stmt, sig, answer, visible, hidden)

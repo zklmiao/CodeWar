@@ -150,7 +150,7 @@ func sortSmallestL1() question.Template {
 			caseAlias{name: "example-2", call: "smallest([4, 2, 7])", expected: "2"},
 		)
 		hidden := cases(
-			caseAlias{name: "empty-input", call: "smallest([6])", expected: "6"},
+			caseAlias{name: "single", call: "smallest([6])", expected: "6"},
 			caseAlias{name: "sorted", call: "smallest([1, 2, 3])", expected: "1"},
 			caseAlias{name: "reverse-sorted", call: "smallest([9, 5, 3])", expected: "3"},
 			caseAlias{name: "duplicates", call: "smallest([4, 4, 4])", expected: "4"},
