@@ -70,8 +70,29 @@ export interface MatchConfigView {
   topic: string; // 题型 key；空 = 全部 6 题型
   cap: number; // 难度上限档 1..5（L1..L5）
   strategy: string; // uniform | climb
-  mode: string; // 09 号票：空 = PvP；pve = 单人练习
+  mode: string; // 09 号票：空 = PvP；pve = 单人练习；tutorial = 新手教程
   bot: string; // 09 号票：PvE 难度 easy | normal | hard（非 PvE 为空）
+}
+
+// 新手教程状态（10 号票）：服务端判定，客户端只渲染。
+// 进度推进没有客户端入口——completed 只来自 ServerMessage.tutorial。
+export interface TutorialGoalView {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface TutorialStateView {
+  level: number; // 1..4
+  title: string;
+  mechanic: string; // 本关机制小结（完成页）
+  slots: string[]; // 本关展示的行动槽
+  goals: TutorialGoalView[];
+  completed: boolean;
+  nextLevel: number; // 0 = 无下一关
+  allCompleted: boolean;
+  cap: number;
+  capCoeff: number;
 }
 
 export interface MatchState {
@@ -86,6 +107,7 @@ export interface MatchState {
   panel: PanelState | null;
   classes: Record<string, ClassView>; // 职业/技能/冷却（06 号票快照字段）
   matchConfig: MatchConfigView | null; // 本场锁定配置（05 号票快照字段）
+  tutorial: TutorialStateView | null; // 教程状态（10 号票，服务端判定）
   pendingTargeting: TargetingView | null; // 攻击/技能槽的目标选择（未提交 = 自动瞄准）
   viewerLockUntil: number;
   viewerActed: boolean; // 本回合查看者已行动（服务端权威结论的本地缓存）
@@ -115,6 +137,7 @@ export const useMatchStore = defineStore("match", {
     panel: null,
     classes: {},
     matchConfig: null,
+    tutorial: null,
     pendingTargeting: null,
     viewerLockUntil: 0,
     viewerActed: false,
@@ -137,12 +160,29 @@ export const useMatchStore = defineStore("match", {
     applyServerMessage(data: unknown, viewer: string) {
       this.viewerId = viewer;
       const msg = ServerMessage.fromJSON(data as object);
-      // ts-proto v2 把 oneof 生成为扁平可选字段（snapshot?/event?）
-      if (msg.snapshot) {
+      // ts-proto v2 把 oneof 生成为扁平可选字段（snapshot?/event?/tutorial?）
+      if (msg.tutorial) {
+        this.applyTutorial(msg.tutorial);
+      } else if (msg.snapshot) {
         this.applySnapshot(msg.snapshot, viewer);
       } else if (msg.event) {
         this.applyEnvelope(msg.event);
       }
+    },
+    // 教程状态（10 号票）：目标清单 / 槽位 / 完成态都由服务端下发。
+    applyTutorial(t: NonNullable<ServerMessage["tutorial"]>) {
+      this.tutorial = {
+        level: t.level,
+        title: t.title,
+        mechanic: t.mechanic,
+        slots: [...(t.slots ?? [])],
+        goals: (t.goals ?? []).map((g) => ({ id: g.id, label: g.label, done: g.done })),
+        completed: t.completed,
+        nextLevel: t.nextLevel,
+        allCompleted: t.allCompleted,
+        cap: t.cap,
+        capCoeff: t.capCoeff,
+      };
     },
     // ===== 快照：接入/重连的起点（panel 已由服务端按查看者过滤私有题） =====
     applySnapshot(s: Snapshot, viewer: string) {

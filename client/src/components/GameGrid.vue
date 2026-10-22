@@ -4,6 +4,7 @@
 // 06 号票：棋子按职业渲染 13 号票占位资产（cw-class-*.svg）+ 职业主色。
 import { useMatchStore } from "../stores/match";
 import { useClassesStore } from "../stores/classes";
+import { computed } from "vue";
 import warriorSvg from "../../../design/components/cw-class-warrior.svg";
 import mageSvg from "../../../design/components/cw-class-mage.svg";
 import rangerSvg from "../../../design/components/cw-class-ranger.svg";
@@ -45,10 +46,17 @@ function isShielded(row: number, col: number): boolean {
 function titleOf(p: string): string {
   return store.classes[p]?.bot ? "机器人" : p.toUpperCase();
 }
+// 10 号票：教程未展示移动槽时不可点选（避免误以为在选移动目标）。
+const canPick = computed(
+  () =>
+    store.isRoundActive &&
+    !store.viewerActed &&
+    (!store.tutorial || store.tutorial.slots.includes("move")),
+);
 // 点选：回合活跃且自己未行动时可设置目标格；点击自己所在格 = 清除选择，
 // 对方占用的格子不可作为目标（合法性最终由服务端校验）
 function pick(row: number, col: number) {
-  if (!store.isRoundActive || store.viewerActed) return;
+  if (!canPick.value) return;
   const cur = store.positions[store.viewerId];
   if (cur && cur.row === row && cur.col === col) {
     store.setMoveTo(null);
@@ -61,7 +69,7 @@ function pick(row: number, col: number) {
 
 <template>
   <div class="grid-wrap">
-    <div class="grid" :class="{ picking: store.isRoundActive && !store.viewerActed }">
+    <div class="grid" :class="{ picking: canPick }">
       <div
         v-for="c in cells"
         :key="`${c.row}-${c.col}`"
@@ -69,7 +77,7 @@ function pick(row: number, col: number) {
         :class="{
           [occupant(c.row, c.col)]: true,
           target: isMoveTarget(c.row, c.col),
-          pickable: store.isRoundActive && !store.viewerActed && !occupant(c.row, c.col),
+          pickable: canPick && !occupant(c.row, c.col),
         }"
         @click="pick(c.row, c.col)"
       >
@@ -88,7 +96,7 @@ function pick(row: number, col: number) {
     </div>
     <div class="legend">
       P1（你={{ store.viewerId === "p1" ? "是" : "否" }}）· P2（你={{ store.viewerId === "p2" ? "是" : "否" }}）
-      <template v-if="store.isRoundActive && !store.viewerActed"> · 点选格子设定移动目标</template>
+      <template v-if="canPick"> · 点选格子设定移动目标</template>
     </div>
   </div>
 </template>

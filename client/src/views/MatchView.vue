@@ -5,7 +5,7 @@
 // 05 号票：对局配置表单（题型/难度上限/抽题策略）——配置随接入链接携带，
 // 服务端按首个 join 锁定整场；「复制接入链接」供热座第二窗口直接粘贴。
 // 断线/序号断裂：关闭连接重连，快照重建状态（ADR-0002）。
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useMatchStore } from "../stores/match";
 import { useUserStore } from "../stores/user";
@@ -17,6 +17,8 @@ import HpBar from "../components/HpBar.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
 import EventLog from "../components/EventLog.vue";
 import EndOverlay from "../components/EndOverlay.vue";
+import TutorialGoals from "../components/TutorialGoals.vue";
+import TutorialOverlay from "../components/TutorialOverlay.vue";
 
 const store = useMatchStore();
 const user = useUserStore();
@@ -25,7 +27,11 @@ const route = useRoute();
 const disconnected = ref(false);
 // 09 号票：PvE 模式（?mode=pve&bot=easy|normal|hard）。必须在 playerFromUrl()
 // 之前初始化——viewer 的初值会读 isPve（const TDZ 会导致整个组件渲染失败）。
+// 10 号票：教程模式（?mode=tutorial&level=1..4[&cap=L3|L5]）复用同一单人拓扑。
 const isPve = route.query.mode === "pve";
+const isTutorial = route.query.mode === "tutorial";
+const solo = isPve || isTutorial;
+const tutorialLevel = ref(parseTutorialLevel(route.query.level));
 const botDifficulty = ref(
   BOT_OPTIONS.some((b) => b.key === route.query.bot) ? (route.query.bot as string) : "normal",
 );
@@ -47,11 +53,36 @@ const cfgStrategy = ref(
     : "climb",
 );
 function playerFromUrl(): string {
-  // PvE 人机练习人类固定 p1（链接里 player 可省略）
-  if (isPve) return "p1";
+  // 单人模式（PvE/教程）人类固定 p1（链接里 player 可省略）
+  if (solo) return "p1";
   const p = route.query.player;
   return p === "1" ? "p1" : p === "2" ? "p2" : "";
 }
+
+// 教程关号：URL 非法时回退第 1 关（服务端还是最终权威，会按进度再校验）。
+function parseTutorialLevel(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 4 ? n : 1;
+}
+
+// 入口页：教程 L4 难度上限（L3 ×1.00 / L5 ×1.20，缺省 L5——越高越疼）。
+const tutorialCap = ref(route.query.cap === "L3" ? "L3" : "L5");
+
+// 教程入口链接：已登录用户按服务端进度继续；未登录点击会引导登录。
+const tutorialNext = computed(() => {
+  const t = user.tutorial;
+  if (!t || t.completed) return 1;
+  return Math.min(t.total_levels, t.next_level || t.level + 1);
+});
+function tutorialHref(level: number): string {
+  const q = new URLSearchParams();
+  q.set("mode", "tutorial");
+  q.set("level", String(level));
+  if (level === 4) q.set("cap", tutorialCap.value);
+  return `/?${q.toString()}`;
+}
+// PvP 门禁的客户端镜像：已登录但进度未知/未完成时保守禁用（服务端仍会校验）。
+const pvpLocked = computed(() => user.loggedIn && (!user.tutorial || !user.tutorial.completed));
 
 // configParams：对局配置的 URL 参数（PvP 双窗口链接与 PvE 人机链接共用，
 // 保证两种模式从同一套配置进入、服务端也走同一 question.Config 构造路径）。
@@ -85,6 +116,7 @@ function pveHref(): string {
 // 时静默失败——下方「以 P2 接入」链接仍可右键复制
 const copied = ref(false);
 async function copyJoinLink() {
+  if (pvpLocked.value) return; // 未完成教程：不复制一个必然被服务端拒绝的链接
   try {
     await navigator.clipboard.writeText(location.origin + joinHref("2"));
     copied.value = true;
@@ -112,12 +144,14 @@ function connect() {
       class: (route.query.class as string) || "",
       skill: (route.query.skill as string) || "",
       // 05 号票：配置随 join 注入（重连同参——服务端按首个 join 锁定，幂等）
-      topic: cfgTopic.value,
-      cap: cfgCap.value,
-      strategy: cfgStrategy.value,
+      topic: isTutorial ? "" : cfgTopic.value,
+      cap: isTutorial ? (tutorialLevel.value === 4 ? tutorialCap.value : "") : cfgCap.value,
+      strategy: isTutorial ? "" : cfgStrategy.value,
       // 09 号票：PvE 模式与难度（人类固定 p1；服务端首个 join 锁定）
-      mode: isPve ? "pve" : "",
+      mode: isTutorial ? "tutorial" : isPve ? "pve" : "",
       bot: isPve ? botDifficulty.value : "",
+      // 10 号票：教程关号（服务端校验登录态与解锁进度）
+      level: isTutorial ? String(tutorialLevel.value) : "",
     },
   );
 }
@@ -126,6 +160,15 @@ onMounted(() => {
   if (viewer.value) connect();
   classesStore.fetch(); // 职业选择与 targeting 控件的同源数据
 });
+
+// 10 号票：登录态恢复后拉取教程进度（入口页门禁与"继续第 N 关"的数据源）。
+watch(
+  () => user.loggedIn,
+  (v) => {
+    if (v) user.fetchTutorial();
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => socket.close());
 
@@ -150,13 +193,47 @@ watch(
       <div v-if="disconnected" class="banner">连接断开，重连中…</div>
       <div class="cols">
         <GameGrid />
-        <QuestionPanel />
+        <div class="right-col">
+          <!-- 10 号票：教程目标清单（服务端事件驱动点亮；非教程模式不渲染） -->
+          <TutorialGoals v-if="isTutorial" />
+          <QuestionPanel :slots="isTutorial ? store.tutorial?.slots ?? [] : undefined" />
+        </div>
       </div>
       <EventLog />
     </main>
 
     <main v-else class="choose">
       <p>本机热座对战：用两个浏览器窗口分别扮演双方。先配置对局，再选职业与技能（盲选——对方开赛前看不到）。</p>
+
+      <!-- 10 号票：新手教程入口（登录后进度保存在账号；PvP 门禁的数据源） -->
+      <div class="tutorial-entry" data-testid="tutorial-entry">
+        <template v-if="!user.loggedIn">
+          <b>新手教程</b>
+          <span>登录后可开始 4 关交互式教程，进度自动保存。教程不要求匿名玩家，但也不会记录进度。</span>
+          <a href="/login">登录后开始</a>
+        </template>
+        <template v-else-if="user.tutorial?.completed">
+          <b>新手教程已完成 ✓</b>
+          <span>1v1 匹配已解锁。可回炉重练：</span>
+          <span class="tut-replay">
+            <a v-for="n in 4" :key="n" :href="tutorialHref(n)">第 {{ n }} 关</a>
+          </span>
+        </template>
+        <template v-else>
+          <b>新手教程</b>
+          <span>依次学习：读题作答 → 走位闪避 → 防御与技能冷却 → 难度收益。完成前 1v1 匹配保持锁定。</span>
+          <a :href="tutorialHref(tutorialNext)" data-testid="join-tutorial">
+            {{ (user.tutorial?.level ?? 0) > 0 ? `继续第 ${tutorialNext} 关` : "开始第 1 关" }}
+          </a>
+          <label>
+            第 4 关难度上限
+            <select v-model="tutorialCap" data-testid="tutorial-cap">
+              <option value="L3">L3（伤害 ×1.00）</option>
+              <option value="L5">L5（伤害 ×1.20，越高越疼）</option>
+            </select>
+          </label>
+        </template>
+      </div>
 
       <!-- 05 号票：对局配置表单（题型过滤只约束攻击题；难度上限档挂钩伤害与结算奖励） -->
       <div class="cfg-form" data-testid="match-config">
@@ -178,7 +255,7 @@ watch(
             <option v-for="s in STRATEGY_OPTIONS" :key="s.key" :value="s.key">{{ s.label }}</option>
           </select>
         </label>
-        <button class="copy" data-testid="copy-link" @click="copyJoinLink">
+        <button class="copy" data-testid="copy-link" :disabled="pvpLocked" @click="copyJoinLink">
           {{ copied ? "已复制 ✓" : "复制接入链接（第二窗口）" }}
         </button>
       </div>
@@ -220,13 +297,20 @@ watch(
       </div>
       <p class="cfg-hint">人机练习使用与 PvP 相同的题型/难度上限/抽题策略；Bot 按难度决定解题速度与正确率。</p>
 
-      <div class="links">
+      <!-- 10 号票：已登录且未完成教程 → PvP 入口禁用（服务端仍会校验，客户端只是先行提示） -->
+      <div v-if="pvpLocked" class="pvp-locked" data-testid="pvp-locked">
+        🔒 先完成新手教程才能进入 1v1 匹配。
+        <a :href="tutorialHref(tutorialNext)">去完成教程（第 {{ tutorialNext }} 关）</a>
+      </div>
+      <div v-else class="links">
         <a :href="joinHref('1')" data-testid="join-p1">以 P1 接入</a>
         <a :href="joinHref('2')" data-testid="join-p2">以 P2 接入</a>
       </div>
     </main>
 
     <EndOverlay />
+    <!-- 10 号票：教程通关完成页（下一关 / 返回入口；服务端 completed 才显示） -->
+    <TutorialOverlay v-if="isTutorial" />
   </div>
 </template>
 
@@ -278,6 +362,33 @@ watch(
   padding: var(--cw-space-2) var(--cw-space-4);
 }
 .pve-entry a:hover { background: var(--cw-color-bg-raised); }
+/* 10 号票：新手教程入口 + PvP 门禁提示 */
+.right-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--cw-space-3); }
+.tutorial-entry {
+  display: flex; gap: var(--cw-space-3); align-items: center; justify-content: center; flex-wrap: wrap;
+  margin: var(--cw-space-4) auto 0; max-width: 720px; padding: var(--cw-space-3);
+  background: var(--cw-color-bg-surface); border: 1px solid var(--cw-color-border);
+  border-radius: var(--cw-radius-md); font-size: var(--cw-font-size-sm);
+}
+.tutorial-entry b { color: var(--cw-color-accent); }
+.tutorial-entry a { color: var(--cw-color-state-success); text-decoration: none; }
+.tutorial-entry label {
+  display: flex; gap: var(--cw-space-2); align-items: center;
+  color: var(--cw-color-text-muted); font-size: var(--cw-font-size-xs);
+}
+.tutorial-entry select {
+  background: var(--cw-color-bg-inset); color: var(--cw-color-text-primary);
+  border: 1px solid var(--cw-color-border); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-1) var(--cw-space-2); font-size: var(--cw-font-size-xs); cursor: pointer;
+}
+.tut-replay { display: flex; gap: var(--cw-space-3); }
+.pvp-locked {
+  margin: var(--cw-space-5) auto 0; max-width: 720px; padding: var(--cw-space-3);
+  border: 1px dashed var(--cw-color-state-warning); border-radius: var(--cw-radius-md);
+  color: var(--cw-color-state-warning); font-size: var(--cw-font-size-sm);
+}
+.pvp-locked a { color: var(--cw-color-accent); margin-left: var(--cw-space-2); }
+.cfg-form .copy:disabled { opacity: 0.5; cursor: not-allowed; }
 .class-grid { display: flex; gap: var(--cw-space-3); justify-content: center; margin: var(--cw-space-5) 0; }
 .class-card {
   background: var(--cw-color-bg-surface); border: 2px solid var(--cw-color-border); border-radius: var(--cw-radius-lg);

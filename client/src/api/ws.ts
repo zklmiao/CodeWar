@@ -19,6 +19,7 @@ export interface JoinOptions {
   strategy?: string; // uniform | climb；空 = climb
   mode?: string; // 09 号票：空/pvp = 现行 PvP；pve = 单人练习（人类 p1 + 服务端 Bot p2）
   bot?: string; // PvE 难度 easy | normal | hard；空 = normal
+  level?: string; // 10 号票：教程关号 "1".."4"（仅 mode=tutorial 生效）
 }
 
 export class MatchSocket {
@@ -52,6 +53,8 @@ export class MatchSocket {
         // 09 号票：模式与 Bot 难度同走 join 契约（服务端首个 join 锁定）
         mode: this.joinOpts.mode ?? "",
         bot: this.joinOpts.bot ?? "",
+        // 10 号票：教程关号（服务端校验解锁进度与登录态）
+        level: this.joinOpts.level ?? "",
       }),
     };
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));

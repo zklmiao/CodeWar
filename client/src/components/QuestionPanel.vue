@@ -11,6 +11,12 @@ import CodeEditor from "./CodeEditor.vue";
 const store = useMatchStore();
 const classesStore = useClassesStore();
 
+// 10 号票：教程只展示本关相关行动槽（未传 = 四槽全开，PvP/PvE 行为不变）。
+const props = defineProps<{ slots?: string[] }>();
+function show(action: string): boolean {
+  return !props.slots || props.slots.includes(action);
+}
+
 // 各槽独立编辑器内容：新题就绪时以 starter code 初始化
 const codes = ref({ attack: "", move: "", defend: "", skill: "" });
 watch(
@@ -127,7 +133,7 @@ function submitSkill() {
       </div>
 
       <!-- 攻击槽：双方同题竞速 -->
-      <section class="slot">
+      <section v-if="show('attack')" class="slot">
         <header><b>⚔ 攻击</b><small>镜像题 · 双方同题竞速，越快伤害越高</small></header>
         <pre v-if="store.panel?.attack" class="statement">{{ store.panel.attack.statement }}</pre>
         <code v-if="store.panel?.attack" class="signature">{{ store.panel.attack.signature }}</code>
@@ -146,7 +152,7 @@ function submitSkill() {
       </section>
 
       <!-- 移动槽：私有题 + 网格点选目标格 -->
-      <section class="slot">
+      <section v-if="show('move')" class="slot">
         <header><b>🏃 移动</b><small>私有题 · 解出后移动到所选格子（直线正交 1-2 格）</small></header>
         <pre v-if="store.panel?.move" class="statement">{{ store.panel.move.statement }}</pre>
         <code v-if="store.panel?.move" class="signature">{{ store.panel.move.signature }}</code>
@@ -163,7 +169,7 @@ function submitSkill() {
       </section>
 
       <!-- 技能槽：私有题 + 冷却灰置（06 号票） -->
-      <section v-if="hasSkillSlot" class="slot skill" :class="{ cooldown: skillCd > 0 }">
+      <section v-if="show('skill') && hasSkillSlot" class="slot skill" :class="{ cooldown: skillCd > 0 }">
         <header>
           <b>✨ 技能</b>
           <small>{{ mySkill?.name ?? "已装备" }} · {{ skillCd > 0 ? `冷却中（还剩 ${skillCd} 回合）` : "就绪" }}</small>
@@ -185,7 +191,7 @@ function submitSkill() {
       </section>
 
       <!-- 防御槽：私有题 -->
-      <section class="slot">
+      <section v-if="show('defend')" class="slot">
         <header><b>🛡 防御</b><small>私有题 · 解出后本回合减伤 60%</small></header>
         <pre v-if="store.panel?.defend" class="statement">{{ store.panel.defend.statement }}</pre>
         <code v-if="store.panel?.defend" class="signature">{{ store.panel.defend.signature }}</code>
