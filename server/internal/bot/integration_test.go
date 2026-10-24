@@ -247,6 +247,13 @@ func newMatchHarnessWithJudge(t *testing.T, seed string, d Difficulty, judge mat
 // 等确定性边界用；生产路径仍由 newMatchHarness 覆盖）。
 func newConfiguredHarness(t *testing.T, seed, p1Class, p1Skill, p2Class, p2Skill string, params Params) *matchHarness {
 	t.Helper()
+	return newConfiguredHarnessWithJudge(t, seed, p1Class, p1Skill, p2Class, p2Skill, params, nil)
+}
+
+// newConfiguredHarnessWithJudge：同上，但可注入判题器（16 号票回归需要
+// "starter 也通过"的 passAllJudge，以复现 Bot 预测与引擎结果的偏差）。
+func newConfiguredHarnessWithJudge(t *testing.T, seed, p1Class, p1Skill, p2Class, p2Skill string, params Params, judge match.JudgePort) *matchHarness {
+	t.Helper()
 	clk := newManualClock()
 	factory := question.NewFactory(question.Config{
 		MaxDifficulty: question.L3,
@@ -254,8 +261,11 @@ func newConfiguredHarness(t *testing.T, seed, p1Class, p1Skill, p2Class, p2Skill
 		MatchSeed:     seed,
 	})
 	factory.RegisterAll(templates.All()...)
+	if judge == nil {
+		judge = newKeyJudge(factory)
+	}
 	h := &matchHarness{clk: clk, factory: factory}
-	h.eng = match.NewEngineWithSetup(clk, factory, newKeyJudge(factory), h.broadcast, match.Setup{
+	h.eng = match.NewEngineWithSetup(clk, factory, judge, h.broadcast, match.Setup{
 		P1Class: p1Class, P1Skill: p1Skill,
 		P2Class: p2Class, P2Skill: p2Skill,
 		RiskTier: 3,
@@ -644,6 +654,35 @@ func TestSkillCooldownPreventsRepeatedSkillSubmissions(t *testing.T) {
 	}
 	if h.locked != 0 {
 		t.Fatalf("Bot 出现 %d 次 locked 判定", h.locked)
+	}
+}
+
+// 16 号票回归：冷却登记必须跟随引擎的判题结果，而不是 Bot 自己的 Correct 预测。
+// passAllJudge 会让 starter 也通过：Accuracy=0 → 每回合都提交 starter，但引擎
+// 仍进入技能冷却。删掉 OnEvent 的 SubmissionJudged 分支（或改回按 d.Correct
+// 登记），本测试立刻出现 skill-cooldown 拒绝，并因回合无人行动而失败。
+func TestSkillCooldownFollowsEngineJudgement(t *testing.T) {
+	h := newConfiguredHarnessWithJudge(t, "skill-cd-passall", "ranger", "", "ranger", "pierce",
+		Params{MinSolveMs: 0, MaxSolveMs: 0, Accuracy: 0, Weights: Weights{Skill: 100}}, passAllJudge{})
+	h.play(20 * time.Second)
+
+	if h.ended == nil {
+		t.Fatalf("整局未终局（events=%d rejected=%d）", len(h.events), h.rejected)
+	}
+	for _, env := range h.events {
+		if r := env.GetSubmissionRejected(); r != nil && r.GetReason() == "skill-cooldown" {
+			t.Fatalf("Bot 在冷却中重复提交技能（预测与引擎结果脱节）：%+v", r)
+		}
+	}
+	skills := 0
+	for _, env := range h.events {
+		j := env.GetSubmissionJudged()
+		if j != nil && j.GetPlayer() == match.P2 && j.GetPassed() && j.GetAction() == match.ActionSkill {
+			skills++
+		}
+	}
+	if skills == 0 {
+		t.Fatal("场景无效：Bot 从未成功释放技能")
 	}
 }
 
