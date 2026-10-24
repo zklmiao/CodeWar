@@ -8,9 +8,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `go test -race -count=1 ./internal/hub/` 全绿（captureLogger 换线程安全 sink，测试断言语义零变化）
-- [ ] `go test -race -count=1 ./...`（server）全绿——race 门控在本地全量可复现
-- [ ] `.github/workflows/ci.yml` 的 go test 步骤带 `-race`
-- [ ] 既有测试除 sink 载体外零改动（断言、期望值、用例集不变；diff 审查可证）
+- [x] `go test -race -count=1 ./internal/hub/` 全绿（captureLogger 换线程安全 sink，测试断言语义零变化）
+- [x] `go test -race -count=1 ./...`（server）全绿——race 门控在本地全量可复现
+- [x] `.github/workflows/ci.yml` 的 go test 步骤带 `-race`
+- [x] 既有测试除 sink 载体外零改动（断言、期望值、用例集不变；diff 审查可证）
