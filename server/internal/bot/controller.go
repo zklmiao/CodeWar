@@ -61,6 +61,9 @@ type Config struct {
 	// RNG 非空时直接使用（测试固定随机流）；否则由 Seed 派生。
 	RNG    *rand.Rand
 	Logger *slog.Logger
+	// Script 非空时以确定性脚本替代难度分布采样（10 号票教程管线）。
+	// 脚本仍走同一条 act → Submit 路径：引擎对 Bot 零感知。
+	Script *Script
 }
 
 // Controller：模拟 Bot 的回合驱动器。
@@ -77,6 +80,7 @@ type Controller struct {
 	class    classes.Class
 	skill    classes.Skill
 	hasSkill bool
+	script   *Script // 非空 = 教程脚本（确定性策略）
 	logger   *slog.Logger
 
 	mu              sync.Mutex
@@ -144,6 +148,11 @@ func New(cfg Config) (*Controller, error) {
 	if cfg.Clock == nil {
 		cfg.Clock = RealClock{}
 	}
+	if cfg.Script != nil {
+		if err := cfg.Script.Validate(); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -160,6 +169,7 @@ func New(cfg Config) (*Controller, error) {
 		class:    cls,
 		skill:    sk,
 		hasSkill: hasSkill,
+		script:   cfg.Script,
 		logger:   cfg.Logger,
 	}, nil
 }
@@ -192,7 +202,18 @@ func (c *Controller) OnEvent(env *matchpb.Envelope) {
 	}
 	c.round = round
 	skillReady := c.hasSkill && round >= c.skillReadyFrom
-	d := Decide(c.params, c.rng, skillReady)
+	var d Decision
+	if c.script != nil {
+		// 教程脚本：确定性行动（不消耗随机流，也不受难度参数影响）。
+		step, ok := c.script.decision(round)
+		if !ok {
+			c.mu.Unlock()
+			return
+		}
+		d = step
+	} else {
+		d = Decide(c.params, c.rng, skillReady)
+	}
 	c.mu.Unlock()
 
 	t := c.clock.AfterFunc(time.Duration(d.SolveMs)*time.Millisecond, func() {
@@ -255,7 +276,9 @@ func (c *Controller) act(round int, d Decision) {
 	switch d.Action {
 	case match.ActionAttack:
 		q = c.cfg.Questions.AttackQuestion(round)
-		if t, ok := PlanTargeting(me, opp, c.class.AttackShape, c.class.AttackRange); ok {
+		if d.Target != nil {
+			c.cfg.Engine.SetTargeting(c.player, *d.Target)
+		} else if t, ok := PlanTargeting(me, opp, c.class.AttackShape, c.class.AttackRange); ok {
 			c.cfg.Engine.SetTargeting(c.player, t)
 		}
 	case match.ActionMove:
@@ -275,7 +298,9 @@ func (c *Controller) act(round int, d Decision) {
 		q = c.cfg.Questions.DefendQuestion(round, c.player)
 	case match.ActionSkill:
 		q = c.cfg.Questions.SkillQuestion(round, c.player)
-		if t, ok := PlanTargeting(me, opp, c.skill.Shape, c.skill.RangeMax); ok {
+		if d.Target != nil {
+			c.cfg.Engine.SetTargeting(c.player, *d.Target)
+		} else if t, ok := PlanTargeting(me, opp, c.skill.Shape, c.skill.RangeMax); ok {
 			c.cfg.Engine.SetTargeting(c.player, t)
 		}
 	default:

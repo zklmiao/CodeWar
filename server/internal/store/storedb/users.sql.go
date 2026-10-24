@@ -104,9 +104,18 @@ SELECT id, username, username_lower, password_hash, elo, created_at
 FROM users WHERE username_lower = $1
 `
 
-func (q *Queries) GetUserByLower(ctx context.Context, usernameLower string) (User, error) {
+type GetUserByLowerRow struct {
+	ID            uuid.UUID `json:"id"`
+	Username      string    `json:"username"`
+	UsernameLower string    `json:"username_lower"`
+	PasswordHash  string    `json:"password_hash"`
+	Elo           int32     `json:"elo"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+func (q *Queries) GetUserByLower(ctx context.Context, usernameLower string) (GetUserByLowerRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByLower, usernameLower)
-	var i User
+	var i GetUserByLowerRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,

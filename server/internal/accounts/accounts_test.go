@@ -15,6 +15,7 @@ import (
 	"codewar/server/internal/testdb"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // 无库模式：所有账号接口 503，匿名热座不受影响（本测试无需 DB，常开）。
@@ -30,6 +31,7 @@ func TestNilStoreUnavailable(t *testing.T) {
 		{"POST", "/api/login", `{"username":"a","password":"b"}`},
 		{"GET", "/api/me", ""},
 		{"GET", "/api/profile", ""},
+		{"GET", "/api/tutorial", ""},
 		{"POST", "/api/logout", ""},
 	}
 	for _, c := range cases {
@@ -92,6 +94,42 @@ func TestHTTPFlow(t *testing.T) {
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &sess); err != nil || sess.Token == "" || sess.Elo != 1000 {
 		t.Fatalf("注册返回异常：%s err=%v", rec.Body.String(), err)
+	}
+
+	// 10 号票：GET /api/tutorial 是唯一读进度入口（无写入端点）。
+	rec = call("GET", "/api/tutorial", "", sess.Token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("教程进度应 200，实际 %d：%s", rec.Code, rec.Body.String())
+	}
+	var tut struct {
+		Level       int32 `json:"level"`
+		Completed   bool  `json:"completed"`
+		TotalLevels int32 `json:"total_levels"`
+		NextLevel   int32 `json:"next_level"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &tut); err != nil {
+		t.Fatal(err)
+	}
+	if tut.Level != 0 || tut.Completed || tut.TotalLevels != 4 || tut.NextLevel != 1 {
+		t.Fatalf("新账号教程进度不符：%+v", tut)
+	}
+	uid, err := uuid.Parse(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AdvanceTutorial(ctx, uid, 2, 4); err != nil {
+		t.Fatal(err)
+	}
+	rec = call("GET", "/api/tutorial", "", sess.Token)
+	if err := json.Unmarshal(rec.Body.Bytes(), &tut); err != nil {
+		t.Fatal(err)
+	}
+	if tut.Level != 2 || tut.Completed || tut.NextLevel != 3 {
+		t.Fatalf("推进后只读接口应反映进度：%+v", tut)
+	}
+	// 未登录：401（不泄露进度）。
+	if rec := call("GET", "/api/tutorial", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("未登录应 401，实际 %d", rec.Code)
 	}
 
 	// 重名 409

@@ -41,10 +41,12 @@ type Session struct {
 }
 
 type User struct {
-	ID            uuid.UUID `json:"id"`
-	Username      string    `json:"username"`
-	UsernameLower string    `json:"username_lower"`
-	PasswordHash  string    `json:"password_hash"`
-	Elo           int32     `json:"elo"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID                  uuid.UUID    `json:"id"`
+	Username            string       `json:"username"`
+	UsernameLower       string       `json:"username_lower"`
+	PasswordHash        string       `json:"password_hash"`
+	Elo                 int32        `json:"elo"`
+	CreatedAt           time.Time    `json:"created_at"`
+	TutorialLevel       int32        `json:"tutorial_level"`
+	TutorialCompletedAt sql.NullTime `json:"tutorial_completed_at"`
 }

@@ -58,6 +58,15 @@ export interface Profile {
   recent: RecentItem[];
 }
 
+// 10 号票：教程进度（只读——服务端目标判定器是唯一写入方）。
+export interface TutorialProgress {
+  level: number; // 已完成的最高关（0 = 未开始）
+  completed: boolean;
+  completed_at: string | null;
+  total_levels: number;
+  next_level: number; // 0 = 已全部完成
+}
+
 export const apiRegister = (username: string, password: string): Promise<Session> =>
   req<Session>("/api/register", { method: "POST", body: JSON.stringify({ username, password }) }, "");
 
@@ -67,5 +76,7 @@ export const apiLogin = (username: string, password: string): Promise<Session> =
 export const apiMe = (): Promise<Me> => req<Me>("/api/me");
 
 export const apiProfile = (): Promise<Profile> => req<Profile>("/api/profile");
+
+export const apiTutorial = (): Promise<TutorialProgress> => req<TutorialProgress>("/api/tutorial");
 
 export const apiLogout = (): Promise<void> => req<void>("/api/logout", { method: "POST" });

@@ -7,7 +7,8 @@ import {
 
 export interface SocketHandlers {
   onMessage: (data: unknown) => void;
-  onClose: () => void;
+  // reason：服务端以 close frame 返回的拒绝原因（空 = 普通断线，可自动重连）。
+  onClose: (reason: string) => void;
 }
 
 export interface JoinOptions {
@@ -19,6 +20,7 @@ export interface JoinOptions {
   strategy?: string; // uniform | climb；空 = climb
   mode?: string; // 09 号票：空/pvp = 现行 PvP；pve = 单人练习（人类 p1 + 服务端 Bot p2）
   bot?: string; // PvE 难度 easy | normal | hard；空 = normal
+  level?: string; // 10 号票：教程关号 "1".."4"（仅 mode=tutorial 生效）
 }
 
 export class MatchSocket {
@@ -35,7 +37,7 @@ export class MatchSocket {
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws.onopen = () => this.sendJoin();
     this.ws.onmessage = (m) => this.handlers?.onMessage(JSON.parse(m.data as string));
-    this.ws.onclose = () => this.handlers?.onClose();
+    this.ws.onclose = (e) => this.handlers?.onClose(e.reason ?? "");
   }
 
   private sendJoin(): void {
@@ -52,6 +54,8 @@ export class MatchSocket {
         // 09 号票：模式与 Bot 难度同走 join 契约（服务端首个 join 锁定）
         mode: this.joinOpts.mode ?? "",
         bot: this.joinOpts.bot ?? "",
+        // 10 号票：教程关号（服务端校验解锁进度与登录态）
+        level: this.joinOpts.level ?? "",
       }),
     };
     this.ws!.send(JSON.stringify(ClientMessage.toJSON(msg)));

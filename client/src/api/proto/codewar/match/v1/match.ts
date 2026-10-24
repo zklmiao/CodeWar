@@ -58,7 +58,47 @@ export function matchPhaseToJSON(object: MatchPhase): string {
 export interface ServerMessage {
   /** 接入/重连时先发快照，之后逐事件下发 */
   snapshot?: Snapshot | undefined;
-  event?: Envelope | undefined;
+  event?:
+    | Envelope
+    | undefined;
+  /**
+   * 新手教程状态（10 号票）：目标清单 / 关卡元数据 / 服务端判定的完成态。
+   * 与事件流分离——它不是对局事件（无 seq），可在任意时刻下发且不参与断号检测。
+   */
+  tutorial?: TutorialState | undefined;
+}
+
+/**
+ * 新手教程状态（10 号票）。进度推进只发生在服务端：客户端没有任何
+ * advance/上报接口，只渲染本消息并据 completed 显示通关完成页。
+ */
+export interface TutorialState {
+  /** 当前关 1..4 */
+  level: number;
+  /** 关卡标题 */
+  title: string;
+  /** 本关机制小结（完成页展示） */
+  mechanic: string;
+  /** 目标清单（checkbox） */
+  goals: TutorialGoal[];
+  /** 本关展示的行动槽：attack|move|defend|skill */
+  slots: string[];
+  /** 本关目标已达成（服务端判定） */
+  completed: boolean;
+  /** 下一关；0 = 已无下一关 */
+  nextLevel: number;
+  /** 本次完成的是最后一关 */
+  allCompleted: boolean;
+  /** 本关难度上限档（L4 教学用；其余关固定 L3） */
+  cap: number;
+  /** 该档的普攻伤害系数（服务端权威，避免客户端复制数值） */
+  capCoeff: number;
+}
+
+export interface TutorialGoal {
+  id: string;
+  label: string;
+  done: boolean;
 }
 
 export interface Snapshot {
@@ -108,6 +148,8 @@ export interface MatchConfig {
    * 客户端据 PlayerView.bot + 本字段显示"机器人（难度）"。
    */
   bot: string;
+  /** 教程关号（10 号票，仅 mode=tutorial 时非零）：1..4。 */
+  tutorialLevel: number;
 }
 
 export interface PlayerView {
@@ -363,6 +405,11 @@ export interface JoinRequest {
   mode: string;
   /** bot：PvE 难度 easy | normal | hard；空 = normal，非法值回退 normal 并 WARN。 */
   bot: string;
+  /**
+   * level：教程关号（10 号票，仅 mode=tutorial 生效）："1".."4"；空/非法回退 1。
+   * 与 cap 一样由首个 join 锁定；服务端还会校验该用户是否已解锁此关。
+   */
+  level: string;
 }
 
 export interface SubmitRequest {
@@ -396,7 +443,7 @@ export interface Targeting {
 }
 
 function createBaseServerMessage(): ServerMessage {
-  return { snapshot: undefined, event: undefined };
+  return { snapshot: undefined, event: undefined, tutorial: undefined };
 }
 
 export const ServerMessage: MessageFns<ServerMessage> = {
@@ -406,6 +453,9 @@ export const ServerMessage: MessageFns<ServerMessage> = {
     }
     if (message.event !== undefined) {
       Envelope.encode(message.event, writer.uint32(18).fork()).join();
+    }
+    if (message.tutorial !== undefined) {
+      TutorialState.encode(message.tutorial, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -439,6 +489,14 @@ export const ServerMessage: MessageFns<ServerMessage> = {
             message.event = Envelope.decode(reader, reader.uint32());
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.tutorial = TutorialState.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -455,6 +513,7 @@ export const ServerMessage: MessageFns<ServerMessage> = {
     return {
       snapshot: isSet(object.snapshot) ? Snapshot.fromJSON(object.snapshot) : undefined,
       event: isSet(object.event) ? Envelope.fromJSON(object.event) : undefined,
+      tutorial: isSet(object.tutorial) ? TutorialState.fromJSON(object.tutorial) : undefined,
     };
   },
 
@@ -465,6 +524,9 @@ export const ServerMessage: MessageFns<ServerMessage> = {
     }
     if (message.event !== undefined) {
       obj.event = Envelope.toJSON(message.event);
+    }
+    if (message.tutorial !== undefined) {
+      obj.tutorial = TutorialState.toJSON(message.tutorial);
     }
     return obj;
   },
@@ -480,6 +542,346 @@ export const ServerMessage: MessageFns<ServerMessage> = {
     message.event = (object.event !== undefined && object.event !== null)
       ? Envelope.fromPartial(object.event)
       : undefined;
+    message.tutorial = (object.tutorial !== undefined && object.tutorial !== null)
+      ? TutorialState.fromPartial(object.tutorial)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseTutorialState(): TutorialState {
+  return {
+    level: 0,
+    title: "",
+    mechanic: "",
+    goals: [],
+    slots: [],
+    completed: false,
+    nextLevel: 0,
+    allCompleted: false,
+    cap: 0,
+    capCoeff: 0,
+  };
+}
+
+export const TutorialState: MessageFns<TutorialState> = {
+  encode(message: TutorialState, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.level !== 0) {
+      writer.uint32(8).uint32(message.level);
+    }
+    if (message.title !== "") {
+      writer.uint32(18).string(message.title);
+    }
+    if (message.mechanic !== "") {
+      writer.uint32(26).string(message.mechanic);
+    }
+    for (const v of message.goals) {
+      TutorialGoal.encode(v!, writer.uint32(34).fork()).join();
+    }
+    for (const v of message.slots) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.completed !== false) {
+      writer.uint32(48).bool(message.completed);
+    }
+    if (message.nextLevel !== 0) {
+      writer.uint32(56).uint32(message.nextLevel);
+    }
+    if (message.allCompleted !== false) {
+      writer.uint32(64).bool(message.allCompleted);
+    }
+    if (message.cap !== 0) {
+      writer.uint32(72).uint32(message.cap);
+    }
+    if (message.capCoeff !== 0) {
+      writer.uint32(81).double(message.capCoeff);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TutorialState {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTutorialState();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.level = reader.uint32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.title = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.mechanic = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.goals.push(TutorialGoal.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.slots.push(reader.string());
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.completed = reader.bool();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.nextLevel = reader.uint32();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.allCompleted = reader.bool();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.cap = reader.uint32();
+            continue;
+          }
+          case 10: {
+            if (tag !== 81) {
+              break;
+            }
+
+            message.capCoeff = reader.double();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TutorialState {
+    return {
+      level: isSet(object.level) ? globalThis.Number(object.level) : 0,
+      title: isSet(object.title) ? globalThis.String(object.title) : "",
+      mechanic: isSet(object.mechanic) ? globalThis.String(object.mechanic) : "",
+      goals: globalThis.Array.isArray(object?.goals) ? object.goals.map((e: any) => TutorialGoal.fromJSON(e)) : [],
+      slots: globalThis.Array.isArray(object?.slots) ? object.slots.map((e: any) => globalThis.String(e)) : [],
+      completed: isSet(object.completed) ? globalThis.Boolean(object.completed) : false,
+      nextLevel: isSet(object.nextLevel)
+        ? globalThis.Number(object.nextLevel)
+        : isSet(object.next_level)
+        ? globalThis.Number(object.next_level)
+        : 0,
+      allCompleted: isSet(object.allCompleted)
+        ? globalThis.Boolean(object.allCompleted)
+        : isSet(object.all_completed)
+        ? globalThis.Boolean(object.all_completed)
+        : false,
+      cap: isSet(object.cap) ? globalThis.Number(object.cap) : 0,
+      capCoeff: isSet(object.capCoeff)
+        ? globalThis.Number(object.capCoeff)
+        : isSet(object.cap_coeff)
+        ? globalThis.Number(object.cap_coeff)
+        : 0,
+    };
+  },
+
+  toJSON(message: TutorialState): unknown {
+    const obj: any = {};
+    if (message.level !== 0) {
+      obj.level = Math.round(message.level);
+    }
+    if (message.title !== "") {
+      obj.title = message.title;
+    }
+    if (message.mechanic !== "") {
+      obj.mechanic = message.mechanic;
+    }
+    if (message.goals?.length) {
+      obj.goals = message.goals.map((e) => TutorialGoal.toJSON(e));
+    }
+    if (message.slots?.length) {
+      obj.slots = message.slots;
+    }
+    if (message.completed !== false) {
+      obj.completed = message.completed;
+    }
+    if (message.nextLevel !== 0) {
+      obj.nextLevel = Math.round(message.nextLevel);
+    }
+    if (message.allCompleted !== false) {
+      obj.allCompleted = message.allCompleted;
+    }
+    if (message.cap !== 0) {
+      obj.cap = Math.round(message.cap);
+    }
+    if (message.capCoeff !== 0) {
+      obj.capCoeff = message.capCoeff;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TutorialState>, I>>(base?: I): TutorialState {
+    return TutorialState.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TutorialState>, I>>(object: I): TutorialState {
+    const message = createBaseTutorialState();
+    message.level = object.level ?? 0;
+    message.title = object.title ?? "";
+    message.mechanic = object.mechanic ?? "";
+    message.goals = object.goals?.map((e) => TutorialGoal.fromPartial(e)) || [];
+    message.slots = object.slots?.map((e) => e) || [];
+    message.completed = object.completed ?? false;
+    message.nextLevel = object.nextLevel ?? 0;
+    message.allCompleted = object.allCompleted ?? false;
+    message.cap = object.cap ?? 0;
+    message.capCoeff = object.capCoeff ?? 0;
+    return message;
+  },
+};
+
+function createBaseTutorialGoal(): TutorialGoal {
+  return { id: "", label: "", done: false };
+}
+
+export const TutorialGoal: MessageFns<TutorialGoal> = {
+  encode(message: TutorialGoal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.label !== "") {
+      writer.uint32(18).string(message.label);
+    }
+    if (message.done !== false) {
+      writer.uint32(24).bool(message.done);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TutorialGoal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTutorialGoal();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.label = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.done = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TutorialGoal {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      label: isSet(object.label) ? globalThis.String(object.label) : "",
+      done: isSet(object.done) ? globalThis.Boolean(object.done) : false,
+    };
+  },
+
+  toJSON(message: TutorialGoal): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.label !== "") {
+      obj.label = message.label;
+    }
+    if (message.done !== false) {
+      obj.done = message.done;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TutorialGoal>, I>>(base?: I): TutorialGoal {
+    return TutorialGoal.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TutorialGoal>, I>>(object: I): TutorialGoal {
+    const message = createBaseTutorialGoal();
+    message.id = object.id ?? "";
+    message.label = object.label ?? "";
+    message.done = object.done ?? false;
     return message;
   },
 };
@@ -708,7 +1110,7 @@ export const Snapshot: MessageFns<Snapshot> = {
 };
 
 function createBaseMatchConfig(): MatchConfig {
-  return { topic: "", cap: 0, strategy: "", mode: "", bot: "" };
+  return { topic: "", cap: 0, strategy: "", mode: "", bot: "", tutorialLevel: 0 };
 }
 
 export const MatchConfig: MessageFns<MatchConfig> = {
@@ -727,6 +1129,9 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     }
     if (message.bot !== "") {
       writer.uint32(42).string(message.bot);
+    }
+    if (message.tutorialLevel !== 0) {
+      writer.uint32(48).uint32(message.tutorialLevel);
     }
     return writer;
   },
@@ -784,6 +1189,14 @@ export const MatchConfig: MessageFns<MatchConfig> = {
             message.bot = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.tutorialLevel = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -803,6 +1216,11 @@ export const MatchConfig: MessageFns<MatchConfig> = {
       strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
       mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
       bot: isSet(object.bot) ? globalThis.String(object.bot) : "",
+      tutorialLevel: isSet(object.tutorialLevel)
+        ? globalThis.Number(object.tutorialLevel)
+        : isSet(object.tutorial_level)
+        ? globalThis.Number(object.tutorial_level)
+        : 0,
     };
   },
 
@@ -823,6 +1241,9 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     if (message.bot !== "") {
       obj.bot = message.bot;
     }
+    if (message.tutorialLevel !== 0) {
+      obj.tutorialLevel = Math.round(message.tutorialLevel);
+    }
     return obj;
   },
 
@@ -836,6 +1257,7 @@ export const MatchConfig: MessageFns<MatchConfig> = {
     message.strategy = object.strategy ?? "";
     message.mode = object.mode ?? "";
     message.bot = object.bot ?? "";
+    message.tutorialLevel = object.tutorialLevel ?? 0;
     return message;
   },
 };
@@ -2995,7 +3417,18 @@ export const SetTargeting: MessageFns<SetTargeting> = {
 };
 
 function createBaseJoinRequest(): JoinRequest {
-  return { player: "", token: "", class: "", skill: "", topic: "", cap: "", strategy: "", mode: "", bot: "" };
+  return {
+    player: "",
+    token: "",
+    class: "",
+    skill: "",
+    topic: "",
+    cap: "",
+    strategy: "",
+    mode: "",
+    bot: "",
+    level: "",
+  };
 }
 
 export const JoinRequest: MessageFns<JoinRequest> = {
@@ -3026,6 +3459,9 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     }
     if (message.bot !== "") {
       writer.uint32(74).string(message.bot);
+    }
+    if (message.level !== "") {
+      writer.uint32(82).string(message.level);
     }
     return writer;
   },
@@ -3115,6 +3551,14 @@ export const JoinRequest: MessageFns<JoinRequest> = {
             message.bot = reader.string();
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.level = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3138,6 +3582,7 @@ export const JoinRequest: MessageFns<JoinRequest> = {
       strategy: isSet(object.strategy) ? globalThis.String(object.strategy) : "",
       mode: isSet(object.mode) ? globalThis.String(object.mode) : "",
       bot: isSet(object.bot) ? globalThis.String(object.bot) : "",
+      level: isSet(object.level) ? globalThis.String(object.level) : "",
     };
   },
 
@@ -3170,6 +3615,9 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     if (message.bot !== "") {
       obj.bot = message.bot;
     }
+    if (message.level !== "") {
+      obj.level = message.level;
+    }
     return obj;
   },
 
@@ -3187,6 +3635,7 @@ export const JoinRequest: MessageFns<JoinRequest> = {
     message.strategy = object.strategy ?? "";
     message.mode = object.mode ?? "";
     message.bot = object.bot ?? "";
+    message.level = object.level ?? "";
     return message;
   },
 };

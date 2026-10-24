@@ -22,7 +22,31 @@ message ServerMessage {
   oneof payload {
     Snapshot snapshot = 1; // 接入/重连时先发快照，之后逐事件下发
     Envelope event = 2;
+    // 新手教程状态（10 号票）：目标清单 / 关卡元数据 / 服务端判定的完成态。
+    // 与事件流分离——它不是对局事件（无 seq），可在任意时刻下发且不参与断号检测。
+    TutorialState tutorial = 3;
   }
+}
+
+// 新手教程状态（10 号票）。进度推进只发生在服务端：客户端没有任何
+// advance/上报接口，只渲染本消息并据 completed 显示通关完成页。
+message TutorialState {
+  uint32 level = 1;                // 当前关 1..4
+  string title = 2;                // 关卡标题
+  string mechanic = 3;             // 本关机制小结（完成页展示）
+  repeated TutorialGoal goals = 4; // 目标清单（checkbox）
+  repeated string slots = 5;       // 本关展示的行动槽：attack|move|defend|skill
+  bool completed = 6;              // 本关目标已达成（服务端判定）
+  uint32 next_level = 7;           // 下一关；0 = 已无下一关
+  bool all_completed = 8;          // 本次完成的是最后一关
+  uint32 cap = 9;                  // 本关难度上限档（L4 教学用；其余关固定 L3）
+  double cap_coeff = 10;           // 该档的普攻伤害系数（服务端权威，避免客户端复制数值）
+}
+
+message TutorialGoal {
+  string id = 1;
+  string label = 2;
+  bool done = 3;
 }
 
 message Snapshot {
@@ -59,6 +83,8 @@ message MatchConfig {
   // Bot 难度（09 号票，仅 mode=pve 时非空）：easy | normal | hard。
   // 客户端据 PlayerView.bot + 本字段显示"机器人（难度）"。
   string bot = 5;
+  // 教程关号（10 号票，仅 mode=tutorial 时非零）：1..4。
+  uint32 tutorial_level = 6;
 }
 
 message PlayerView {
@@ -260,6 +286,9 @@ message JoinRequest {
   string mode = 8;
   // bot：PvE 难度 easy | normal | hard；空 = normal，非法值回退 normal 并 WARN。
   string bot = 9;
+  // level：教程关号（10 号票，仅 mode=tutorial 生效）："1".."4"；空/非法回退 1。
+  // 与 cap 一样由首个 join 锁定；服务端还会校验该用户是否已解锁此关。
+  string level = 10;
 }
 
 message SubmitRequest {

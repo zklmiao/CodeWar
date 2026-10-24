@@ -20,6 +20,7 @@ import (
 	"codewar/server/internal/question"
 	"codewar/server/internal/question/templates"
 	"codewar/server/internal/store"
+	"codewar/server/internal/tutorial"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -80,6 +81,10 @@ type Hub struct {
 	botCtl *bot.Controller
 	// botClock：Bot 调度时钟的测试注入口（nil = 真实时钟）。
 	botClock bot.Clock
+	// 10 号票：教程目标判定器（仅 tutorial 局非空）。与 Bot 同一 observer 通道；
+	// tutDone 防止同一关达成后重复落库（DB 写失败会复位以便重试）。
+	tutCtl  *tutorial.Checker
+	tutDone bool
 	// started：当前引擎是否已开赛。废弃大厅回收用它判断，避免持 h.mu 时
 	// 调 Engine.Phase() 取引擎锁（broadcast 的锁序是 engine→h.mu，反向会死锁）。
 	started bool
@@ -89,6 +94,9 @@ type Hub struct {
 type accountStore interface {
 	Authenticate(ctx context.Context, token string) (store.User, error)
 	RecordMatch(ctx context.Context, res store.MatchResult) (store.EloDelta, store.EloDelta, error)
+	// 10 号票：教程进度（服务端唯一写入方）。
+	GetTutorialProgress(ctx context.Context, userID uuid.UUID) (store.TutorialProgress, error)
+	AdvanceTutorial(ctx context.Context, userID uuid.UUID, level, totalLevels int32) (store.TutorialProgress, error)
 }
 
 func New(judge match.JudgePort, logger *slog.Logger, st *store.Store) *Hub {
@@ -127,6 +135,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			h.botCtl.Stop()
 			h.botCtl = nil
 		}
+		h.tutCtl = nil
+		h.tutDone = false
 		h.engine.Stop()
 		h.engine = nil
 		h.seats = make(map[match.Player]store.User)
@@ -143,19 +153,21 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		mc = parseMatchConfig(jc, h.logger)
 	}
 	pve := mc.mode == modePvE
-	if pve {
-		// PvE 人类固定 p1（player 可省略）；p2 是 Bot 席位，不接受人类接入。
+	tutorialMode := mc.mode == modeTutorial
+	solo := pve || tutorialMode
+	if solo {
+		// 单人模式人类固定 p1（player 可省略）；p2 是 Bot 席位，不接受人类接入。
 		if player == "" {
 			player = match.P1
 		}
 		if player != match.P1 {
 			h.mu.Unlock()
-			h.reject(ws, "PvE 模式人类固定为 p1（p2 由机器人占位）")
+			h.reject(ws, "单人模式人类固定为 p1（p2 由机器人占位）")
 			return
 		}
 		if !firstJoin {
 			h.mu.Unlock()
-			h.reject(ws, "PvE 对局进行中，不接受第二名玩家")
+			h.reject(ws, "对局进行中，不接受第二名玩家")
 			return
 		}
 	}
@@ -164,8 +176,9 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		h.reject(ws, player+" 已有玩家接入（本票不支持重连，08 号票处理）")
 		return
 	}
-	// 06 号票：职业装备组合校验（盲选值 fail-closed；缺省/空 = legacy 锚点）
-	if classID != "" || skillID != "" {
+	// 06 号票：职业装备组合校验（盲选值 fail-closed；缺省/空 = legacy 锚点）。
+	// 10 号票：教程使用固定职业，join 携带的 class/skill 忽略，不做校验。
+	if !tutorialMode && (classID != "" || skillID != "") {
 		if err := classes.ValidateLoadout(classID, skillID); err != nil {
 			h.mu.Unlock()
 			h.reject(ws, "职业装备组合非法："+err.Error())
@@ -189,28 +202,89 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		}
 		h.seats[player] = u
 	}
+	// 10 号票：教程需要登录（进度只落服务端账号）；且只能进入已解锁的关。
+	if tutorialMode {
+		u, ok := h.seats[player]
+		if !ok {
+			h.mu.Unlock()
+			h.reject(ws, "新手教程需要登录（进度保存在账号上）")
+			return
+		}
+		prog, err := h.tutorialProgress(u.ID)
+		if err != nil {
+			h.mu.Unlock()
+			h.reject(ws, "教程进度读取失败，请稍后重试")
+			return
+		}
+		if !prog.Completed && int32(mc.level) > prog.Level+1 {
+			h.mu.Unlock()
+			h.reject(ws, fmt.Sprintf("教程第 %d 关尚未解锁（当前进度：已完成第 %d 关）", mc.level, prog.Level))
+			return
+		}
+	}
+	// 10 号票：已登录且未完成教程 → 拒绝 PvP 入口（spec 用户故事 6）。
+	// 08 号票的在线匹配入口复用本函数位置；匿名热座 URL 直连是实验室旁路
+	// （无账号即无进度可查），显式放行——不在此拦截，也不伪造教程状态。
+	if mc.mode == "" {
+		if u, ok := h.seats[player]; ok {
+			if err := h.pvpGate(u.ID); err != nil {
+				h.mu.Unlock()
+				h.reject(ws, err.Error())
+				return
+			}
+		}
+	}
 	if firstJoin {
 		// 05 号票：首个 join 锁定整场配置——题型过滤喂给 04 工厂（question.
 		// NewFactory(Config) 承接面零改动），难度上限档同时决定风险系数
 		// （引擎普攻伤害）与出题区间上限（同源同档）。每局新 MatchSeed。
 		// 09 号票：PvE 与 PvP 走完全相同的 Config 构造与 seed 派生（验收 4）。
+		// 10 号票：教程改走固定题包（同一条引擎构造路径，QuestionPort 换实现）。
 		mc.seed = question.NewMatchSeed()
-		questions := newQuestions(mc)
-		h.engine = match.NewEngineWithSetup(match.RealClock{}, questions, h.judge, h.broadcast,
-			match.Setup{RiskTier: mc.tier})
+		var questions match.QuestionPort
+		setup := match.Setup{RiskTier: mc.tier}
+		var level tutorial.Level
+		if tutorialMode {
+			var ok bool
+			level, ok = tutorial.LevelByN(mc.level)
+			if !ok {
+				h.mu.Unlock()
+				h.reject(ws, "未知教程关号")
+				return
+			}
+			bank, err := tutorial.NewBank(mc.level)
+			if err != nil {
+				h.mu.Unlock()
+				h.reject(ws, "教程题包初始化失败："+err.Error())
+				return
+			}
+			questions = bank
+			// 教程固定职业组合（不做盲选，数值可复现才好教学）。
+			setup = match.Setup{
+				P1Class: level.PlayerClass, P1Skill: level.PlayerSkill,
+				P2Class: level.BotClass, P2Skill: level.BotSkill,
+				RiskTier: mc.tier,
+			}
+		} else {
+			questions = newQuestions(mc)
+		}
+		h.engine = match.NewEngineWithSetup(match.RealClock{}, questions, h.judge, h.broadcast, setup)
 		h.started = false
-		if pve {
-			// Bot 职业按 matchSeed 确定性盲选（开局由快照揭示），技能同职业内随机。
+		if pve || tutorialMode {
+			// 09 号票：PvE Bot 职业按 matchSeed 确定性盲选；教程用固定职业。
 			botClassID, botSkillID := bot.Loadout(mc.seed)
+			if tutorialMode {
+				botClassID, botSkillID = level.BotClass, level.BotSkill
+			}
 			if err := h.engine.BindClass(match.P2, botClassID, botSkillID); err != nil {
 				h.engine.Stop()
 				h.engine = nil
 				h.started = false
 				h.mu.Unlock()
-				h.reject(ws, "PvE Bot 职业绑定失败："+err.Error())
+				h.reject(ws, "Bot 职业绑定失败："+err.Error())
 				return
 			}
-			ctl, err := bot.New(bot.Config{
+			botCfg := bot.Config{
 				Seed:       mc.seed,
 				Difficulty: bot.Difficulty(mc.botDifficulty),
 				ClassID:    botClassID,
@@ -220,39 +294,65 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 				Engine:     h.engine,
 				Clock:      h.botClock,
 				Logger:     h.logger,
-			})
+			}
+			if tutorialMode {
+				botCfg.Script = &level.Script
+			}
+			ctl, err := bot.New(botCfg)
 			if err != nil {
 				h.engine.Stop()
 				h.engine = nil
 				h.started = false
 				h.mu.Unlock()
-				h.reject(ws, "PvE Bot 初始化失败："+err.Error())
+				h.reject(ws, "Bot 初始化失败："+err.Error())
 				return
 			}
 			h.botCtl = ctl
+			if tutorialMode {
+				chk, err := tutorial.NewChecker(mc.level, mc.tier)
+				if err != nil {
+					h.botCtl.Stop()
+					h.botCtl = nil
+					h.engine.Stop()
+					h.engine = nil
+					h.started = false
+					h.mu.Unlock()
+					h.reject(ws, "教程判定器初始化失败："+err.Error())
+					return
+				}
+				h.tutCtl = chk
+				h.tutDone = false
+			}
 		}
 		h.cfg = mc
 		h.logger.Info("对局配置已锁定（首个 join）",
 			"topic", mc.topicDisplay(), "cap", mc.tier, "strategy", mc.strategy,
-			"mode", mc.mode, "bot", mc.botDifficulty)
+			"mode", mc.mode, "bot", mc.botDifficulty, "tutorial_level", mc.level)
 	} else if jc.anySet() {
 		// 05 裁决 1：后续 join 的配置参数忽略（本场已按首个 join 锁定）。
 		// 不拒连——第二窗口复制粘贴同一链接是常态路径，参数一致时无感。
 		h.logger.Warn("后续 join 的对局配置参数已忽略（本场按首个 join 锁定）",
 			"ignored_topic", jc.topic, "ignored_cap", jc.cap, "ignored_strategy", jc.strategy,
-			"ignored_mode", jc.mode, "ignored_bot", jc.bot)
+			"ignored_mode", jc.mode, "ignored_bot", jc.bot, "ignored_level", jc.level)
 	}
 	// 06 号票：职业绑定（仅 WAITING 可绑；join 请求已 fail-closed 校验过组合）。
 	// 第二名玩家 join 时引擎已存在，同样可绑——双方就位开赛前数值与初始 HP 冻结。
-	if classID != "" {
+	// 10 号票：教程使用固定职业，忽略 join 的 class/skill（不静默覆盖教学配置）。
+	if tutorialMode && (classID != "" || skillID != "") {
+		h.logger.Info("教程使用固定职业，join 的 class/skill 已忽略",
+			"class", classID, "skill", skillID, "tutorial_level", mc.level)
+	}
+	if !tutorialMode && classID != "" {
 		if err := h.engine.BindClass(player, classID, skillID); err != nil {
-			// 纵深防御：组合已在 join 时校验过，此分支理论上不可达。PvE 首 join
+			// 纵深防御：组合已在 join 时校验过，此分支理论上不可达。单人首 join
 			// 若走到这里必须整体回滚，否则会在没有人类席位的情况下留下 Bot 局。
-			if pve && firstJoin {
+			if solo && firstJoin {
 				if h.botCtl != nil {
 					h.botCtl.Stop()
 					h.botCtl = nil
 				}
+				h.tutCtl = nil
+				h.tutDone = false
 				h.engine.Stop()
 				h.engine = nil
 				h.seats = make(map[match.Player]store.User)
@@ -269,8 +369,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	eng := h.engine
 	// 开赛必须在释放 h.mu 之后：StartMatch 会同步 emit 事件 → broadcast 再次请求 h.mu，
 	// 持锁调用会自死锁（sync.Mutex 不可重入）。
-	// 09 号票：PvE 没有第二个人类窗口——Bot 已就位即开赛（人类接入仅一人）。
-	shouldStart := eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING && (pve || len(h.conns) == 2)
+	// 09 号票：单人模式没有第二个人类窗口——Bot 已就位即开赛（人类接入仅一人）。
+	shouldStart := eng.Phase() == matchpb.MatchPhase_MATCH_PHASE_WAITING && (solo || len(h.conns) == 2)
 	if shouldStart {
 		// 07 号票：本场 ID 与开赛时刻（结果落库与时长用）。
 		h.started = true
@@ -284,9 +384,15 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		go eng.Run() // 计时泵：服务端权威倒计时（ADR-0002）
 	}
 
-	h.logger.Info("玩家接入", "player", player, "match_started", shouldStart, "pve", pve)
+	h.logger.Info("玩家接入", "player", player, "match_started", shouldStart, "pve", pve,
+		"tutorial", tutorialMode, "tutorial_level", mc.level)
 	go h.writePump(c)
 	h.sendSnapshot(c, player)
+	// 10 号票：教程状态先于 readLoop 下发（目标清单/关卡元数据/槽位）。
+	// 未登录/未知关已在上面拒绝，这里只负责渲染数据。
+	if tutorialMode {
+		h.sendTutorialState(c)
+	}
 	h.readLoop(c)
 }
 
@@ -318,25 +424,32 @@ func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string
 		return "", "", "", "", joinConfig{}, fmt.Errorf("首条消息必须是 join")
 	}
 	p := match.Player(join.GetPlayer())
-	// 09 号票：PvE 人类固定 p1，player 参数可省略（Bot 占 p2）。
+	// 09/10 号票：单人模式人类固定 p1，player 参数可省略（Bot 占 p2）。
 	// PvP 契约不变：空 player 仍在 readJoin 阶段拒绝（与 01~07 的拒连路径一致）。
-	if p == "" && normalize(join.GetMode()) == modePvE {
-		p = match.P1
+	if p == "" {
+		if m := normalize(join.GetMode()); m == modePvE || m == modeTutorial {
+			p = match.P1
+		}
 	}
 	if p != match.P1 && p != match.P2 {
 		return "", "", "", "", joinConfig{}, fmt.Errorf("player 必须是 p1 或 p2")
 	}
 	// 05 号票：对局配置参数随 join 注入（页面 URL → 客户端 → join 契约）。
-	// 09 号票：mode/bot 走同一锁定路径。
+	// 09/10 号票：mode/bot/level 走同一锁定路径。
 	jc := joinConfig{
 		topic: join.GetTopic(), cap: join.GetCap(), strategy: join.GetStrategy(),
-		mode: join.GetMode(), bot: join.GetBot(),
+		mode: join.GetMode(), bot: join.GetBot(), level: join.GetLevel(),
 	}
 	return p, join.GetToken(), join.GetClass(), join.GetSkill(), jc, nil
 }
 
 func (h *Hub) reject(ws *websocket.Conn, msg string) {
 	h.logger.Warn("连接被拒", "reason", msg)
+	// 把原因经 WebSocket close frame 返回客户端（浏览器 onclose.reason），
+	// 否则被门禁/会话拒绝的用户只能看到"连接断开"并无限重连。
+	_ = ws.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, msg),
+		time.Now().Add(time.Second))
 	_ = ws.Close()
 }
 
@@ -401,13 +514,14 @@ func (h *Hub) removeConn(c *conn) {
 	// 席位绑定一并清除：同席位换身份重连不得沿用旧身份结算（fail-closed）。
 	delete(h.seats, c.player)
 
-	// 09 号票：PvE 单连接断开 = 对局作废（刷新重开）。Bot 与人一起清场，
+	// 09/10 号票：单人模式单连接断开 = 对局作废（刷新重开）。Bot 与人一起清场，
 	// 不保留"看似还在打、实际 Bot 已停"的僵尸局；通用重连归 08 号票。
 	var eng *match.Engine
 	var ctl *bot.Controller
-	if h.cfg.mode == modePvE {
+	if h.cfg.mode == modePvE || h.cfg.mode == modeTutorial {
 		eng, ctl = h.engine, h.botCtl
 		h.engine, h.botCtl = nil, nil
+		h.tutCtl, h.tutDone = nil, false
 		h.seats = make(map[match.Player]store.User)
 		h.cfg = matchConfig{}
 		h.started = false
@@ -443,9 +557,9 @@ func (h *Hub) sendSnapshot(c *conn, player match.Player) {
 		return
 	}
 	snap := eng.Snapshot(player)
-	// 09 号票：PvE 的 p2 是 Bot——在 hub 层标注（引擎对 Bot 零感知）。
+	// 09/10 号票：PvE/教程的 p2 是 Bot——在 hub 层标注（引擎对 Bot 零感知）。
 	// 开局后快照才会揭示其职业（引擎的盲选规则），此处只标记席位属性。
-	if cfg.mode == modePvE {
+	if cfg.mode == modePvE || cfg.mode == modeTutorial {
 		for _, pv := range snap.GetPlayers() {
 			if pv.GetId() == string(match.P2) {
 				isBot := true
@@ -454,11 +568,12 @@ func (h *Hub) sendSnapshot(c *conn, player match.Player) {
 		}
 	}
 	snap.MatchConfig = &matchpb.MatchConfig{
-		Topic:    cfg.topicKey,
-		Cap:      uint32(cfg.tier),
-		Strategy: cfg.strategy,
-		Mode:     cfg.mode,
-		Bot:      cfg.botDifficulty,
+		Topic:         cfg.topicKey,
+		Cap:           uint32(cfg.tier),
+		Strategy:      cfg.strategy,
+		Mode:          cfg.mode,
+		Bot:           cfg.botDifficulty,
+		TutorialLevel: uint32(cfg.level),
 	}
 	b, err := protojson.Marshal(&matchpb.ServerMessage{Payload: &matchpb.ServerMessage_Snapshot{
 		Snapshot: snap,
@@ -484,11 +599,12 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 		// MatchEnded 上发出（终局面板即时可见）。任一方匿名/落库失败时
 		// elo 字段为空，行为与 01 号票完全一致（降级不断连）。
 		h.settleEnded(me)
-		// 09 号票：PvE Bot 随终局停止（不残留下一个对局的定时提交）。
+		// 09/10 号票：Bot 随终局停止（不残留下一个对局的定时提交）。
 		if h.botCtl != nil {
 			h.botCtl.Stop()
 			h.botCtl = nil
 		}
+		h.tutCtl, h.tutDone = nil, false
 		// 对局结束即作废引擎：下一场对局由下一条 join 重新创建。
 		// 否则 ENDED 相位的引擎被永久复用，后续所有接入永远无法开赛——
 		// UI 承诺的"刷新两个窗口可再来一局"将落空（浏览器验收发现的 P0）。
@@ -509,6 +625,144 @@ func (h *Hub) broadcast(env *matchpb.Envelope) {
 	for _, c := range h.conns {
 		c.send(b)
 	}
+	// 10 号票：教程目标判定（与 Bot 同一 observer 通道；事件先下发，
+	// 状态消息后下发）。完成态要等进度真正落库后才发——见 finishTutorial。
+	if env.GetMatchEnded() == nil && h.tutCtl != nil {
+		st := h.tutCtl.Observe(env)
+		if st.Completed {
+			if !h.tutDone {
+				h.tutDone = true
+				user, ok := h.seats[match.P1]
+				level := h.cfg.level
+				go h.finishTutorial(user, ok, level)
+			}
+			// 落库完成前：目标全部点亮，但 completed 仍为 false。
+			st.Completed = false
+		}
+		h.sendTutorialStateLocked(st)
+	}
+}
+
+// sendTutorialState：接入时只发给当前连接（快照之后的第一条教程状态）。
+func (h *Hub) sendTutorialState(c *conn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.tutCtl == nil {
+		return
+	}
+	b, err := marshalTutorial(h.tutCtl.State())
+	if err != nil {
+		h.logger.Error("教程状态序列化失败", "err", err)
+		return
+	}
+	c.send(b)
+}
+
+// sendTutorialStateLocked：广播路径（调用方持 h.mu）——状态变化扇出到所有连接。
+func (h *Hub) sendTutorialStateLocked(st tutorial.State) {
+	b, err := marshalTutorial(st)
+	if err != nil {
+		h.logger.Error("教程状态序列化失败", "err", err)
+		return
+	}
+	for _, c := range h.conns {
+		c.send(b)
+	}
+}
+
+func marshalTutorial(st tutorial.State) ([]byte, error) {
+	goals := make([]*matchpb.TutorialGoal, len(st.Goals))
+	for i, g := range st.Goals {
+		goals[i] = &matchpb.TutorialGoal{Id: g.ID, Label: g.Label, Done: g.Done}
+	}
+	return protojson.Marshal(&matchpb.ServerMessage{
+		Payload: &matchpb.ServerMessage_Tutorial{Tutorial: &matchpb.TutorialState{
+			Level:        uint32(st.Level),
+			Title:        st.Title,
+			Mechanic:     st.Mechanic,
+			Goals:        goals,
+			Slots:        st.Slots,
+			Completed:    st.Completed,
+			NextLevel:    uint32(st.NextLevel),
+			AllCompleted: st.AllCompleted,
+			Cap:          uint32(st.Cap),
+			CapCoeff:     st.CapCoeff,
+		}},
+	})
+}
+
+// finishTutorial：目标达成后的唯一写入方——先落库，成功后才下发完成态并
+// 作废本场（客户端没有任何 advance 入口，防自报造假）。
+// 调用方已在广播路径把 tutDone 置位；落库失败会复位以便后续事件重试。
+func (h *Hub) finishTutorial(user store.User, hasUser bool, level int) {
+	if h.st == nil || !hasUser || user.ID == uuid.Nil {
+		h.logger.Error("教程达成但缺少登录席位/存储，无法落库", "level", level)
+		h.mu.Lock()
+		if h.tutCtl != nil {
+			h.tutDone = false
+		}
+		h.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settleTimeout)
+	defer cancel()
+	if _, err := h.st.AdvanceTutorial(ctx, user.ID, int32(level), int32(tutorial.MaxLevel)); err != nil {
+		h.logger.Error("教程进度落库失败（不标记完成，等待重试）",
+			"user", user.ID, "level", level, "err", err)
+		h.mu.Lock()
+		if h.tutCtl != nil {
+			h.tutDone = false
+		}
+		h.mu.Unlock()
+		return
+	}
+
+	// 落库成功：下发完成态（触发客户端完成页），并像断线一样清场——
+	// 教程目标已达成，不再产生新的对局事件，避免终局/超时覆盖完成页。
+	h.mu.Lock()
+	if h.tutCtl != nil {
+		h.sendTutorialStateLocked(h.tutCtl.State())
+	}
+	eng, ctl := h.engine, h.botCtl
+	h.engine, h.botCtl, h.tutCtl = nil, nil, nil
+	h.tutDone = false
+	h.seats = make(map[match.Player]store.User)
+	h.cfg = matchConfig{}
+	h.started = false
+	h.mu.Unlock()
+
+	// Stop 取引擎锁：必须在释放 h.mu 之后（broadcast 的锁序是 engine→h.mu）。
+	if ctl != nil {
+		ctl.Stop()
+	}
+	if eng != nil {
+		eng.Stop()
+	}
+	h.logger.Info("教程关卡完成并已落库", "user", user.ID, "level", level)
+}
+
+// tutorialProgress：带超时的进度读取（DB 挂起不得永久卡住持锁的 join 路径）。
+func (h *Hub) tutorialProgress(userID uuid.UUID) (store.TutorialProgress, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), settleTimeout)
+	defer cancel()
+	return h.st.GetTutorialProgress(ctx, userID)
+}
+
+// pvpGate：PvP 入口门禁（spec 用户故事 6：完成教程才解锁 1v1 匹配）。
+// 08 号票的在线匹配入口复用同一判定位置；匿名热座不经过此处
+// （无账号即无进度可查——实验室旁路，调用点已显式注释）。
+func (h *Hub) pvpGate(userID uuid.UUID) error {
+	if h.st == nil {
+		return nil
+	}
+	prog, err := h.tutorialProgress(userID)
+	if err != nil {
+		return fmt.Errorf("教程进度读取失败，请稍后重试")
+	}
+	if !prog.Completed {
+		return fmt.Errorf("请先完成新手教程（入口页「新手教程」）")
+	}
+	return nil
 }
 
 // settleEnded：终局结算与落库（调用方持 h.mu；引擎已 ENDED，无后续事件，
@@ -518,10 +772,10 @@ func (h *Hub) settleEnded(me *matchpb.MatchEnded) {
 	if h.st == nil {
 		return
 	}
-	// 09 号票：PvE 不落战绩/ELO（Bot 无账号——"双方认证才落库"规则的显式化；
-	// 显式守卫同时钉住未来拓扑演进时不误把 Bot 席位算进结算）。
-	if h.cfg.mode == modePvE {
-		h.logger.Info("PvE 对局不落战绩/ELO（Bot 无账号）")
+	// 09/10 号票：PvE/教程不落战绩/ELO（Bot 无账号——"双方认证才落库"规则的
+	// 显式化；显式守卫同时钉住未来拓扑演进时不误把 Bot 席位算进结算）。
+	if h.cfg.mode == modePvE || h.cfg.mode == modeTutorial {
+		h.logger.Info("单人模式对局不落战绩/ELO（Bot 无账号）", "mode", h.cfg.mode)
 		return
 	}
 	u1, ok1 := h.seats[match.P1]
