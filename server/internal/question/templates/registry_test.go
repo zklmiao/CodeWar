@@ -4,10 +4,14 @@ package templates
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"strings"
+	"sync"
 	"testing"
 
 	"codewar/server/internal/match"
@@ -17,8 +21,9 @@ import (
 func testRegistry(t *testing.T) []question.Template {
 	t.Helper()
 	all := All()
-	if len(all) < 20 || len(all) > 30 {
-		t.Fatalf("首批模板应为 20-30 个，实际 %d", len(all))
+	// 数量目标（124）与矩阵覆盖归 coverage_test.go 管；此处只保注册表非空与 ID 唯一。
+	if len(all) < 26 {
+		t.Fatalf("模板应 ≥26 个（04 首批 26 + 12 号票扩容），实际 %d", len(all))
 	}
 	seen := map[string]bool{}
 	for _, tm := range all {
@@ -44,22 +49,6 @@ func TestAllTemplatesValidate(t *testing.T) {
 		in.Seed = "validate|" + tm.Meta().ID
 		if err := question.ValidateInstance(in); err != nil {
 			t.Fatalf("校验失败：%v", err)
-		}
-	}
-}
-
-// 攻击题覆盖 6 题型（每题型 ≥2 模板）。
-func TestAttackCoversSixTopics(t *testing.T) {
-	byTopic := map[question.Topic]int{}
-	for _, tm := range testRegistry(t) {
-		m := tm.Meta()
-		if m.Action == question.ActionAttack {
-			byTopic[m.Topic]++
-		}
-	}
-	for _, tp := range question.AllTopics {
-		if byTopic[tp] < 2 {
-			t.Fatalf("题型 %s 攻击模板仅 %d 个（要求 ≥2）", tp, byTopic[tp])
 		}
 	}
 }
@@ -108,8 +97,13 @@ func TestDualFormRendering(t *testing.T) {
 			t.Fatal(err)
 		}
 		c, f := in.ToQuestion(question.FormComplete), in.ToQuestion(question.FormFillBlank)
-		if len(c.Tests) != len(f.Tests) {
-			t.Fatalf("模板 %s 双形式用例不一致", m.ID)
+		// 原断言 len(c.Tests)==len(f.Tests) 恒真（两形式共用 in.Tests()），改为可失败属性：
+		// 骨架填空占位数必须等于 BlankLines，且 complete 形式不得混入填空占位。
+		if got := strings.Count(f.StarterCode, "____ 填空"); got != in.BlankLines {
+			t.Fatalf("模板 %s 骨架占位 %d 个与 BlankLines %d 不符", m.ID, got, in.BlankLines)
+		}
+		if strings.Contains(c.StarterCode, "____ 填空") {
+			t.Fatalf("模板 %s complete 起始代码混入填空占位", m.ID)
 		}
 		if c.StarterCode == f.StarterCode {
 			t.Fatalf("模板 %s 双形式起始代码无区别", m.ID)
@@ -126,37 +120,120 @@ func TestDualFormRendering(t *testing.T) {
 
 // 冒烟：每个模板参考解跑自家全部用例（真实 executor，不走 gRPC）。
 // 理由：gRPC 需起服务进程，测试只关心“参考解正确”，子进程直调 executor.run
-// 与生产判题同代码路径；CI 无 python 时跳过，本地必须全过。
+// 与生产判题同代码路径；CI 无 python 时不允许静默跳过（见 judgeEnv）。
+// 并发：每个任务是一次独立容器判题（子进程为主），4 worker 并行把模板库
+// 墙钟压回 go test 默认超时内；首个失败按模板 ID 上报（t.Fatalf 仅主 goroutine 调用）。
 func TestSmokeAnswerKeyPassesOwnTests(t *testing.T) {
-	judgeDir := filepath.Join("..", "..", "..", "..", "judge")
-	if _, err := os.Stat(filepath.Join(judgeDir, "judgesvc", "executor.py")); err != nil {
-		t.Skipf("无 judge 目录，跳过冒烟：%v", err)
-	}
-	py := "python"
-	if _, err := exec.LookPath(py); err != nil {
-		py = "python3"
-		if _, err := exec.LookPath(py); err != nil {
-			t.Skip("无 python，跳过冒烟")
-		}
-	}
+	judgeDir, py := judgeEnv(t)
+	jobs := make([]smokeJob, 0, 160)
 	for _, tm := range testRegistry(t) {
 		for _, seed := range []string{"smoke-1", "smoke-2"} {
 			in, err := tm.Generate(question.NewRNG(question.DeriveSeed(seed, tm.Meta().ID)))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := runExecutor(py, judgeDir, in.AnswerKey, in.Tests()); err != nil {
-				t.Fatalf("模板 %s seed %s 参考解未通过自家用例：%v", tm.Meta().ID, seed, err)
-			}
+			jobs = append(jobs, smokeJob{id: tm.Meta().ID, seed: seed, code: in.AnswerKey, tests: in.Tests()})
 		}
 	}
+	if err := runSmokeJobs(py, judgeDir, jobs, true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestStarterFailsOwnTests：负向控制——起始代码（NotImplementedError/空类）必须判失败。
+// 若“什么都不做”的代码能通过某模板的用例集，说明隐藏用例空转（虚假 pass 风险）。
+// 12 号票 review 增加：每模板 1 个种子，与冒烟共用真实 executor 链路。
+func TestStarterFailsOwnTests(t *testing.T) {
+	judgeDir, py := judgeEnv(t)
+	jobs := make([]smokeJob, 0, 160)
+	for _, tm := range testRegistry(t) {
+		const seed = "starter"
+		in, err := tm.Generate(question.NewRNG(question.DeriveSeed(seed, tm.Meta().ID)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		jobs = append(jobs, smokeJob{id: tm.Meta().ID, seed: seed, code: in.CompleteStarter, tests: in.Tests()})
+	}
+	if err := runSmokeJobs(py, judgeDir, jobs, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// judgeEnv：冒烟环境的判题目录与 python 解释器探测。
+func judgeEnv(t *testing.T) (judgeDir, py string) {
+	t.Helper()
+	judgeDir = filepath.Join("..", "..", "..", "..", "judge")
+	if _, err := os.Stat(filepath.Join(judgeDir, "judgesvc", "executor.py")); err != nil {
+		t.Skipf("无 judge 目录，跳过冒烟：%v", err)
+	}
+	py = "python"
+	if _, err := exec.LookPath(py); err != nil {
+		py = "python3"
+		if _, err := exec.LookPath(py); err != nil {
+			if os.Getenv("CI") != "" {
+				t.Fatal("CI 缺少 python/python3：判题冒烟是验收 3 的端到端证据，不允许静默跳过")
+			}
+			t.Skip("本地无 python，跳过冒烟")
+		}
+	}
+	return judgeDir, py
+}
+
+// smokeJob：一次判题任务（模板 × seed × 提交代码）。
+type smokeJob struct {
+	id    string
+	seed  string
+	code  string
+	tests []match.TestCase
+}
+
+// runSmokeJobs：4 worker 并发判题。expectPass=true 时“未通过”计失败；
+// expectPass=false 时“通过”计失败（负向控制）。返回首个失败。
+func runSmokeJobs(py, judgeDir string, jobs []smokeJob, expectPass bool) error {
+	const workers = 4
+	ch := make(chan smokeJob)
+	var (
+		mu       sync.Mutex
+		firstErr error
+		wg       sync.WaitGroup
+	)
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range ch {
+				err := runExecutor(py, judgeDir, job.code, job.tests)
+				bad := (expectPass && err != nil) || (!expectPass && err == nil)
+				if !bad {
+					continue
+				}
+				mu.Lock()
+				if firstErr == nil {
+					if expectPass {
+						firstErr = fmt.Errorf("模板 %s seed %s 参考解未通过自家用例：%v", job.id, job.seed, err)
+					} else {
+						firstErr = fmt.Errorf("模板 %s seed %s 起始代码竟通过自家用例（用例集可能空转）", job.id, job.seed)
+					}
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, job := range jobs {
+		ch <- job
+	}
+	close(ch)
+	wg.Wait()
+	return firstErr
 }
 
 // runExecutor：子进程直调 judgesvc.executor.run（与 judge 服务同函数）。
 func runExecutor(py, judgeDir, code string, tests []match.TestCase) error {
 	triples := make([]map[string]string, len(tests))
 	for i, tc := range tests {
-		triples[i] = map[string]string{"name": tc.Name, "call": tc.Call, "expected": tc.Expected}
+		// 15 号票契约 v2：setup/compare 为空串时与旧路径字节级一致。
+		triples[i] = map[string]string{"name": tc.Name, "call": tc.Call, "expected": tc.Expected,
+			"setup": tc.Setup, "compare": tc.Compare}
 	}
 	payload, _ := json.Marshal(map[string]any{"code": code, "cases": triples})
 	script := `import json, sys
@@ -178,3 +255,36 @@ if not (r["passed"] and r["category"] == "ok"):
 type smokeError struct{ msg string }
 
 func (e *smokeError) Error() string { return e.msg }
+
+// TestManifestMatchesRegistry：MANIFEST 台账与注册表双向一致。
+// 12 号票 review 发现：批 3a/4 漏更、批 1-2 出现重复行——台账漂移必须机械拦截。
+func TestManifestMatchesRegistry(t *testing.T) {
+	data, err := os.ReadFile("MANIFEST.md")
+	if err != nil {
+		t.Fatalf("读取 MANIFEST 失败：%v", err)
+	}
+	rowRe := regexp.MustCompile(`^\| ([a-z0-9-]+-L[1-5]-(?:attack|move|defend|skill)) \|`)
+	seen := map[string]int{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if m := rowRe.FindStringSubmatch(line); m != nil {
+			seen[m[1]]++
+		}
+	}
+	registry := map[string]bool{}
+	for _, tm := range All() {
+		registry[tm.Meta().ID] = true
+	}
+	for id, n := range seen {
+		if n > 1 {
+			t.Errorf("MANIFEST 重复行：%s ×%d", id, n)
+		}
+		if !registry[id] {
+			t.Errorf("MANIFEST 含未注册模板：%s", id)
+		}
+	}
+	for id := range registry {
+		if seen[id] == 0 {
+			t.Errorf("MANIFEST 缺少模板：%s", id)
+		}
+	}
+}

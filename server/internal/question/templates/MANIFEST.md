@@ -1,57 +1,182 @@
-# 首批模板登记表（04 号票，26 个；L5 归 12 号票）
+# 模板登记表（04 号票首批 26 + 12 号票扩容；矩阵口径见 templates/coverage_test.go）
 
 > 四维 = 题型 × 难度档 × 动作类型 × 题面形式；陷阱清单与隐藏用例一一对应（`checks.invariants` 强制）。
 > 黄金样板 20 个（攻击 18 全覆盖 + 移动/防御各 1 模式样板）+ 仿写 6 个（移动 2、防御 2、技能 2）。
 
-## 攻击题（18，形式 both：同一 Instance 双渲染）
+## 攻击题（43，形式 both：同一 Instance 双渲染）
 
 | 模板 ID | 题型 | 难度 | 形式 | 黄金 | 陷阱 |
 |---|---|---|---|---|---|
 | syntax-add-L1-attack | 语法与运算 | L1 | both | 是 | — |
 | syntax-sum-evens-L2-attack | 语法与运算 | L2 | both | 是 | empty-input |
 | syntax-count-div-L3-attack | 语法与运算 | L3 | both | 是 | empty-input, no-match |
+| syntax-brackets-L4-attack | 语法与运算 | L4 | both | 是 | empty-input, wrong-order, unmatched-open, unmatched-close |
+| syntax-reverse-digits-L3-attack | 语法与运算 | L3 | both | 是 | trailing-zero, negative, single-digit, zero |
+| syntax-big-add-L4-attack | 语法与运算 | L4 | both | 是 | carry-chain, different-length, zero-value |
 | string-palindrome-L2-attack | 字符串处理 | L2 | both | 是 | empty-input, case-sensitive |
 | string-vowel-count-L3-attack | 字符串处理 | L3 | both | 是 | empty-input, no-vowel |
 | string-run-length-L4-attack | 字符串处理 | L4 | both | 是 | empty-input, single-char, long-run |
+| string-shout-L1-attack | 字符串处理 | L1 | both | 否 | — |
+| string-reverse-words-L3-attack | 字符串处理 | L3 | both | 否 | multi-space, single-word, empty-input |
+| string-version-compare-L4-attack | 字符串处理 | L4 | both | 否 | equal, leading-zeros, different-length, less-than |
+| string-unique-window-L5-attack | 字符串处理 | L5 | both | 否 | empty-input, single-char, all-same, all-distinct |
+| string-palindrome-substr-L5-attack | 字符串处理 | L5 | both | 是 | empty-input, single-char, all-same, tie-first |
 | array-dedup-L2-attack | 数组与列表 | L2 | both | 是 | empty-input, all-same |
 | array-two-sum-L3-attack | 数组与列表 | L3 | both | 是 | duplicates, negative |
 | array-window-sum-L4-attack | 数组与列表 | L4 | both | 是 | empty-input, single-element, all-negative, full-window |
+| array-sum-L1-attack | 数组与列表 | L1 | both | 否 | — |
+| array-max-index-L3-attack | 数组与列表 | L3 | both | 否 | duplicates, single-element, all-negative |
+| array-rotate-L4-attack | 数组与列表 | L4 | both | 否 | empty-input, k-larger-than-n, k-zero |
+| array-kadane-L5-attack | 数组与列表 | L5 | both | 否 | empty-input, single-negative, all-negative, all-positive |
+| array-subarray-sum-L5-attack | 数组与列表 | L5 | both | 否 | empty-input, negative-numbers, zero-k, no-match |
 | hash-count-L2-attack | 哈希与计数 | L2 | both | 是 | empty-input, absent |
 | hash-word-frequency-L3-attack | 哈希与计数 | L3 | both | 是 | repeated-max, single-distinct |
 | hash-top-k-L4-attack | 哈希与计数 | L4 | both | 是 | tie-order, single-distinct, k-equals-distinct |
+| hash-contains-L1-attack | 哈希与计数 | L1 | both | 否 | — |
+| hash-pair-sum-L3-attack | 哈希与计数 | L3 | both | 否 | empty-input, no-pair, duplicates |
+| hash-anagram-L4-attack | 哈希与计数 | L4 | both | 否 | different-length, empty-input, repeated-chars, no-match |
+| hash-longest-consecutive-L5-attack | 哈希与计数 | L5 | both | 否 | empty-input, all-same, no-consecutive, negative |
+| hash-min-steps-L5-attack | 哈希与计数 | L5 | both | 否 | empty-input, identical, no-overlap, one-empty |
 | sort-parity-L2-attack | 排序与贪心 | L2 | both | 是 | empty-input |
 | sort-kth-L3-attack | 排序与贪心 | L3 | both | 是 | single-element, duplicates |
 | sort-insertion-L4-attack | 排序与贪心 | L4 | both | 是 | empty-input, single-element, already-sorted, reverse-sorted |
+| sort-smallest-L1-attack | 排序与贪心 | L1 | both | 否 | — |
+| sort-min-gap-L3-attack | 排序与贪心 | L3 | both | 否 | duplicates, adjacent-pair, unsorted-input |
+| sort-merge-intervals-L4-attack | 排序与贪心 | L4 | both | 否 | empty-input, touching, contained, unsorted-input |
+| sort-sorted-squares-L5-attack | 排序与贪心 | L5 | both | 否 | all-negative, all-positive, mixed, single-element |
+| sort-min-arrows-L5-attack | 排序与贪心 | L5 | both | 否 | empty-input, touching-points, disjoint, single-balloon |
 | recursion-factorial-L2-attack | 递归与简单 DP | L2 | both | 是 | base-zero, base-one |
 | recursion-binary-search-L3-attack | 递归与简单 DP | L3 | both | 是 | empty-input, single-element, not-found |
 | recursion-pascal-L4-attack | 递归与简单 DP | L4 | both | 是 | row-zero, row-one |
+| recursion-climb-L3-attack | 递归与简单 DP | L3 | both | 否 | base-zero, base-one, memo-hit |
+| recursion-fast-power-L4-attack | 递归与简单 DP | L4 | both | 否 | exp-zero, negative-exp, odd-exp |
 
 注：递归题型 L1/L5 在 Rubric 下无语义（矩阵空语义格），归 12 号票。
 
-## 移动题（3，私有，形式 complete）
+## 结构体类攻击题（17，形式 complete-only，15 号票契约四件套；12 号票批 7）
 
-| 模板 ID | 难度 | 黄金 | 陷阱 |
+> 矩阵之外的增量内容（124 目标已由批 1-6b 达成）：链表/树/LRU/调用序列按设计 002 附录 E 实现。
+> setup 构造入参、compare 规范化 got、expected 永不进容器；答案内嵌 class 定义，故不做双渲染。
+
+| 模板 ID | 题型 | 难度 | setup | compare | 陷阱 |
+|---|---|---|---|---|---|
+| struct-reverse-list-L3-attack | 数组与列表 | L3 | list_to_nodes | nodes_repr | empty-input, single-node, duplicates |
+| struct-delete-dups-L3-attack | 数组与列表 | L3 | list_to_nodes | nodes_repr | empty-input, all-same, last-pair |
+| struct-merge-lists-L5-attack | 数组与列表 | L5 | list_to_nodes ×2 | nodes_repr | empty-input, different-length, duplicates |
+| struct-has-cycle-L4-attack | 数组与列表 | L4 | list_to_nodes + make_cycle | —（bool） | empty-input, single-node, no-cycle |
+| struct-detect-cycle-L5-attack | 数组与列表 | L5 | list_to_nodes + make_cycle | nodes_repr | empty-input, no-cycle, cycle-at-head, single-cycle |
+| struct-add-two-L5-attack | 数组与列表 | L5 | list_to_nodes ×2 | nodes_repr | carry-chain, different-length, zero-value |
+| struct-sort-list-L4-attack | 数组与列表 | L4 | list_to_nodes | nodes_repr | empty-input, single-element, duplicates |
+| struct-remove-nth-L4-attack | 数组与列表 | L4 | list_to_nodes + n | nodes_repr | remove-head, remove-tail, single-element |
+| struct-reorder-L5-attack | 数组与列表 | L5 | list_to_nodes | nodes_repr | empty-input, single-element, even-length, odd-length |
+| struct-max-depth-L2-attack | 递归与简单 DP | L2 | build_tree | —（int） | empty-input, single-node |
+| struct-inorder-L3-attack | 递归与简单 DP | L3 | build_tree | —（list） | empty-input, single-node, skew |
+| struct-invert-tree-L3-attack | 递归与简单 DP | L3 | build_tree | tree_repr | empty-input, single-node, skew |
+| struct-level-order-L4-attack | 递归与简单 DP | L4 | build_tree | —（nested list） | empty-input, single-node, skew |
+| struct-right-view-L4-attack | 递归与简单 DP | L4 | build_tree | —（list） | empty-input, single-node, skew |
+| struct-lca-L4-attack | 递归与简单 DP | L4 | build_tree + p/q | tree_repr | root-is-lca, left-subtree, right-subtree |
+| struct-lru-L5-attack | 哈希与计数 | L5 | 构造 LRUCache | —（调用序列） | capacity-one, evict-order, miss |
+| struct-myqueue-L4-attack | 语法与运算 | L4 | 构造 MyQueue | —（调用序列） | fifo-order, empty-after |
+
+## 移动题（27，私有，形式 complete；12 批 2 起带题型标注）
+
+| 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
+|---|---|---|---|---|
+| move-manhattan-L1-move | 语法与运算 | L1 | 是 | — |
+| move-step-L2-move | 数组与列表 | L2 | 否 | already-there |
+| move-follow-L3-move | 字符串处理 | L3 | 否 | empty-input, invalid-char |
+| move-vector-L2-move | 语法与运算 | L2 | 否 | unknown-char |
+| move-corridor-L3-move | 语法与运算 | L3 | 否 | empty-input, negative-steps, full-loop, wrap-around |
+| move-parse-L4-move | 语法与运算 | L4 | 否 | empty-input, no-number, multi-digit |
+| move-firststep-L1-move | 字符串处理 | L1 | 否 | — |
+| move-count-forward-L2-move | 字符串处理 | L2 | 否 | empty-input, none-forward |
+| move-facing-L4-move | 字符串处理 | L4 | 否 | empty-input, full-circle, unknown-char |
+| move-beacon-L5-move | 字符串处理 | L5 | 否 | empty-input, undo-empty, undo-back, all-back |
+| move-nearest-L1-move | 数组与列表 | L1 | 否 | — |
+| move-clamp-L3-move | 数组与列表 | L3 | 否 | empty-input, clamp-high, clamp-low |
+| move-jump-L4-move | 数组与列表 | L4 | 否 | empty-input, stuck-zero, single-element |
+| move-paths-L5-move | 数组与列表 | L5 | 否 | zero-input, blocked-start, blocked-middle, single-row |
+| move-lookup-L1-move | 哈希与计数 | L1 | 否 | — |
+| move-keycount-L2-move | 哈希与计数 | L2 | 否 | empty-input, absent |
+| move-first-repeat-L3-move | 哈希与计数 | L3 | 否 | empty-input, no-repeat, repeat-adjacent |
+| move-favorite-L4-move | 哈希与计数 | L4 | 否 | empty-input, tie-order, single-distinct |
+| move-schedule-L5-move | 哈希与计数 | L5 | 否 | empty-input, cooldown-zero, single-task, all-same |
+| move-sortpick-L1-move | 排序与贪心 | L1 | 否 | — |
+| move-cheapest-L2-move | 排序与贪心 | L2 | 否 | k-zero, empty-input |
+| move-walkall-L3-move | 排序与贪心 | L3 | 否 | empty-input, single-element, gap |
+| move-ranks-L4-move | 排序与贪心 | L4 | 否 | duplicates, single-element, all-same |
+| move-events-L5-move | 排序与贪心 | L5 | 否 | empty-input, chained, disjoint, all-overlapping |
+| move-fib-L2-move | 递归与简单 DP | L2 | 否 | base-zero |
+| move-recsum-L3-move | 递归与简单 DP | L3 | 否 | empty-input, single-element |
+| move-depth-L4-move | 递归与简单 DP | L4 | 否 | empty-input, one-level, deep-nesting |
+
+## 防御题（27，私有，形式 complete；12 批 2 起带题型标注）
+
+| 模板 ID | 题型 | 难度 | 黄金 | 陷阱 |
+|---|---|---|---|---|
+| defend-reduce-L1-defend | 语法与运算 | L1 | 是 | — |
+| defend-shield-L2-defend | 数组与列表 | L2 | 否 | empty-input, overkill |
+| defend-survive-L3-defend | 哈希与计数 | L3 | 否 | empty-input, lethal, full-block |
+| defend-repair-L2-defend | 语法与运算 | L2 | 否 | over-cap, empty-input |
+| defend-hp-after-L3-defend | 语法与运算 | L3 | 否 | empty-input, shield-eats-all, overkill, exact-zero |
+| defend-siege-L4-defend | 语法与运算 | L4 | 否 | empty-input, full-block, degrade-chain, lethal |
+| defend-badge-L1-defend | 字符串处理 | L1 | 否 | — |
+| defend-mask-L2-defend | 字符串处理 | L2 | 否 | empty-input, short-input |
+| defend-censor-L3-defend | 字符串处理 | L3 | 否 | empty-input, no-match, all-match |
+| defend-scroll-L4-defend | 字符串处理 | L4 | 否 | empty-input, punctuation-only, mixed-case, odd-length |
+| defend-barrier-L5-defend | 字符串处理 | L5 | 否 | empty-input, all-open, all-close, concatenated |
+| defend-lowest-L1-defend | 数组与列表 | L1 | 否 | — |
+| defend-count-L3-defend | 数组与列表 | L3 | 否 | empty-input, no-match, all-match |
+| defend-bucket-L4-defend | 数组与列表 | L4 | 否 | empty-input, boundary-five, boundary-ten |
+| defend-window-L5-defend | 数组与列表 | L5 | 否 | empty-input, k-larger-than-n, all-negative, k-equals-n |
+| defend-membership-L1-defend | 哈希与计数 | L1 | 否 | — |
+| defend-duplicate-L2-defend | 哈希与计数 | L2 | 否 | empty-input, all-same |
+| defend-shared-L4-defend | 哈希与计数 | L4 | 否 | empty-input, no-overlap, duplicates-in-b |
+| defend-majority-L5-defend | 哈希与计数 | L5 | 否 | empty-input, no-majority, all-same, exactly-half |
+| defend-weakest-L1-defend | 排序与贪心 | L1 | 否 | — |
+| defend-topsum-L2-defend | 排序与贪心 | L2 | 否 | k-zero, empty-input |
+| defend-second-L3-defend | 排序与贪心 | L3 | 否 | single-distinct, empty-input, duplicates |
+| defend-cluster-L4-defend | 排序与贪心 | L4 | 否 | empty-input, single-element, all-one-group, separated |
+| defend-span-L5-defend | 排序与贪心 | L5 | 否 | empty-input, sorted-input, single-element, reverse-sorted |
+| defend-chain-L2-defend | 递归与简单 DP | L2 | 否 | zero-layers |
+| defend-ones-L3-defend | 递归与简单 DP | L3 | 否 | zero-input, single-bit |
+| defend-memo-L4-defend | 递归与简单 DP | L4 | 否 | zero-input, negative-input, memo-hit |
+
+## 技能题（27，06 号票消费，形式 complete）
+
+| 模板 ID | 题型 | 难度 | 陷阱 |
 |---|---|---|---|
-| move-manhattan-L1-move | L1 | 是 | — |
-| move-step-L2-move | L2 | 否 | already-there |
-| move-follow-L3-move | L3 | 否 | empty-input, invalid-char |
-
-## 防御题（3，私有，形式 complete）
-
-| 模板 ID | 难度 | 黄金 | 陷阱 |
-|---|---|---|---|
-| defend-reduce-L1-defend | L1 | 是 | — |
-| defend-shield-L2-defend | L2 | 否 | empty-input, overkill |
-| defend-survive-L3-defend | L3 | 否 | empty-input, lethal, full-block |
-
-## 技能题（2，供 06 号票参照，形式 complete）
-
-| 模板 ID | 难度 | 陷阱 |
-|---|---|---|
-| skill-blast-L3-skill | L3 | —（overcap/negative 为普通边界用例） |
-| skill-heal-L3-skill | L3 | no-missing, over-heal |
+| skill-clamp-L1-skill | 语法与运算 | L1 | — |
+| skill-chain-heal-L2-skill | 数组与列表 | L2 | empty-input |
+| skill-blast-L3-skill | 语法与运算 | L3 | —（overcap/negative 为普通边界用例） |
+| skill-heal-L3-skill | 哈希与计数 | L3 | no-missing, over-heal |
+| skill-mana-L2-skill | 语法与运算 | L2 | over-cap |
+| skill-arcana-L4-skill | 语法与运算 | L4 | zero-targets, decay-floor, overcap |
+| skill-echo-L1-skill | 字符串处理 | L1 | — |
+| skill-odd-L2-skill | 字符串处理 | L2 | empty-input, single-char |
+| skill-draw-L3-skill | 字符串处理 | L3 | empty-input, no-digits |
+| skill-decompress-L4-skill | 字符串处理 | L4 | empty-input, multi-digit-count, no-count |
+| skill-ward-L5-skill | 字符串处理 | L5 | empty-input, single-char, all-same, whole-palindrome, worst-case |
+| skill-orb-L1-skill | 数组与列表 | L1 | — |
+| skill-charge-L3-skill | 数组与列表 | L3 | empty-input, below-threshold |
+| skill-merge-L4-skill | 数组与列表 | L4 | empty-input, single-element, no-adjacent |
+| skill-rob-L5-skill | 数组与列表 | L5 | empty-input, single-house, two-houses, all-zero |
+| skill-ingredient-L1-skill | 哈希与计数 | L1 | — |
+| skill-cost-L2-skill | 哈希与计数 | L2 | empty-input |
+| skill-stockdiff-L4-skill | 哈希与计数 | L4 | empty-input, only-left, only-right |
+| skill-craftreport-L5-skill | 哈希与计数 | L5 | empty-input, exact-match, deficit, surplus |
+| skill-strongest-L1-skill | 排序与贪心 | L1 | — |
+| skill-shield-L2-skill | 排序与贪心 | L2 | k-zero, empty-input |
+| skill-closepairs-L3-skill | 排序与贪心 | L3 | empty-input, no-close, all-close |
+| skill-rank-L4-skill | 排序与贪心 | L4 | duplicates, tie-at-top, single-element |
+| skill-swaps-L5-skill | 排序与贪心 | L5 | empty-input, sorted-input, single-cycle, reverse-sorted |
+| skill-combo-L2-skill | 递归与简单 DP | L2 | zero-power |
+| skill-droot-L3-skill | 递归与简单 DP | L3 | single-digit, zero-input |
+| skill-choose-L4-skill | 递归与简单 DP | L4 | k-zero, k-greater-than-n, full-k |
 
 ## 档位覆盖
 
-- 攻击：L1×1、L2×6、L3×6、L4×5；L5 缺失（12 号票补 DP/贪心）。
-- 移动/防御：L1~L3；技能：L3 样板（技能题难度=所选上限档，06 号票消费）。
+- 攻击：全题型矩阵完成（批 1-6b），关键格（攻击 × L3-L5）均 ≥2 模板；再加批 7 的 17 个结构体增量。
+- 移动/防御/技能：全部 6 题型 L1-L5 已补齐（批 2-6b）。
+- 矩阵 108/108 有效格、关键格 16/16 双模板、基线 124/124（+17 结构体增量 = 141）；口径见 templates/coverage_test.go。
+- 形式：攻击题 both（批 7 结构体类 complete-only，见该节说明）；私有题 complete。
