@@ -43,6 +43,7 @@ function playerLabel(id: string): string {
 .num {
   position: absolute; inset: 0; text-align: center;
   font-size: var(--cw-font-size-xs); line-height: 18px; color: var(--cw-color-text-primary);
-  text-shadow: 0 1px 2px var(--cw-color-shadow);
+  /* 数字投影按 004 §5 以 color-mix 派生（accent 档 55%），禁 rgba 写死 */
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--cw-color-bg-inset) 55%, transparent);
 }
 </style>

@@ -15,15 +15,21 @@
 
 ## 2. Token 命名约定
 
-单一来源 = `design/tokens.css`。模式：`--cw-{族}-{槽位}[-{变体}]`，五族：
+单一来源 = `design/tokens.css`。模式：`--cw-{族}-{槽位}[-{变体}]`，六族：
 
 | 族 | 模式 | 例 |
 |---|---|---|
-| 颜色 | `--cw-color-{bg\|text\|border\|state\|class\|accent}-{槽位}` | `--cw-color-bg-inset`、`--cw-color-class-warrior`、`--cw-color-state-danger` |
+| 颜色 | `--cw-color-{bg\|text\|border\|state\|class\|seat\|accent}-{槽位}` | `--cw-color-bg-inset`、`--cw-color-class-warrior`、`--cw-color-state-danger`、`--cw-color-seat-p1` |
 | 字体 | `--cw-font-{sans\|mono}`（族）、`--cw-font-size-{xs…xxl}`、`--cw-font-weight-{regular\|medium\|semibold}` | `--cw-font-size-sm` |
 | 间距 | `--cw-space-{N}`（4px 基准，N=步数；`--cw-space-24` 兼作 1 格占位尺寸） | `--cw-space-6` |
 | 圆角 | `--cw-radius-{sm\|md\|lg\|full}` | `--cw-radius-md` |
 | 动效 | `--cw-motion-{fast\|slow\|pulse}`（150ms / 400ms / 1.6s，14 号票增补） | `--cw-motion-fast` |
+| 层级 | `--cw-z-{槽位}`（22 号票增补） | `--cw-z-modal` |
+
+> 22 号票登记：颜色族新增 `seat` 子族（`seat-p1`/`seat-p2`，对局席位识别色——血条填充，
+> 与职业主色正交）与 `bg-target`（移动目标格选中底色）、`bg-scrim` 槽位（全屏覆盖层遮罩，
+> 以 color-mix 自 `bg-inset` 派生，见使用规则 2）；新增层级族 `z-overlay`/`z-modal`
+> （全屏覆盖层 / 模态结算层的 z 阶）。
 
 **使用规则**（风格页 grep 自检项）：
 

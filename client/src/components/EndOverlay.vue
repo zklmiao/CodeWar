@@ -43,7 +43,7 @@ function deltaText(before: number, after: number): string {
 
 <style scoped>
 .overlay {
-  position: fixed; inset: 0; background: var(--cw-color-scrim);
+  position: fixed; inset: 0; background: var(--cw-color-bg-scrim);
   display: flex; align-items: center; justify-content: center;
   /* 22 号票：补齐 z-index（教程局终局时须压过 z-10 的教程完成页，见 --cw-z-modal） */
   z-index: var(--cw-z-modal);
