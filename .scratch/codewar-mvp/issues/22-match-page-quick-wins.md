@@ -6,11 +6,11 @@
 
 **Blocked by:** None（可立即开工；与 23/24 有同文件面，先行可减少后续冲突）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Token 合规：上述文件裸色值全部替换为 `--cw-*` 变量（缺的 token 补进 tokens.css，含 z-index 阶梯）；App.vue body 背景与 `--cw-color-bg-base` 二选一对齐；修正 `--cw-color-accent-warrior` 引用
-- [ ] 字号/字体 token 化：px 字号 → `--cw-font-size-*`；正文 font-family 接 `--cw-font-sans`，签名/日志/编辑器语境接 `--cw-font-mono`；题面字号提档 xs → sm（12px → 14px）
-- [ ] EndOverlay z-index 补齐：教程局终局时结算层位于 TutorialOverlay 之上不被遮盖（补断言或人工目检记录）
-- [ ] 移动端防横向溢出：`@media (max-width: ~860px)` 下 `.cols` 纵向堆叠、棋盘格 `min()` 缩放、日志跟随；窄窗口无横向滚动条
-- [ ] 入口屏 P1/P2 接入升级为按钮卡片：`join-p1`/`join-p2` 的 `data-testid` 与 href 语义保留（match-view.spec.ts:59 依赖），「复制接入链接」按钮并入卡片
-- [ ] 验收：`npx vitest run` 全绿 + `npx vite build` 通过；diff 审查可证除字号提档外零逻辑/行为改动
+- [x] Token 合规：上述文件裸色值全部替换为 `--cw-*` 变量（缺的 token 补进 tokens.css，含 z-index 阶梯）；App.vue body 背景与 `--cw-color-bg-base` 二选一对齐；修正 `--cw-color-accent-warrior` 引用
+- [x] 字号/字体 token 化：px 字号 → `--cw-font-size-*`；正文 font-family 接 `--cw-font-sans`，签名/日志/编辑器语境接 `--cw-font-mono`；题面字号提档 xs → sm（12px → 14px）
+- [x] EndOverlay z-index 补齐：教程局终局时结算层位于 TutorialOverlay 之上不被遮盖（补断言或人工目检记录）
+- [x] 移动端防横向溢出：`@media (max-width: ~860px)` 下 `.cols` 纵向堆叠、棋盘格 `min()` 缩放、日志跟随；窄窗口无横向滚动条
+- [x] 入口屏 P1/P2 接入升级为按钮卡片：`join-p1`/`join-p2` 的 `data-testid` 与 href 语义保留（match-view.spec.ts:59 依赖），「复制接入链接」按钮并入卡片
+- [x] 验收：`npx vitest run` 全绿 + `npx vite build` 通过；diff 审查可证除字号提档外零逻辑/行为改动
