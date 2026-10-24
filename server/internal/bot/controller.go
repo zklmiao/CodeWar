@@ -201,7 +201,7 @@ func (c *Controller) OnEvent(env *matchpb.Envelope) {
 		c.pending = nil
 	}
 	c.round = round
-	skillReady := c.hasSkill && round >= c.skillReadyFrom
+	skillReady := c.skillReadyAt(round)
 	var d Decision
 	if c.script != nil {
 		// 教程脚本：确定性行动（不消耗随机流，也不受难度参数影响）。
@@ -228,6 +228,12 @@ func (c *Controller) OnEvent(env *matchpb.Envelope) {
 		return
 	}
 	c.pending = t
+}
+
+// skillReadyAt：第 round 回合技能是否就绪（OnEvent 的行动采样与 act 的接近
+// 射程判定共用同式；口径以引擎冷却登记为准，16 号票语义）。
+func (c *Controller) skillReadyAt(round int) bool {
+	return c.hasSkill && round >= c.skillReadyFrom
 }
 
 // Stop：终局/断线时停止——取消未触发的行动，之后的一切回调都变成 no-op。
@@ -288,7 +294,10 @@ func (c *Controller) act(round int, d Decision) {
 			c.mu.Unlock()
 			return
 		}
-		to, ok := PickMove(c.rng, me, opp, int(c.class.MoveMax))
+		// 19 号票：超距时移动决策升级为"接近"（射程口径含就绪技能）；
+		// 射程内维持现行随机移动。
+		reach := EffectiveReach(c.class, c.skill, c.hasSkill, c.skillReadyAt(round))
+		to, ok := ChooseMove(c.rng, me, opp, int(c.class.MoveMax), reach)
 		c.mu.Unlock()
 		if !ok {
 			return
