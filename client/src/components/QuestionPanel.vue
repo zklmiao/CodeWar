@@ -93,8 +93,10 @@ const actedLabel = computed(() => {
   const map: Record<string, string> = { move: "移动", defend: "防御", skill: "技能" };
   return map[store.actedKind ?? ""] ?? "攻击";
 });
-// 查看者技能冷却剩余回合（快照权威；0 = 可用）
-const skillCd = computed(() => store.classes[store.viewerId]?.skillCdRounds ?? 0);
+// 查看者技能冷却剩余回合（20 号票：对局中由事件流本地推导——judged 技能通过登记、
+// roundStarted 更新回合时递减；接入/重连快照值经 store 重锚为初值。组件只读派生值，
+// 不再直读快照字段 classes[..].skillCdRounds——那在对局中不更新，正是本票缺陷 B）
+const skillCd = computed(() => store.skillCdRounds);
 const hasSkillSlot = computed(() => !!store.classes[store.viewerId]?.skillId);
 
 function submitAttack() {

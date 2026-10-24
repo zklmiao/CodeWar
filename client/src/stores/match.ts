@@ -9,6 +9,7 @@ import {
   Snapshot,
   SubmissionJudged,
 } from "../api/proto/codewar/match/v1/match";
+import { useClassesStore } from "./classes";
 
 export interface LogEntry {
   seq: number;
@@ -117,6 +118,10 @@ export interface MatchState {
   log: LogEntry[];
   serverOffsetMs: number; // 服务端时钟 - 本地时钟
   gapDetected: boolean; // 事件序号断裂 → 需要重连（ADR-0002）
+  // 20 号票 B：技能冷却的事件推导锚点——查看者释放回合 + CD（与引擎 skillReadyFrom
+  // 同语义）。仅由 judged(技能,通过,自己) 登记与 applySnapshot 重锚；对局中不再
+  // 依赖快照字段（SkillCdRounds 只在接入/重连时权威）。
+  skillCdUntilRound: number;
 }
 
 function toProblem(p: { id: string; statement: string; signature: string; starterCode: string } | null | undefined): ProblemView | null {
@@ -147,6 +152,7 @@ export const useMatchStore = defineStore("match", {
     log: [],
     serverOffsetMs: 0,
     gapDetected: false,
+    skillCdUntilRound: 0,
   }),
   getters: {
     isWaiting: (s) => s.phase === MatchPhase.MATCH_PHASE_WAITING,
@@ -154,6 +160,10 @@ export const useMatchStore = defineStore("match", {
     isEnded: (s) => s.phase === MatchPhase.MATCH_PHASE_ENDED,
     // 倒计时毫秒（客户端只渲染，权威在服务端）
     remainingMs: (s) => Math.max(0, s.deadlineUnixMs - (Date.now() + s.serverOffsetMs)),
+    // 20 号票 B：查看者技能冷却剩余回合（0 = 可用）——由锚点与本回合派生，
+    // roundStarted 更新 round 时自动逐回合递减；释放回合即显示 CD（与引擎快照
+    // 语义一致：skillReadyFrom - round，释放当回合也灰置）。
+    skillCdRounds: (s) => Math.max(0, s.skillCdUntilRound - s.round),
   },
   actions: {
     // ===== 服务端消息入口 =====
@@ -219,6 +229,9 @@ export const useMatchStore = defineStore("match", {
             bot: s.matchConfig.bot ?? "",
           }
         : null;
+      // 20 号票 B：接入/重连快照的 skill_cd_rounds 重锚冷却推导基线（权威初值）——
+      // 无条件覆盖本地推导（含归零），保证双源不漂移、重连以服务端为准。
+      this.skillCdUntilRound = s.round + (this.classes[viewer]?.skillCdRounds ?? 0);
       this.panel = s.panel
         ? {
             attack: toProblem(s.panel.attack),
@@ -310,6 +323,18 @@ export const useMatchStore = defineStore("match", {
         if (j.player === this.viewerId) {
           this.viewerActed = true;
           this.actedKind = j.action;
+          // 20 号票 B：冷却登记镜像引擎语义（16 号票）——judged 技能通过即登记
+          // （当前回合 + CD），与结算时的命中/闪避无关，故不挂在 actionResolved 上。
+          // CD 查 /api/classes 同源职业表；数据未就绪或查不到时不登记——
+          // 服务端 skill-cooldown 拒绝事件仍是权威兜底（对局内快照不再下发）。
+          if (j.action === "skill") {
+            const me = this.classes[this.viewerId];
+            const cd =
+              useClassesStore()
+                .byId(me?.classId ?? "")
+                ?.skills.find((k) => k.id === me?.skillId)?.cooldown ?? 0;
+            if (cd > 0) this.skillCdUntilRound = this.round + cd;
+          }
         }
         this.pushLog(`✔ ${j.player} 解出${kind}题（${(j.solveMs / 1000).toFixed(1)}s）`);
       } else if (j.category === "locked") {
