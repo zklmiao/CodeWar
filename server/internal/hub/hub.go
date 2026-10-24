@@ -47,10 +47,13 @@ func (c *conn) send(b []byte) {
 	}
 }
 
+// close：连接收尾（幂等）。只关 closed 信号——outbox 永不关闭：send 的
+// 发送分支与本函数无 happens-before，关闭数据通道即竞态源（21 号票：
+// -race 报 DATA RACE + send on closed channel panic）。writePump 经
+// closed 信号退出并排干缓冲；迟到的 send 走 closed 分支丢弃（有界）。
 func (c *conn) close() {
 	c.once.Do(func() {
 		close(c.closed)
-		close(c.outbox)
 	})
 }
 
@@ -537,9 +540,33 @@ func (h *Hub) removeConn(c *conn) {
 	}
 }
 
+// writePump：串行写 ws。退出条件：closed 信号（21 号票：outbox 永不关闭，
+// 不再以通道关闭作退出信号）或写失败；退出前收尾排干（drainOutbox）。
 func (h *Hub) writePump(c *conn) {
-	for b := range c.outbox {
-		if err := c.ws.WriteMessage(websocket.TextMessage, b); err != nil {
+	for {
+		select {
+		case b := <-c.outbox:
+			if err := c.ws.WriteMessage(websocket.TextMessage, b); err != nil {
+				return
+			}
+		case <-c.closed:
+			h.drainOutbox(c)
+			return
+		}
+	}
+}
+
+// drainOutbox：连接关闭后的收尾排干（writePump 专用）——对齐旧 close+range
+// 的收尾语义：close 时刻已缓冲的消息仍获得一次写尝试；缓冲空即返回，不等待
+// 新消息（迟到的发送者走 send 的 closed 分支丢弃，缓冲上限封顶）。
+func (h *Hub) drainOutbox(c *conn) {
+	for {
+		select {
+		case b := <-c.outbox:
+			if err := c.ws.WriteMessage(websocket.TextMessage, b); err != nil {
+				return
+			}
+		default:
 			return
 		}
 	}
