@@ -4,19 +4,16 @@ package hub
 // 此前 hub_elo_test 全部走 stubStore，只能断言"桩被怎么调"，真实 SQL 事务、
 // elo_history、users.elo 与 MatchEnded 事件的一致性从未验证过。
 //
-// 门控与隔离：CODEWAR_TEST_DSN 必填且库名须含 test；本测试用**专属库**
-// codewar_test_hub（缺失则自动 CREATE DATABASE），与 store 包测试的
-// TRUNCATE 互不干扰（go test 并行跑不同包的二进制）。
+// 门控与隔离：CODEWAR_TEST_DSN 必填且源库名须含 test；本测试使用
+// internal/testdb 分配的专属库 codewar_test_hub（缺失则自动创建），
+// 与 store/accounts 包测试的 TRUNCATE 互不干扰（go test 并行跑不同包）。
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -29,44 +26,12 @@ import (
 	"codewar/server/gen/matchpb"
 	"codewar/server/internal/match"
 	"codewar/server/internal/store"
-	_ "github.com/lib/pq"
+	"codewar/server/internal/testdb"
 )
 
 func integrationDSN(t *testing.T) string {
 	t.Helper()
-	raw := strings.TrimSpace(os.Getenv("CODEWAR_TEST_DSN"))
-	if raw == "" {
-		t.Skip("CODEWAR_TEST_DSN 未设置，跳过 hub×store 集成测试")
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Path == "" {
-		t.Skipf("DSN 无法解析，跳过：%q", raw)
-	}
-	dbName := strings.TrimPrefix(u.Path, "/")
-	if !strings.Contains(strings.ToLower(dbName), "test") {
-		t.Skip("测试库名必须含 test（防误清共享库）")
-	}
-	// 专属库：与 store 包测试的 TRUNCATE 隔离。
-	hubDB := "codewar_test_hub"
-	admin, err := sql.Open("postgres", raw)
-	if err != nil {
-		t.Fatalf("管理连接失败：%v", err)
-	}
-	defer admin.Close()
-	var exists bool
-	if err := admin.QueryRow(
-		`SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)`, hubDB,
-	).Scan(&exists); err != nil {
-		t.Fatalf("查询库存在性失败：%v", err)
-	}
-	if !exists {
-		if _, err := admin.Exec(
-			fmt.Sprintf(`CREATE DATABASE %s OWNER codewar`, hubDB)); err != nil {
-			t.Fatalf("创建专属库失败：%v", err)
-		}
-	}
-	u.Path = "/" + hubDB
-	return u.String()
+	return testdb.DSN(t, "hub")
 }
 
 func dialWS(t *testing.T, srvURL, player, token string) *websocket.Conn {

@@ -4,25 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"net/url"
-	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"codewar/server/internal/testdb"
+
 	"github.com/google/uuid"
 )
 
-// 门控集成测试：连接 compose 的 postgres（localhost:5432），
+// 门控集成测试：连接 compose 的 postgres（localhost:25432），
 // 以 CODEWAR_TEST_DSN 门控——变量缺失时 t.Skip，CI（无 DB）保持绿。
 // 本地全量：docker compose up postgres（deploy/）+ 设变量跑。
 //
-// 破坏性护栏：测试会 TRUNCATE 四表，故 DSN 必须指向库名含 "test" 的库，
-// 否则直接 Skip（防误指生产/共享库）。
+// 破坏性护栏与库隔离：源 DSN 的库名必须含 "test"；每个测试包使用独立库
+// （internal/testdb，codewar_test_store），因此 `go test ./...` 可并行跑包，
+// 不会与 accounts/hub 的 TRUNCATE 互相干扰。
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	dsn := testDSN(t)
+	dsn := testdb.DSN(t, "store")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	s, err := Open(ctx, dsn)
@@ -36,34 +36,6 @@ func openTestStore(t *testing.T) *Store {
 		}
 	}
 	return s
-}
-
-func testDSN(t *testing.T) string {
-	t.Helper()
-	dsn := strings.TrimSpace(os.Getenv("CODEWAR_TEST_DSN"))
-	if dsn == "" {
-		t.Skip("CODEWAR_TEST_DSN 未设置，跳过 DB 集成测试（CI 无 DB 保持绿）")
-	}
-	if !strings.Contains(strings.ToLower(testDBName(dsn)), "test") {
-		t.Skip("测试库名必须含 test（防误清共享库），当前 DSN 被拒绝")
-	}
-	return dsn
-}
-
-// testDBName：从 postgres://…/dbname 或 key=value 形态 DSN 提取库名；解析失败返回空。
-func testDBName(dsn string) string {
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		if u, err := url.Parse(dsn); err == nil {
-			return strings.TrimPrefix(u.Path, "/")
-		}
-		return ""
-	}
-	for _, kv := range strings.Fields(dsn) {
-		if name, ok := strings.CutPrefix(kv, "dbname="); ok {
-			return name
-		}
-	}
-	return ""
 }
 
 // 注册 → 登录 → 双令牌鉴权 → 注销其一 → 另一仍有效；

@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"codewar/server/internal/store"
+	"codewar/server/internal/testdb"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -52,14 +52,9 @@ func TestNilStoreUnavailable(t *testing.T) {
 }
 
 // 门控：HTTP 全流程（注册 201 → me → profile → logout → 401；409/401/400 错误路径）。
+// 17 号票：使用 accounts 专属测试库（codewar_test_accounts），与 store/hub 并行不互删。
 func TestHTTPFlow(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("CODEWAR_TEST_DSN"))
-	if dsn == "" {
-		t.Skip("CODEWAR_TEST_DSN 未设置，跳过")
-	}
-	if !strings.Contains(strings.ToLower(dsn), "test") {
-		t.Skip("测试库名必须含 test")
-	}
+	dsn := testdb.DSN(t, "accounts")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	st, err := store.Open(ctx, dsn)
@@ -166,10 +161,7 @@ func TestHTTPFlow(t *testing.T) {
 
 // 关库后的 handler：DB 错误映射 500 而非 panic（500 分支覆盖）。
 func TestClosedStoreMaps500(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("CODEWAR_TEST_DSN"))
-	if dsn == "" || !strings.Contains(strings.ToLower(dsn), "test") {
-		t.Skip("需 CODEWAR_TEST_DSN（测试库）")
-	}
+	dsn := testdb.DSN(t, "accounts")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	st, err := store.Open(ctx, dsn)

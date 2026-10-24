@@ -25,3 +25,20 @@
 - **采用**：每包独立数据库。迁移/sqlc/测试代码零改动，隔离最强。
 - **不采用**：每包独立 schema / `search_path`（迁移与 sqlc 需额外处理，收益低）。
 - **不采用**：长期 `-p 1`（掩盖包间耦合、拖慢 CI；只作为本票落地前的临时 workaround）。
+
+## 实现记录（待人工验收）
+
+- 新增 `server/internal/testdb`：读取 `CODEWAR_TEST_DSN`、校验源库名含 `test`、
+  目标库 `codewar_test_<suffix>` 不存在则 `CREATE DATABASE`，返回目标 DSN；
+  连接/迁移仍由调用方 `store.Open` 完成。只被测试 import。
+- `store` → `codewar_test_store`；`accounts` → `codewar_test_accounts`；
+  `hub` → `codewar_test_hub`（复用同一 helper）。
+- 验证：
+  - 带 DSN 直接 `go test ./internal/store/... ./internal/accounts/... ./internal/hub/...`
+    并行通过（不再需要 `-p 1`）。
+  - `go test ./internal/store/... ./internal/accounts/... -count=5` 并行通过。
+  - 带 DSN `go test ./...` 并行全绿。
+  - 无 DSN 时 DB 集成测试仍 `SKIP`（CI 无 DB 保持绿）。
+- 注意：迁移版本变更后，若旧测试库已迁移到更高版本，需 `DROP DATABASE`
+  对应 `codewar_test_*` 后重跑（跨分支共享本地测试库的固有现象，不在本票范围）。
+
