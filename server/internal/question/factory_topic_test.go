@@ -42,8 +42,8 @@ func newTopicFactory(cfg question.Config) *question.Factory {
 }
 
 // topic=hash + cap L3 + 爬坡：10 回合攻击题全部命中哈希题型——
-// 回归锚点：round1 爬坡落 L1（哈希无 L1 攻击模板），修复前会回退为跨题型
-// 泄出非哈希题（05 验收 2 的遍历断言在此钉住就近平移难度语义）。
+// 回归锚点：05 时期 round1 曾因哈希缺 L1 走就近/跨题型回退（该断言钉住
+// 不泄出题型）；12 号票矩阵收官后哈希 L1 存在，round1 直接命中。
 func TestAttackTopicFilterStrict(t *testing.T) {
 	f := newTopicFactory(question.Config{Topics: []question.Topic{question.TopicHash}, MaxDifficulty: question.L3, Strategy: question.StrategyClimb, MatchSeed: "topic-strict"})
 	hashAttacks := idsOf(question.TopicHash, question.ActionAttack)
@@ -58,8 +58,9 @@ func TestAttackTopicFilterStrict(t *testing.T) {
 	}
 }
 
-// topic=sort + cap L5 + 均匀：40 次抽题全部命中排序题型；难度格空（排序无
-// L1/L5 模板）时就近平移落在 [L2, L4]，绝不越出题型、也绝不报错占位题。
+// topic=sort + cap L5 + 均匀：40 次抽题全部命中排序题型；排序 L1-L5 齐备
+// （12 号票矩阵收官，就近平移不再触发），难度应铺满多档（不钉死 5/5——
+// 模板增补会改变随机流，4/5 足以证明均匀铺开且不越出题型）。
 func TestAttackTopicFilterUniformCapL5(t *testing.T) {
 	f := newTopicFactory(question.Config{Topics: []question.Topic{question.TopicSort}, MaxDifficulty: question.L5, Strategy: question.StrategyUniform, MatchSeed: "topic-uniform"})
 	sortAttacks := idsOf(question.TopicSort, question.ActionAttack)
@@ -77,11 +78,8 @@ func TestAttackTopicFilterUniformCapL5(t *testing.T) {
 			}
 		}
 	}
-	if seen[question.L1] || seen[question.L5] {
-		t.Fatalf("排序题只应在 [L2, L4] 落档（空格就近平移），实际命中 %v", seen)
-	}
-	if len(seen) < 2 {
-		t.Fatalf("40 次抽题难度应覆盖多档（均匀语义），实际 %v", seen)
+	if len(seen) < 4 {
+		t.Fatalf("40 次均匀抽题应覆盖 ≥4/5 档（排序 L1-L5 齐备），实际 %v", seen)
 	}
 }
 
@@ -124,31 +122,34 @@ func TestActionQuestionsNeverPlaceholderAtCapL5(t *testing.T) {
 	}
 }
 
-// cap=L5 + 技能位：贴上限语义下就近回退——现役技能模板仅 L3，cap=L5 应回
-// 落 L3 而非错误占位（与 06 号票 pinned 行为一致的端到端面）。
-func TestSkillQuestionNearestFallbackAtCapL5(t *testing.T) {
+// cap=L5 + 技能位：贴上限语义直取上限档——技能模板 L1-L5 已齐备（12 号票
+// 批 1 补 L1/L2、批 6b/7 补 L4/L5），cap=L5 不再回退；回退机制本身由
+// factory_test.go 的 TestSkillQuestionCapTierAndFallback（桩注册表留空档）覆盖。
+func TestSkillQuestionExactCapTierAtL5(t *testing.T) {
 	f := newTopicFactory(question.Config{MaxDifficulty: question.L5, Strategy: question.StrategyClimb, MatchSeed: "skill-cap5"})
 	q := f.SkillQuestion(1, "p1")
 	if strings.HasPrefix(templateID(q.ID), "error") {
-		t.Fatalf("cap=L5 技能题应回退到最近可用档，实际 %q", q.ID)
+		t.Fatalf("cap=L5 技能题应直取上限档，实际 %q", q.ID)
 	}
-	if !strings.Contains(templateID(q.ID), "-L3-") {
-		t.Fatalf("现役技能模板仅 L3，应回退到 L3：%q", q.ID)
+	if !strings.Contains(templateID(q.ID), "-L5-") {
+		t.Fatalf("技能模板 L5 已存在，cap=L5 应直取 L5：%q", q.ID)
 	}
 }
 
-// 真空格保底：topic=hash + cap L1——整个区间无哈希攻击模板（12 号票补齐前
-// 的语义空格），退回跨题型（行动题同语义），且必须给出可用题而非错误占位。
+// 真空格保底：topic=recursion + cap L1——递归 L1 是设计 002 勘误认定的
+// 永久语义空格（递归至少需要基例+递归步，装不进 L1"≤3 行/1 个语法点"），
+// 整个 [L1,L1] 区间无递归攻击模板 → 退回跨题型（行动题同语义），必须给出
+// 可用题而非错误占位。（05 时期用 hash×L1 触发，该格自 12 号票矩阵收官起已填充。）
 func TestAttackTopicEmptyPoolFallsBackCrossTopic(t *testing.T) {
-	f := newTopicFactory(question.Config{Topics: []question.Topic{question.TopicHash}, MaxDifficulty: question.L1, Strategy: question.StrategyClimb, MatchSeed: "topic-empty"})
+	f := newTopicFactory(question.Config{Topics: []question.Topic{question.TopicRecursion}, MaxDifficulty: question.L1, Strategy: question.StrategyClimb, MatchSeed: "topic-empty"})
 	for round := 1; round <= 3; round++ {
 		q := f.AttackQuestion(round)
 		tpl := templateID(q.ID)
 		if strings.HasPrefix(tpl, "error") {
 			t.Fatalf("真空格应跨题型保底而非错误占位：%q", q.ID)
 		}
-		if idsOf(question.TopicHash, question.ActionAttack)[tpl] {
-			t.Fatalf("cap=L1 不可能存在哈希攻击模板：%q", tpl)
+		if idsOf(question.TopicRecursion, question.ActionAttack)[tpl] {
+			t.Fatalf("cap=L1 不可能存在递归攻击模板（递归 L1 为永久语义空格）：%q", tpl)
 		}
 	}
 }

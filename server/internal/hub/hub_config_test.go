@@ -313,16 +313,17 @@ func TestJoinInvalidConfigFallsBackToDefaults(t *testing.T) {
 }
 
 // 验收 1（cap 端到端）：topic=hash 固定题型下 cap=L5 + 爬坡——哈希攻击模板
-// 只有 L2..L4（L1 空格首回合就近平移到 L2），realized 难度序列 [2,2,2,3]
-// （26 伤害/回合，第 4 回合终局）；第 4 回合出现 L3，与默认 cap=L3
-// （[2,2,2,2,…]）确定性分化，证明 cap 真实放宽了出题区间上限。
+// L1-L5 齐备（12 号票矩阵收官），realized 爬坡序列 [1,2,2,3]：round1 合法落
+// L1 正是爬坡"开局低档"的设计本意（05 时期期望 L2 是哈希缺 L1 时的就近平移
+// workaround，矩阵补齐后该假设过时）；第 4 回合出现 L3，与默认 cap=L3 的
+// 序列确定性分化，证明 cap 真实放宽了出题区间上限。
 func TestJoinCapL5RaisesDifficultyCeiling(t *testing.T) {
 	h := New(passJudge{}, slog.Default(), nil)
 	r1, r2 := runConfiguredMatch(t, h,
 		&matchpb.JoinRequest{Player: "p1", Topic: "hash", Cap: "L5", Strategy: "climb"},
 		&matchpb.JoinRequest{Player: "p2"},
 	)
-	want := []int{2, 2, 2, 3} // 26 伤害/回合（22×1.2）→ 第 4 回合双双归零
+	want := []int{1, 2, 2, 3} // 26 伤害/回合（22×1.2，伤害与抽取档位无关）→ 第 4 回合双双归零
 	if len(r1.attackIDs) != len(want) {
 		t.Fatalf("应打满 %d 回合，实际 %d 回合", len(want), len(r1.attackIDs))
 	}
