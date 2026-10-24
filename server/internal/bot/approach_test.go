@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"codewar/server/internal/classes"
 	"codewar/server/internal/match"
 )
 
@@ -134,10 +135,10 @@ func TestBotOutOfRangeMoveClosesDistance(t *testing.T) {
 }
 
 // 端到端断言（裁决 4）：修复后 Bot 先接近再命中——事件流出现 P2 攻击
-// Damage>0。修复前（种子 exile-e）该局面下 Bot 的 9 次攻击全部 dodged=true、
+// Damage>0。修复前（种子 exile-08）该局面下 Bot 的 8 次攻击全部 dodged=true、
 // 伤害 0 次（超距放逐到回合上限），本测试红——即票据实录的缺陷现场。
 func TestBotApproachesThenLandsHit(t *testing.T) {
-	h := newConfiguredHarness(t, "exile-e", "ranger", "", "ranger", "windheal",
+	h := newConfiguredHarness(t, "exile-08", "ranger", "", "ranger", "windheal",
 		Params{MinSolveMs: 0, MaxSolveMs: 0, Accuracy: 1, Weights: Weights{Attack: 60, Move: 40}})
 	playFleeScenario(h, 10)
 
@@ -159,5 +160,105 @@ func TestBotApproachesThenLandsHit(t *testing.T) {
 	}
 	if h.rejected != 0 {
 		t.Fatalf("Bot 出现 %d 次参数拒绝", h.rejected)
+	}
+}
+
+// ===== 纯函数契约：射程口径与接近落点选择 =====
+
+// classWithSkill：取职业与其技能（测试辅助）。
+func classWithSkill(t *testing.T, classID, skillID string) (classes.Class, classes.Skill, bool) {
+	t.Helper()
+	c, ok := classes.ByID(classID)
+	if !ok {
+		t.Fatalf("未知职业 %q", classID)
+		return c, classes.Skill{}, false
+	}
+	sk, has, err := classes.SkillByID(classID, skillID)
+	if err != nil {
+		t.Fatalf("职业 %q 查技能 %q 失败：%v", classID, skillID, err)
+	}
+	return c, sk, has
+}
+
+// 射程口径（裁决 1）：普攻按职业——剑士 1、法师 2、游侠 3；技能就绪取 max，
+// 穿云箭（4）放大游侠射程，治疗/邻域技能不放大；冷却中不放大。
+func TestEffectiveReachByClass(t *testing.T) {
+	cases := []struct {
+		classID, skillID string
+		skillReady       bool
+		want             int
+	}{
+		{"warrior", "", false, 1},
+		{"warrior", "cleave", true, 1},  // 巨力斩邻域无距离语义
+		{"warrior", "survive", true, 1}, // 治疗不放大
+		{"mage", "", false, 2},
+		{"mage", "firestorm", true, 2}, // 横带纵深 2
+		{"mage", "drain", true, 2},     // 秘法汲取射程 2
+		{"ranger", "", false, 3},
+		{"ranger", "windheal", true, 3}, // 治疗不放大
+		{"ranger", "pierce", false, 3},  // 冷却中不放大
+		{"ranger", "pierce", true, 4},   // 穿云箭就绪 → 4
+	}
+	for _, tc := range cases {
+		c, sk, has := classWithSkill(t, tc.classID, tc.skillID)
+		if got := EffectiveReach(c, sk, has, tc.skillReady); got != tc.want {
+			t.Fatalf("%s+%s(ready=%v) 射程 = %d，want %d", tc.classID, tc.skillID, tc.skillReady, got, tc.want)
+		}
+	}
+}
+
+// 接近落点选择（裁决 1/2）：
+//   - 角落对角（裁决 4 的 (0,0)/(4,4) 游侠局面）：一格进不了射程 → 沿主轴
+//     最大进度，跨回合收敛；
+//   - 一格能进射程 → 停在射程边缘（rim），不贴脸；
+//   - 轴向被封死 → false（调用方退化随机移动，裁决 1 的负例分支）。
+func TestApproachMove(t *testing.T) {
+	cases := []struct {
+		name           string
+		from, opp      match.Pos
+		moveMax, reach int
+		want           match.Pos
+		ok             bool
+	}{
+		{"角落对角取最大进度（裁决4局面）", match.Pos{Row: 0, Col: 0}, match.Pos{Row: 4, Col: 4}, 3, 3, match.Pos{Row: 3, Col: 0}, true},
+		{"对角反向同构", match.Pos{Row: 4, Col: 4}, match.Pos{Row: 0, Col: 0}, 3, 3, match.Pos{Row: 1, Col: 4}, true},
+		{"一格进射程停在边缘", match.Pos{Row: 0, Col: 0}, match.Pos{Row: 4, Col: 0}, 3, 3, match.Pos{Row: 1, Col: 0}, true},
+		{"法师两格进射程", match.Pos{Row: 2, Col: 2}, match.Pos{Row: 0, Col: 4}, 2, 2, match.Pos{Row: 0, Col: 2}, true},
+		{"剑士斜向相邻接近", match.Pos{Row: 0, Col: 0}, match.Pos{Row: 1, Col: 1}, 2, 1, match.Pos{Row: 1, Col: 0}, true},
+		{"边缘优先于更近格", match.Pos{Row: 0, Col: 0}, match.Pos{Row: 1, Col: 4}, 3, 3, match.Pos{Row: 0, Col: 2}, true},
+		{"轴向封死退化", match.Pos{Row: 0, Col: 0}, match.Pos{Row: 0, Col: 1}, 2, 1, match.Pos{}, false},
+	}
+	for _, tc := range cases {
+		got, ok := ApproachMove(tc.from, tc.opp, tc.moveMax, tc.reach)
+		if ok != tc.ok || got != tc.want {
+			t.Fatalf("%s：got %v,%v want %v,%v", tc.name, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// 射程内随机决策保持不变（裁决 1"射程内时维持现行权重决策"+ 裁决 3 随机流
+// 不变）：ChooseMove 在射程内与 PickMove 消费同一随机序列、产生同一落点；
+// 接近落点为确定性计算，不消耗随机流。
+func TestChooseMoveRandomStreamUntouched(t *testing.T) {
+	from, opp := match.Pos{Row: 2, Col: 2}, match.Pos{Row: 2, Col: 3} // 距离 1 ≤ 射程
+	r1 := &seqRNG{ints: []int{7}}
+	r2 := &seqRNG{ints: []int{7}}
+	a, okA := ChooseMove(r1, from, opp, 3, 3)
+	b, okB := PickMove(r2, from, opp, 3)
+	if !okA || !okB || a != b {
+		t.Fatalf("射程内应与现行随机移动一致：%v,%v vs %v,%v", a, okA, b, okB)
+	}
+	if r1.ii != r2.ii || r1.fi != r2.fi {
+		t.Fatalf("射程内随机流消费应一致：%+v vs %+v", r1, r2)
+	}
+
+	// 超距：确定性接近，不消耗任何随机流。
+	r3 := &seqRNG{ints: []int{7}}
+	to, ok := ChooseMove(r3, match.Pos{Row: 0, Col: 0}, match.Pos{Row: 4, Col: 4}, 3, 3)
+	if !ok || to != (match.Pos{Row: 3, Col: 0}) {
+		t.Fatalf("超距应确定性接近：got %v,%v", to, ok)
+	}
+	if r3.ii != 0 || r3.fi != 0 {
+		t.Fatalf("接近落点不应消耗随机流：%+v", r3)
 	}
 }

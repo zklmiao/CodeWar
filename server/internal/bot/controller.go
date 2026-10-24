@@ -288,7 +288,11 @@ func (c *Controller) act(round int, d Decision) {
 			c.mu.Unlock()
 			return
 		}
-		to, ok := PickMove(c.rng, me, opp, int(c.class.MoveMax))
+		// 19 号票：超距时移动决策升级为"接近"（射程口径含就绪技能，
+		// skillReady 判定与 OnEvent 同式）；射程内维持现行随机移动。
+		skillReady := c.hasSkill && round >= c.skillReadyFrom
+		reach := EffectiveReach(c.class, c.skill, c.hasSkill, skillReady)
+		to, ok := ChooseMove(c.rng, me, opp, int(c.class.MoveMax), reach)
 		c.mu.Unlock()
 		if !ok {
 			return
