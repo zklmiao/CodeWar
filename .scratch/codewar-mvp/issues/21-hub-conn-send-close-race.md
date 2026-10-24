@@ -14,11 +14,11 @@ panic: send on closed channel → 整个测试进程崩溃
 
 **Blocked by:** None（可立即开工）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 红→绿：并发 send/close 压测（500 轮 × 4 发送者对 1 close）修复前 `-race` 必红（DATA RACE / panic），修复后绿
-- [ ] close() 只关 `closed` 信号（保留 once 幂等），outbox 永不关闭；send() 零改动
-- [ ] writePump 改 select(outbox, closed) 退出，退出前排干已缓冲消息（对齐旧 close+range 收尾语义）
-- [ ] `go test -race -count=1 ./...`（server 全包）绿、零 DATA RACE
-- [ ] 断连语义不退：hub 既有断连/教程测试全绿（TestPveDisconnectAbortsAndRefreshRestarts、TestJoinBindsUserAndCleansUpOnDisconnect、TestTutorialL2HitDoesNotComplete 等）
-- [ ] 高强度回归不退：`go test -race ./internal/hub/... -run 'TestPve' -count=200`
+- [x] 红→绿：并发 send/close 压测（500 轮 × 4 发送者对 1 close）修复前 `-race` 必红（DATA RACE / panic），修复后绿
+- [x] close() 只关 `closed` 信号（保留 once 幂等），outbox 永不关闭；send() 零改动
+- [x] writePump 改 select(outbox, closed) 退出，退出前排干已缓冲消息（对齐旧 close+range 收尾语义）
+- [x] `go test -race -count=1 ./...`（server 全包）绿、零 DATA RACE
+- [x] 断连语义不退：hub 既有断连/教程测试全绿（TestPveDisconnectAbortsAndRefreshRestarts、TestJoinBindsUserAndCleansUpOnDisconnect、TestTutorialL2HitDoesNotComplete 等）
+- [x] 高强度回归不退：`go test -race ./internal/hub/... -run 'TestPve' -count=200`
