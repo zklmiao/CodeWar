@@ -134,29 +134,49 @@ func TestBotOutOfRangeMoveClosesDistance(t *testing.T) {
 	}
 }
 
-// 端到端断言（裁决 4）：修复后 Bot 先接近再命中——事件流出现 P2 攻击
-// Damage>0。修复前（种子 exile-08）该局面下 Bot 的 8 次攻击全部 dodged=true、
-// 伤害 0 次（超距放逐到回合上限），本测试红——即票据实录的缺陷现场。
+// 端到端断言（裁决 4 + 票据 L22）：修复后 Bot 先接近再命中——事件流呈现
+// "dodged 由 true 转为命中"。修复前（种子 exile-08）该局面下 Bot 的 8 次攻击
+// 全部 dodged=true、伤害 0 次（超距放逐到回合上限），本测试红——即票据实录
+// 的缺陷现场。三重守卫防空转：必须先出现闪避阶段、后出现命中、且命中在
+// 事件序上位于闪避之后（否则种子局面退化为开局即射程内，测试虚假通过）。
 func TestBotApproachesThenLandsHit(t *testing.T) {
 	h := newConfiguredHarness(t, "exile-08", "ranger", "", "ranger", "windheal",
 		Params{MinSolveMs: 0, MaxSolveMs: 0, Accuracy: 1, Weights: Weights{Attack: 60, Move: 40}})
 	playFleeScenario(h, 10)
 
-	hit := 0
-	dodged := 0
-	for _, env := range h.events {
+	attacks, dodged, hit := 0, 0, 0
+	firstDodge, firstHit := -1, -1
+	for i, env := range h.events {
 		ar := env.GetActionResolved()
 		if ar == nil || ar.GetAttacker() != string(match.P2) || ar.GetAction() != match.ActionAttack {
 			continue
 		}
-		if ar.GetDamage() > 0 {
+		attacks++
+		switch {
+		case ar.GetDamage() > 0:
 			hit++
-		} else if ar.GetDodged() {
+			if firstHit < 0 {
+				firstHit = i
+			}
+		case ar.GetDodged():
 			dodged++
+			if firstDodge < 0 {
+				firstDodge = i
+			}
 		}
+	}
+	if attacks == 0 {
+		t.Fatal("场景无效：Bot 未发起任何攻击")
+	}
+	if dodged == 0 {
+		t.Fatal("场景无效：无超距闪避阶段（开局即命中），未复现放逐→恢复的转移")
 	}
 	if hit == 0 {
 		t.Fatalf("Bot 从未命中（超距放逐）：P2 攻击 dodged=%d 次、伤害 0 次", dodged)
+	}
+	if firstHit < firstDodge {
+		t.Fatalf("事件序异常：首次命中(事件#%d)早于首次闪避(事件#%d)，未呈现 dodged→命中转移",
+			firstHit, firstDodge)
 	}
 	if h.rejected != 0 {
 		t.Fatalf("Bot 出现 %d 次参数拒绝", h.rejected)
