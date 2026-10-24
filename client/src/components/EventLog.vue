@@ -14,10 +14,12 @@ const store = useMatchStore();
 
 <style scoped>
 .log {
-  height: 150px; overflow-y: auto; background: #141926;
-  border-radius: 8px; padding: 8px 12px; font-size: 13px;
-  color: #aab3c7;
+  /* 22 号票：日志为等宽数值语境 → --cw-font-mono；字号 13px 归入 sm 档 */
+  height: 150px; overflow-y: auto; background: var(--cw-color-bg-surface);
+  border-radius: 8px; padding: 8px 12px; font-size: var(--cw-font-size-sm);
+  font-family: var(--cw-font-mono);
+  color: var(--cw-color-text-secondary);
 }
 .line { padding: 1px 0; }
-.seq { display: inline-block; width: 34px; color: #56607a; }
+.seq { display: inline-block; width: 34px; color: var(--cw-color-text-muted); }
 </style>

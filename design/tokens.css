@@ -31,6 +31,17 @@
   --cw-color-class-mage: #7C5CBF;   /* 法师 · 紫（长袍法杖） */
   --cw-color-class-ranger: #3E8E5A; /* 游侠 · 绿（轻甲短弓） */
 
+  /* ---------- 颜色 · 席位与特殊面（22 号票归位增补） ---------- */
+  --cw-color-seat-p1: #C2554F;      /* P1 席位识别色（血条填充） */
+  --cw-color-seat-p2: #5B7FD4;      /* P2 席位识别色（血条填充） */
+  --cw-color-bg-target: #3A3320;    /* 移动目标格选中底色（警示色沾染面） */
+  --cw-color-scrim: rgba(10, 13, 20, 0.82); /* 全屏覆盖层遮罩（终局结算、教程完成页） */
+  --cw-color-shadow: rgba(0, 0, 0, 0.6);    /* 文字投影（血条数字压底可读性） */
+
+  /* ---------- 层级 · z-index 阶梯（22 号票增补） ---------- */
+  --cw-z-overlay: 10;  /* 全屏覆盖层（教程完成页） */
+  --cw-z-modal: 20;    /* 模态层（终局结算——须压过教程完成页，验收 3） */
+
   /* ---------- 字体 ---------- */
   --cw-font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC",
                   "Microsoft YaHei", sans-serif;   /* 界面正文（零外部依赖） */

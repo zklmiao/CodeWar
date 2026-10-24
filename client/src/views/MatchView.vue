@@ -264,9 +264,6 @@ watch(
             <option v-for="s in STRATEGY_OPTIONS" :key="s.key" :value="s.key">{{ s.label }}</option>
           </select>
         </label>
-        <button class="copy" data-testid="copy-link" :disabled="pvpLocked" @click="copyJoinLink">
-          {{ copied ? "已复制 ✓" : "复制接入链接（第二窗口）" }}
-        </button>
       </div>
       <p class="cfg-hint">难度上限越高，普攻伤害与结算奖励系数越高（L1 ×0.85 → L5 ×1.20）。</p>
 
@@ -311,9 +308,22 @@ watch(
         🔒 先完成新手教程才能进入 1v1 匹配。
         <a :href="tutorialHref(tutorialNext)">去完成教程（第 {{ tutorialNext }} 关）</a>
       </div>
+      <!-- 22 号票：P1/P2 接入升级为按钮卡片；「复制接入链接」并入 P2 卡（它复制的正是 P2 链接）。
+           join-p1/join-p2 的 data-testid 与 href 语义保留（tests/match-view.spec.ts 依赖）。 -->
       <div v-else class="links">
-        <a :href="joinHref('1')" data-testid="join-p1">以 P1 接入</a>
-        <a :href="joinHref('2')" data-testid="join-p2">以 P2 接入</a>
+        <a class="join-card" :href="joinHref('1')" data-testid="join-p1">
+          <b>以 P1 接入</b>
+          <small>本窗口先入座，等待对手加入</small>
+        </a>
+        <div class="join-card">
+          <a class="join-main" :href="joinHref('2')" data-testid="join-p2">
+            <b>以 P2 接入</b>
+            <small>第二窗口入座，与本窗口热座对战</small>
+          </a>
+          <button class="copy" data-testid="copy-link" :disabled="pvpLocked" @click="copyJoinLink">
+            {{ copied ? "已复制 ✓" : "复制接入链接（第二窗口）" }}
+          </button>
+        </div>
       </div>
     </main>
 
@@ -346,12 +356,6 @@ watch(
   border: 1px solid var(--cw-color-border); border-radius: var(--cw-radius-sm);
   padding: var(--cw-space-2) var(--cw-space-3); font-size: var(--cw-font-size-sm); cursor: pointer;
 }
-.cfg-form .copy {
-  background: var(--cw-color-bg-surface); color: var(--cw-color-state-success);
-  border: 1px solid var(--cw-color-state-success); border-radius: var(--cw-radius-sm);
-  padding: var(--cw-space-2) var(--cw-space-4); cursor: pointer; font-size: var(--cw-font-size-sm);
-}
-.cfg-form .copy:hover { background: var(--cw-color-bg-raised); }
 .cfg-hint { font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted); margin: var(--cw-space-2) 0 0; }
 /* 09 号票：人机练习入口 */
 .pve-entry {
@@ -399,7 +403,6 @@ watch(
   color: var(--cw-color-state-warning); font-size: var(--cw-font-size-sm);
 }
 .pvp-locked a { color: var(--cw-color-accent); margin-left: var(--cw-space-2); }
-.cfg-form .copy:disabled { opacity: 0.5; cursor: not-allowed; }
 .class-grid { display: flex; gap: var(--cw-space-3); justify-content: center; margin: var(--cw-space-5) 0; }
 .class-card {
   background: var(--cw-color-bg-surface); border: 2px solid var(--cw-color-border); border-radius: var(--cw-radius-lg);
@@ -414,10 +417,33 @@ watch(
   color: var(--cw-color-text-secondary); padding: var(--cw-space-1) var(--cw-space-2); cursor: pointer; font-size: var(--cw-font-size-xs); text-align: left;
 }
 .skill-pick.on { border-color: var(--cw-color-state-success); color: var(--cw-color-text-primary); }
-.links { display: flex; gap: var(--cw-space-6); justify-content: center; margin-top: var(--cw-space-5); }
-.links a {
-  color: var(--cw-color-state-success); text-decoration: none; font-size: var(--cw-font-size-lg);
-  border: 1px solid var(--cw-color-border); padding: var(--cw-space-3) var(--cw-space-6); border-radius: var(--cw-radius-lg);
+/* 22 号票：P1/P2 接入按钮卡片（复制按钮并入 P2 卡） */
+.links { display: flex; gap: var(--cw-space-4); justify-content: center; align-items: stretch; margin-top: var(--cw-space-5); }
+.join-card {
+  display: flex; flex-direction: column; gap: var(--cw-space-2); justify-content: center;
+  background: var(--cw-color-bg-surface); border: 1px solid var(--cw-color-border);
+  border-radius: var(--cw-radius-lg); padding: var(--cw-space-4); min-width: 240px; text-align: left;
 }
-.links a:hover { background: var(--cw-color-bg-surface); }
+a.join-card { text-decoration: none; cursor: pointer; }
+a.join-card:hover { background: var(--cw-color-bg-raised); border-color: var(--cw-color-border-strong); }
+.join-card b { color: var(--cw-color-state-success); font-size: var(--cw-font-size-lg); }
+.join-card small { color: var(--cw-color-text-secondary); font-size: var(--cw-font-size-sm); }
+.join-main { display: flex; flex-direction: column; gap: var(--cw-space-2); text-decoration: none; }
+.join-main:hover b { text-decoration: underline; text-underline-offset: 4px; }
+.join-card .copy {
+  background: var(--cw-color-bg-inset); color: var(--cw-color-state-success);
+  border: 1px solid var(--cw-color-state-success); border-radius: var(--cw-radius-sm);
+  padding: var(--cw-space-2) var(--cw-space-3); cursor: pointer; font-size: var(--cw-font-size-sm);
+}
+.join-card .copy:hover { background: var(--cw-color-bg-raised); }
+.join-card .copy:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 22 号票：全站唯一一条 @media——窄窗口防横向溢出的防崩守护（spec 范围外的移动端
+   不做支持，见 001「范围外」）：.cols 纵向堆叠后日志自然跟随；棋盘格缩放由
+   GameGrid 的 min(--cell-size) 无条件承担，不占媒体查询。 */
+@media (max-width: 860px) {
+  .cols { flex-direction: column; }
+  .class-grid { flex-wrap: wrap; }
+  .links { flex-wrap: wrap; }
+}
 </style>

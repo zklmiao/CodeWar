@@ -48,9 +48,11 @@ watch(
 
 <style scoped>
 .editor {
-  border: 1px solid #2c3650;
+  /* 22 号票：编辑器语境接 --cw-font-mono；字号 13px 归入 sm 档 */
+  border: 1px solid var(--cw-color-border);
   border-radius: 8px;
   overflow: hidden;
-  font-size: 13px;
+  font-family: var(--cw-font-mono);
+  font-size: var(--cw-font-size-sm);
 }
 </style>

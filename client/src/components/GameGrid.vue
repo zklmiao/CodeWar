@@ -103,16 +103,19 @@ function pick(row: number, col: number) {
 
 <style scoped>
 .grid {
+  /* 22 号票：格子用 min() 随视口收缩——宽屏恒为 56px，窄窗防横向溢出（唯一 @media
+     只负责 .cols 纵向堆叠；扣减 96px = 页面留白 32 + 棋盘内衬/间隙 36 + 滚动条余量） */
+  --cell-size: min(56px, calc((100vw - 96px) / 5));
   display: grid;
-  grid-template-columns: repeat(5, 56px);
-  grid-template-rows: repeat(5, 56px);
+  grid-template-columns: repeat(5, var(--cell-size));
+  grid-template-rows: repeat(5, var(--cell-size));
   gap: 4px;
-  background: #1a2030;
+  background: var(--cw-color-bg-surface);
   padding: 10px;
   border-radius: 10px;
 }
 .cell {
-  background: #232b40;
+  background: var(--cw-color-bg-raised);
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -120,8 +123,8 @@ function pick(row: number, col: number) {
   position: relative;
 }
 .cell.pickable { cursor: pointer; }
-.cell.pickable:hover { background: #2c3650; }
-.cell.target { outline: 2px solid #e0b45f; background: #3a3320; }
+.cell.pickable:hover { background: var(--cw-color-border-strong); }
+.cell.target { outline: 2px solid var(--cw-color-state-warning); background: var(--cw-color-bg-target); }
 .pawn {
   width: 40px;
   height: 40px;
@@ -129,9 +132,9 @@ function pick(row: number, col: number) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--cw-color-text-primary);
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--cw-font-size-sm);
 }
 .pawn { overflow: hidden; }
 .pawn img { width: 100%; height: 100%; object-fit: contain; }
@@ -139,7 +142,7 @@ function pick(row: number, col: number) {
   position: absolute;
   top: 2px;
   right: 4px;
-  font-size: 12px;
+  font-size: var(--cw-font-size-xs);
 }
-.legend { color: #8a93a8; font-size: 12px; margin-top: 8px; }
+.legend { color: var(--cw-color-text-secondary); font-size: var(--cw-font-size-xs); margin-top: 8px; }
 </style>
