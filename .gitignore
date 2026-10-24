@@ -32,3 +32,6 @@ server/codewar
 # python
 __pycache__/
 *.pyc
+
+# mimosa 安全扫描钩子的本地会话状态（不入库）
+.mimosa/
