@@ -567,8 +567,8 @@ func (e *Engine) startRound(n int) {
 	}}})
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_PanelReady{PanelReady: &matchpb.PanelReady{
 		Attack: problemToPb(e.panel.attack),
-		P1:     privatePanelToPb(e.panel.move[P1], e.panel.defend[P1]),
-		P2:     privatePanelToPb(e.panel.move[P2], e.panel.defend[P2]),
+		P1:     privatePanelToPb(e.panel.move[P1], e.panel.defend[P1], e.panel.skill[P1]),
+		P2:     privatePanelToPb(e.panel.move[P2], e.panel.defend[P2], e.panel.skill[P2]),
 	}}})
 	e.armTimer()
 }
@@ -758,8 +758,17 @@ func problemToPb(q Question) *matchpb.Problem {
 	}
 }
 
-func privatePanelToPb(move, defend Question) *matchpb.PrivatePanel {
-	return &matchpb.PrivatePanel{Move: problemToPb(move), Defend: problemToPb(defend)}
+// privatePanelToPb：事件路径的私有面板（move/defend 恒填；skill 仅装备玩家携带）。
+// 20 号票：startRound 传入 e.panel.skill[p]，未装备玩家 map 取零值 → 空 Question
+// 不携带 skill 字段——与快照路径的 ok-跳过（Snapshot.panel.skill）对齐：JSON 中
+// 字段缺省，客户端 toProblem(缺省) 得 null。不能改填空 Problem：protojson 会把
+// 非 nil 空消息序列化成 {}，客户端得到非 null 的空题面，破坏"未装备=无技能题"契约。
+func privatePanelToPb(move, defend, skill Question) *matchpb.PrivatePanel {
+	pb := &matchpb.PrivatePanel{Move: problemToPb(move), Defend: problemToPb(defend)}
+	if skill.ID != "" {
+		pb.Skill = problemToPb(skill)
+	}
+	return pb
 }
 
 func playerView(p Player, hp int32, pos Pos, shielded bool) *matchpb.PlayerView {
