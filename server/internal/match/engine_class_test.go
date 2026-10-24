@@ -289,6 +289,60 @@ func TestSkillDamageShielded(t *testing.T) {
 	}
 }
 
+// 20 号票回归：PanelReady 事件必须逐回合携带当回合技能题（PrivatePanel.skill）。
+// 缺陷史：privatePanelToPb 只填 move/defend，事件路径的技能题恒空——客户端每回合
+// 用事件刷新面板，技能题从第 2 回合起消失；快照路径（Snapshot.panel.skill）一直
+// 正确，两边测试各自绿、proto 契约在 seam 交叉处断了无人看。
+// 红证据（2026-10-24 修复前首跑）：R1 即红——
+//   "PanelReadyCarriesSkillQuestion: 第 1 回合 PanelReady.p1.skill 应携带当回合技能题（非 nil 且 ID 非空）"
+//   （PrivatePanel.skill 恒为 nil，与票面根因证据一致）。
+func TestPanelReadyCarriesSkillQuestion(t *testing.T) {
+	h := newClassHarness(t, Setup{P1Class: "warrior", P1Skill: "cleave"}, passOK())
+
+	// 回合 1..4：装备玩家（剑士+巨力斩，CD=4）每回合都携带新技能题；ID 随回合变化
+	// （SkillQuestion seed 含 round——用回合间变化断言，不从实现反抄具体 ID）；
+	// 未装备玩家（P2 legacy）不携带——与快照路径的 ok-跳过对齐。
+	prevID := ""
+	for round := 1; round <= 4; round++ {
+		ps := panels(h.events())
+		if len(ps) != round {
+			t.Fatalf("第 %d 回合应有 %d 条 PanelReady，实际 %d", round, round, len(ps))
+		}
+		cur := ps[round-1]
+		if cur.P1.Skill == nil || cur.P1.Skill.Id == "" {
+			t.Fatalf("第 %d 回合 PanelReady.p1.skill 应携带当回合技能题（非 nil 且 ID 非空）", round)
+		}
+		if round > 1 && cur.P1.Skill.Id == prevID {
+			t.Fatalf("技能题 ID 应随回合变化：第 %d 与第 %d 回合同为 %q", round-1, round, cur.P1.Skill.Id)
+		}
+		prevID = cur.P1.Skill.Id
+		if cur.P2.Skill != nil {
+			t.Fatalf("未装备玩家（legacy）的 PanelReady.p2.skill 不应携带，实际 ID %q", cur.P2.Skill.Id)
+		}
+		if round == 1 {
+			h.eng.Submit(P1, ActionSkill, "good", Pos{}) // R1 释放：冷却登记（结算语义归 16 号票，此处不断言）
+		}
+		h.timeoutRound()
+	}
+
+	// 真实链路收尾（验收 2 最低要求）：冷却结束（1+4=5）后技能题仍在且可再次提交——
+	// R5 提交无 rejection、判题通过（R1+R5 共两次技能通过）。
+	h.eng.Submit(P1, ActionSkill, "good", Pos{})
+	h.timeoutRound()
+	if rej := rejections(h.events()); len(rej) != 0 {
+		t.Fatalf("冷却结束后技能提交不应被拒：%+v", rej)
+	}
+	passedSkill := 0
+	for _, j := range judged(h.events()) {
+		if j.Player == P1 && j.Action == ActionSkill && j.Passed {
+			passedSkill++
+		}
+	}
+	if passedSkill != 2 {
+		t.Fatalf("R1 与 R5 应各有一次技能判题通过，实际 %d", passedSkill)
+	}
+}
+
 // 工具：某玩家最后一次 HpChanged 后的 HP。
 func lastHp(envs []*matchpb.Envelope, player Player) int32 {
 	out := int32(-999)
