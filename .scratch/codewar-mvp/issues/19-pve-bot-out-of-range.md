@@ -16,9 +16,9 @@ Bot（游侠，普攻射程 3 / 穿云箭射程 4）移动后与玩家距离 > �
 
 **Blocked by:** None（可立即开工；与 08 号票无文件冲突面——bot 包 vs hub/匹配）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 超距时 Bot 移动决策优先接近：与对手距离 > 自身攻击射程时，移动目标选择"向对手方向、落入射程内"的合法格（仍遵守移动距离上限与路径规则）；射程内时维持现行权重决策
-- [ ] 回归测试复现原缺陷场景（种子/脚本构造"Bot 移动出射程"的局面）：修复前永久 miss、修复后恢复命中（事件流断言 dodged 由 true 转为命中）
-- [ ] 既有 bot 包测试全绿，含 16 号票高强度回归不退：`go test -race ./internal/bot/... -run TestSkillCooldown -count=100` 与 `go test -race ./internal/hub/... -run 'TestPve' -count=200`
-- [ ] 引擎零改动（修复只落在 bot 包 decide/aim 层；grep 断言 engine 包无本票改动）
+- [x] 超距时 Bot 移动决策优先接近：与对手距离 > 自身攻击射程时，移动目标选择"向对手方向、落入射程内"的合法格（仍遵守移动距离上限与路径规则）；射程内时维持现行权重决策
+- [x] 回归测试复现原缺陷场景（种子/脚本构造"Bot 移动出射程"的局面）：修复前永久 miss、修复后恢复命中（事件流断言 dodged 由 true 转为命中）
+- [x] 既有 bot 包测试全绿，含 16 号票高强度回归不退：`go test -race ./internal/bot/... -run TestSkillCooldown -count=100` 与 `go test -race ./internal/hub/... -run 'TestPve' -count=200`
+- [x] 引擎零改动（修复只落在 bot 包 decide/aim 层；grep 断言 engine 包无本票改动）
