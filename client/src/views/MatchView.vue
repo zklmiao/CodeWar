@@ -200,15 +200,20 @@ watch(
     <main v-if="viewer">
       <div v-if="joinError" class="banner error">{{ joinError }}（<a href="/">返回入口</a>）</div>
       <div v-else-if="disconnected" class="banner">连接断开，重连中…</div>
+      <!-- 23 号票：左栏 = 棋盘上 + 日志下（EventLog 从底部整行移入左栏，高度弹性）；
+           右栏整体留给题区。 -->
       <div class="cols">
-        <GameGrid />
+        <div class="left-col">
+          <GameGrid />
+          <EventLog />
+        </div>
+        <!-- 23 号票：右栏 = 题区容器（24 号票题卡+主工作区落位处，不预造）；
+             10 号票：教程目标清单仍在题区顶部（服务端事件驱动点亮，非教程不渲染） -->
         <div class="right-col">
-          <!-- 10 号票：教程目标清单（服务端事件驱动点亮；非教程模式不渲染） -->
           <TutorialGoals v-if="isTutorial" />
           <QuestionPanel :slots="isTutorial ? store.tutorial?.slots ?? [] : undefined" />
         </div>
       </div>
-      <EventLog />
     </main>
 
     <main v-else class="choose">
@@ -335,6 +340,12 @@ watch(
 
 <style>
 .cols { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
+/* 23 号票：左栏 = 棋盘上 + 日志下。宽度跟随棋盘自然尺寸（页宽增量让给右栏）；
+   align-self: stretch 拉到与右栏等高，EventLog 的 flex 弹性高度才有富余可吃。 */
+.left-col {
+  display: flex; flex-direction: column; gap: var(--cw-space-4);
+  align-self: stretch;
+}
 .banner {
   background: var(--cw-color-state-warning); color: var(--cw-color-bg-inset); padding: var(--cw-space-2) var(--cw-space-4);
   border-radius: var(--cw-radius-md); margin-bottom: var(--cw-space-3); font-size: var(--cw-font-size-xs);
@@ -377,8 +388,9 @@ watch(
   padding: var(--cw-space-2) var(--cw-space-4);
 }
 .pve-entry a:hover { background: var(--cw-color-bg-raised); }
-/* 10 号票：新手教程入口 + PvP 门禁提示 */
+/* 23 号票：右栏 = 题区容器（24 号票题卡+主工作区落位处）；flex:1 吃下 --wide 页宽增量 */
 .right-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--cw-space-3); }
+/* 10 号票：新手教程入口 + PvP 门禁提示（选择页） */
 .tutorial-entry {
   display: flex; gap: var(--cw-space-3); align-items: center; justify-content: center; flex-wrap: wrap;
   margin: var(--cw-space-4) auto 0; max-width: 720px; padding: var(--cw-space-3);
@@ -439,8 +451,9 @@ a.join-card:hover { background: var(--cw-color-bg-raised); border-color: var(--c
 .join-card .copy:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* 22 号票：全站唯一一条 @media——窄窗口防横向溢出的防崩守护（spec 范围外的移动端
-   不做支持，见 001「范围外」）：.cols 纵向堆叠后日志自然跟随；棋盘格缩放由
-   GameGrid 的 min(--cell-size) 无条件承担，不占媒体查询。 */
+   不做支持，见 001「范围外」）。23 号票重排后堆叠语义迁移：.cols 纵向堆叠 =
+   左栏（棋盘+日志）在上、题区在下；棋盘格缩放由 GameGrid 的 min(--cell-size)
+   无条件承担，不占媒体查询。 */
 @media (max-width: 860px) {
   .cols { flex-direction: column; }
   .class-grid { flex-wrap: wrap; }
