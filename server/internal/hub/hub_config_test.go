@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,8 +23,28 @@ import (
 
 // ===== 对局配置：解析 / 首个 join 锁定 / 非法回退 / 快照展示 / 结算系数（05 号票）=====
 
-func captureLogger() (*slog.Logger, *bytes.Buffer) {
-	var buf bytes.Buffer
+// syncBuffer：并发安全的日志 sink。hub 协程的日志写入（readLoop defer 的
+// 「玩家断开」等）与测试断言 buf.String() 并发访问同一缓冲，无锁的
+// bytes.Buffer 在 -race 下报 DATA RACE；Write 与 String 均持锁，断言内容不变。
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+func captureLogger() (*slog.Logger, *syncBuffer) {
+	var buf syncBuffer
 	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
 }
 
