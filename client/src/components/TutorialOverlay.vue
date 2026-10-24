@@ -38,11 +38,11 @@ function nextHref(): string {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 13, 20, 0.82);
+  background: var(--cw-color-bg-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: var(--cw-z-overlay);
 }
 .card {
   background: var(--cw-color-bg-surface);

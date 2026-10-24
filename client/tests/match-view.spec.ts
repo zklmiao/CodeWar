@@ -62,3 +62,21 @@ describe("09 人机练习入口", () => {
     wrapper.unmount();
   });
 });
+
+// 22 号票 review 修正：join-p2 此前在全套件零断言（票面称 match-view.spec.ts:59
+// 依赖，实际该行只 pin join-p1）——P2 链接丢 player=2 或混入 mode= 时测试仍绿。
+// 这里按外部行为契约补 pin：href 参数与复制按钮随卡片渲染。
+describe("22 接入卡片链接契约", () => {
+  it("join-p2 携带 player=2 且不带 mode；copy-link 随 P2 卡片渲染", async () => {
+    const wrapper = await mountAt("/?topic=hash&cap=L5&strategy=uniform");
+    const link = wrapper.find('[data-testid="join-p2"]');
+    expect(link.exists()).toBe(true);
+    const href = link.attributes("href") ?? "";
+    expect(href).toContain("player=2");
+    expect(href).not.toContain("mode=");
+    expect(href).toContain("topic=hash");
+    expect(href).toContain("cap=L5");
+    expect(wrapper.find('[data-testid="copy-link"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});

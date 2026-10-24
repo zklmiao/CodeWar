@@ -210,12 +210,12 @@ function submitSkill() {
   display: flex; flex-direction: column; gap: 12px;
 }
 .placeholder { color: var(--cw-color-text-muted); margin: auto; }
-.match-cfg { font-size: 12px; color: var(--cw-color-text-muted); }
+.match-cfg { font-size: var(--cw-font-size-xs); color: var(--cw-color-text-muted); }
 .head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .round { font-weight: 700; color: var(--cw-color-text-primary); }
 .timer { font-variant-numeric: tabular-nums; color: var(--cw-color-state-success); font-weight: 700; }
 .timer.low { color: var(--cw-color-state-danger); }
-.solved, .locked, .hint { font-size: 13px; color: var(--cw-color-state-warning); }
+.solved, .locked, .hint { font-size: var(--cw-font-size-sm); color: var(--cw-color-state-warning); }
 .hint { color: var(--cw-color-text-secondary); }
 .slot {
   border: 1px solid var(--cw-color-border); border-radius: 8px; padding: 10px;
@@ -225,14 +225,16 @@ function submitSkill() {
 .slot header b { color: var(--cw-color-text-primary); }
 .slot header small { color: var(--cw-color-text-muted); }
 .statement {
-  white-space: pre-wrap; color: var(--cw-color-text-primary); font-size: 12px;
+  /* 22 号票：题面字号提档 xs → sm（12px → 14px，token 阶无 13px 档） */
+  white-space: pre-wrap; color: var(--cw-color-text-primary); font-size: var(--cw-font-size-sm);
   margin: 0; font-family: inherit; max-height: 96px; overflow: auto;
 }
 .signature {
   display: block; background: var(--cw-color-bg-raised); border-radius: 6px;
-  padding: 4px 8px; color: var(--cw-color-state-success); font-size: 12px;
+  padding: 4px 8px; color: var(--cw-color-state-success); font-size: var(--cw-font-size-xs);
+  font-family: var(--cw-font-mono);
 }
-.move-row { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--cw-color-text-primary); }
+.move-row { display: flex; gap: 10px; align-items: center; font-size: var(--cw-font-size-xs); color: var(--cw-color-text-primary); }
 .target { color: var(--cw-color-state-warning); }
 .clear {
   background: none; border: 1px solid var(--cw-color-border); color: var(--cw-color-text-secondary);
@@ -242,12 +244,12 @@ function submitSkill() {
   padding: 8px 0; width: 100%; color: var(--cw-color-text-primary); font-weight: 700;
   border: none; border-radius: 8px; cursor: pointer;
 }
-.submit.atk { background: var(--cw-color-accent-warrior, var(--cw-color-class-warrior)); }
+.submit.atk { background: var(--cw-color-class-warrior); }
 .submit.mov { background: var(--cw-color-accent); }
 .submit.def { background: var(--cw-color-state-success); }
 .submit.skl { background: var(--cw-color-class-mage); }
 .targeting {
-  display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--cw-color-text-secondary);
+  display: flex; gap: 6px; align-items: center; font-size: var(--cw-font-size-xs); color: var(--cw-color-text-secondary);
 }
 .targeting .dir {
   background: var(--cw-color-bg-inset); border: 1px solid var(--cw-color-border); color: var(--cw-color-text-primary);
@@ -256,5 +258,5 @@ function submitSkill() {
 .targeting .dir.on { border-color: var(--cw-color-state-success); color: var(--cw-color-state-success); }
 .targeting .dist { color: var(--cw-color-state-warning); min-width: 34px; text-align: center; }
 .slot.cooldown { opacity: 0.55; }
-.submit:disabled { background: #333c52; color: var(--cw-color-text-muted); cursor: not-allowed; }
+.submit:disabled { background: var(--cw-color-border-strong); color: var(--cw-color-text-muted); cursor: not-allowed; }
 </style>

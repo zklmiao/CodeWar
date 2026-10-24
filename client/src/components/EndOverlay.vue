@@ -25,7 +25,7 @@ function deltaText(before: number, after: number): string {
 </script>
 
 <template>
-  <div v-if="store.isEnded" class="overlay">
+  <div v-if="store.isEnded" class="overlay" data-testid="match-end">
     <div class="card">
       <h2>{{ title }}</h2>
       <p>{{ reasonText }}</p>
@@ -43,17 +43,19 @@ function deltaText(before: number, after: number): string {
 
 <style scoped>
 .overlay {
-  position: fixed; inset: 0; background: rgba(10, 13, 20, 0.8);
+  position: fixed; inset: 0; background: var(--cw-color-bg-scrim);
   display: flex; align-items: center; justify-content: center;
+  /* 22 号票：补齐 z-index（教程局终局时须压过 z-10 的教程完成页，见 --cw-z-modal） */
+  z-index: var(--cw-z-modal);
 }
 .card {
-  background: #1a2030; padding: 32px 48px; border-radius: 14px;
-  text-align: center; color: #dfe4ee;
+  background: var(--cw-color-bg-surface); padding: 32px 48px; border-radius: 14px;
+  text-align: center; color: var(--cw-color-text-primary);
 }
-.card h2 { font-size: 26px; margin: 0 0 10px; }
-.elo { margin: 12px 0 4px; font-size: 15px; }
+.card h2 { font-size: var(--cw-font-size-xl); margin: 0 0 10px; }
+.elo { margin: 12px 0 4px; font-size: var(--cw-font-size-md); }
 .elorow { display: flex; gap: 10px; justify-content: center; padding: 3px 0; }
-.who { color: #8a93a8; }
-.delta { color: #7fd1a8; }
-.hint { color: #56607a; font-size: 12px; }
+.who { color: var(--cw-color-text-secondary); }
+.delta { color: var(--cw-color-state-success); }
+.hint { color: var(--cw-color-text-muted); font-size: var(--cw-font-size-xs); }
 </style>

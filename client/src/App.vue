@@ -41,12 +41,13 @@ async function logout() {
 
 <style>
 * { box-sizing: border-box; }
-body { margin: 0; background: #10141f; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+/* body 背景对齐 --cw-color-bg-base（22 号票：原 body 裸背景色退役，token 为准） */
+body { margin: 0; background: var(--cw-color-bg-base); font-family: var(--cw-font-sans); }
 .page { max-width: 960px; margin: 0 auto; padding: 16px; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-h1 { font-size: 20px; color: #dfe4ee; margin: 0; }
-h1 small { color: #56607a; font-size: 12px; font-weight: 400; margin-left: 8px; }
-nav { display: flex; gap: 16px; font-size: 14px; }
-nav a { color: #8a93a8; text-decoration: none; }
-nav a.router-link-active { color: #7fd1a8; }
+h1 { font-size: var(--cw-font-size-lg); color: var(--cw-color-text-primary); margin: 0; }
+h1 small { color: var(--cw-color-text-muted); font-size: var(--cw-font-size-xs); font-weight: 400; margin-left: 8px; }
+nav { display: flex; gap: 16px; font-size: var(--cw-font-size-sm); }
+nav a { color: var(--cw-color-text-secondary); text-decoration: none; }
+nav a.router-link-active { color: var(--cw-color-state-success); }
 </style>

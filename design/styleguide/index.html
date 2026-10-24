@@ -72,6 +72,11 @@
   .sg-swatch--class-warrior .sg-swatch__chip { background: var(--cw-color-class-warrior); }
   .sg-swatch--class-mage    .sg-swatch__chip { background: var(--cw-color-class-mage); }
   .sg-swatch--class-ranger  .sg-swatch__chip { background: var(--cw-color-class-ranger); }
+  /* 22 号票增补（登记见 004 §2） */
+  .sg-swatch--seat-p1       .sg-swatch__chip { background: var(--cw-color-seat-p1); }
+  .sg-swatch--seat-p2       .sg-swatch__chip { background: var(--cw-color-seat-p2); }
+  .sg-swatch--bg-target     .sg-swatch__chip { background: var(--cw-color-bg-target); }
+  .sg-swatch--bg-scrim      .sg-swatch__chip { background: var(--cw-color-bg-scrim); }
 
   /* 字号 / 间距 / 圆角 样本 */
   .sg-type > div { display: flex; align-items: baseline; gap: var(--cw-space-4); margin-bottom: var(--cw-space-2); }
@@ -148,7 +153,13 @@
     <div class="sg-swatch sg-swatch--class-warrior"><i class="sg-swatch__chip"></i><code>--cw-color-class-warrior</code></div>
     <div class="sg-swatch sg-swatch--class-mage"><i class="sg-swatch__chip"></i><code>--cw-color-class-mage</code></div>
     <div class="sg-swatch sg-swatch--class-ranger"><i class="sg-swatch__chip"></i><code>--cw-color-class-ranger</code></div>
+    <div class="sg-swatch sg-swatch--seat-p1"><i class="sg-swatch__chip"></i><code>--cw-color-seat-p1</code></div>
+    <div class="sg-swatch sg-swatch--seat-p2"><i class="sg-swatch__chip"></i><code>--cw-color-seat-p2</code></div>
+    <div class="sg-swatch sg-swatch--bg-target"><i class="sg-swatch__chip"></i><code>--cw-color-bg-target</code></div>
+    <div class="sg-swatch sg-swatch--bg-scrim"><i class="sg-swatch__chip"></i><code>--cw-color-bg-scrim</code></div>
   </div>
+
+  <p class="sg-sub">层级（22 号票增补第六族）：<code>--cw-z-overlay</code> = 10（教程完成页）· <code>--cw-z-modal</code> = 20（终局结算，须压过教程完成页）。</p>
 
   <div class="sg-type">
     <div><code>--cw-font-size-xs~xxl</code></div>

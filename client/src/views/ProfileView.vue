@@ -57,19 +57,19 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.profile { max-width: 640px; margin: 24px auto; color: #dfe4ee; }
+.profile { max-width: 640px; margin: 24px auto; color: var(--cw-color-text-primary); }
 .profile h2 { margin: 0; }
-.elo { font-size: 22px; color: #7fd1a8; margin: 6px 0; }
-.stats { color: #8a93a8; font-size: 14px; }
-.profile h3 { margin-top: 20px; font-size: 16px; }
-.empty { color: #56607a; font-size: 13px; }
+.elo { font-size: var(--cw-font-size-xl); color: var(--cw-color-state-success); margin: 6px 0; }
+.stats { color: var(--cw-color-text-secondary); font-size: var(--cw-font-size-sm); }
+.profile h3 { margin-top: 20px; font-size: var(--cw-font-size-md); }
+.empty { color: var(--cw-color-text-muted); font-size: var(--cw-font-size-sm); }
 .recent { list-style: none; padding: 0; }
 .recent li {
   display: flex; gap: 12px; padding: 8px 12px; margin-bottom: 6px;
-  background: #1a2030; border-radius: 8px; font-size: 14px;
+  background: var(--cw-color-bg-surface); border-radius: 8px; font-size: var(--cw-font-size-sm);
 }
 .outcome { font-weight: bold; min-width: 1.2em; }
-.elo-delta { margin-left: auto; color: #8a93a8; }
-.error { color: #e08080; font-size: 13px; }
-a { color: #7fd1a8; }
+.elo-delta { margin-left: auto; color: var(--cw-color-text-secondary); }
+.error { color: var(--cw-color-state-danger); font-size: var(--cw-font-size-sm); }
+a { color: var(--cw-color-state-success); }
 </style>
