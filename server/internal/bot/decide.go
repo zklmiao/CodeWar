@@ -126,8 +126,9 @@ func EffectiveReach(c classes.Class, s classes.Skill, hasSkill, skillReady bool)
 // ApproachMove：超距回合的接近落点（确定性纯函数，不消耗随机流，裁决 3）。
 //
 // 方向 = 朝对手的主轴（|Δrow| ≥ |Δcol| 取行轴，否则列轴，与引擎自动瞄准
-// 同构，裁决 2）；候选 = 该方向 1..moveMax 步的合法落点（边界、终点被占、
-// 距离 2 不穿人，与 LegalMoves/引擎 validateMove 同语义）。选择规则：
+// 同构，裁决 2）；候选 = LegalMoves 中该方向上的合法落点——边界、终点被占、
+// 距离 2 不穿人规则以 LegalMoves 为单一来源（其与引擎 validateMove 的同语义
+// 由 TestLegalMovesAcceptedByEngine 钉住），本函数不另抄一份。选择规则：
 //   - 存在"移动后与对手距离 ≤ reach"的落点时，取步数最小的一个——进入射程
 //     即停在射程边缘，不贴脸（保持设计 003 §5 的走位博弈语义）；
 //   - 整段轴都进不了射程（对手太远、一格接近不了）时，取移动后距离最小的
@@ -139,19 +140,12 @@ func ApproachMove(from, opp match.Pos, moveMax, reach int) (match.Pos, bool) {
 	best, bestDist := match.Pos{}, -1
 	var inRange match.Pos
 	hasInRange := false
-	for step := 1; step <= moveMax; step++ {
-		to := match.Pos{Row: from.Row + dr*step, Col: from.Col + dc*step}
-		if to.Row < 0 || to.Row >= match.GridSize || to.Col < 0 || to.Col >= match.GridSize {
-			break // 越过边界后同方向更远的格也非法（与 LegalMoves 一致）
-		}
-		if to == opp {
-			continue // 终点被占：该格非法，但同方向更远仍可尝试
-		}
-		if step == 2 {
-			mid := match.Pos{Row: from.Row + dr, Col: from.Col + dc}
-			if mid == opp {
-				continue
-			}
+	for _, to := range LegalMoves(from, opp, moveMax) {
+		sr, sc := to.Row-from.Row, to.Col-from.Col
+		// 只保留主轴方向上的落点（主轴分量同号且另一分量为零）；
+		// LegalMoves 按方向升序产出，步数最小者优先的取法在此天然成立。
+		if !((dc == 0 && sc == 0 && sr*dr > 0) || (dr == 0 && sr == 0 && sc*dc > 0)) {
+			continue
 		}
 		d := manhattan(to, opp)
 		if d <= reach && !hasInRange {
