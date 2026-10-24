@@ -4,15 +4,15 @@
 
 **Blocked by:** 无
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `store` / `accounts` / `hub` 各用独立测试库（如 `codewar_test_store` / `codewar_test_accounts` / `codewar_test_hub`）
-- [ ] 共享 `server/internal/testdb` 辅助：解析 `CODEWAR_TEST_DSN` → 校验源库名含 `test` → 目标库不存在则 `CREATE DATABASE` → 返回目标 DSN；由调用方 `store.Open` 自动迁移
-- [ ] 带 `CODEWAR_TEST_DSN` 直接 `go test ./...` 连续 5 次并行全绿，无需 `-p 1`
-- [ ] 无 DSN 时仍按既有约定 `t.Skip`（CI 无 DB 保持绿）
-- [ ] 库名必须含 `test` 的破坏性护栏保留（源 DSN 不满足即 skip）
-- [ ] 无生产代码行为变化（辅助包只被测试 import）
-- [ ] README 或 `docs/agents/issue-tracker.md` 记录测试库命名约定
+- [x] `store` / `accounts` / `hub` 各用独立测试库（如 `codewar_test_store` / `codewar_test_accounts` / `codewar_test_hub`）
+- [x] 共享 `server/internal/testdb` 辅助：解析 `CODEWAR_TEST_DSN` → 校验源库名含 `test` → 目标库不存在则 `CREATE DATABASE` → 返回目标 DSN；由调用方 `store.Open` 自动迁移
+- [x] 带 `CODEWAR_TEST_DSN` 直接 `go test ./...` 连续 5 次并行全绿，无需 `-p 1`
+- [x] 无 DSN 时仍按既有约定 `t.Skip`（CI 无 DB 保持绿）
+- [x] 库名必须含 `test` 的破坏性护栏保留（源 DSN 不满足即 skip）
+- [x] 无生产代码行为变化（辅助包只被测试 import）
+- [x] README 或 `docs/agents/issue-tracker.md` 记录测试库命名约定
 
 ## 根因（10 号票验收期间记录）
 
