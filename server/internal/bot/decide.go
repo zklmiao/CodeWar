@@ -124,6 +124,7 @@ func EffectiveReach(c classes.Class, s classes.Skill, hasSkill, skillReady bool)
 }
 
 // ApproachMove：超距回合的接近落点（确定性纯函数，不消耗随机流，裁决 3）。
+// 三层取法的语义出处 = ADR-0007（架构师已裁定"跨回合最大进度"读法）。
 //
 // 方向 = 朝对手的主轴（|Δrow| ≥ |Δcol| 取行轴，否则列轴，与引擎自动瞄准
 // 同构，裁决 2）；候选 = LegalMoves 中该方向上的合法落点——边界、终点被占、
