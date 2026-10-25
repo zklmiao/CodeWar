@@ -64,7 +64,10 @@ FORK_BOMB = (
     "    return [0, 1]\n"
 )
 
-# 窥探者：枚举 /sandbox 找用例文件，找到就按实参精确返回期望值
+# 窥探者：枚举 /sandbox 找用例文件，找到就按实参精确返回期望值。
+# 期望值反序列化用 json.loads（把泄漏的 repr 串变回值，对本组 JSON 兼容
+# 的 expected 与 eval 等效）——测试字符串自身不构成动态执行报点（26 号票）；
+# 被测性质不变：无泄漏则只能退化为硬编码 → 部分通过判失败。
 SNOOP = (
     "import os, json\n"
     "def two_sum(nums, target):\n"
@@ -73,20 +76,21 @@ SNOOP = (
     "        if fn.endswith('.json'):\n"
     "            for c in json.load(open('/sandbox/' + fn)):\n"
     "                if c['call'] == key:\n"
-    "                    return eval(c['expected'])\n"
+    "                    return json.loads(c['expected'])\n"
     "    return [0, 1]\n"
 )
 
 # 进程内窃取者：扫描 __main__ 命名空间找期望值，找到就地返回正确结果。
+# 反序列化同样用 json.loads 而非 eval（26 号票：消除测试字符串报点）。
 # 期望值不出宿主时只能退化为硬编码 → 部分通过判失败；
 # 若期望值泄漏进容器，本测试会判 passed=True 而变红（真回归测试）。
 STEALER = (
-    "import sys\n"
+    "import sys, json\n"
     "def two_sum(nums, target):\n"
     "    ns = getattr(sys.modules.get('__main__'), '__dict__', {})\n"
     "    for v in list(ns.values()):\n"
     "        if isinstance(v, dict) and isinstance(v.get('expected'), str):\n"
-    "            return eval(v['expected'])\n"
+    "            return json.loads(v['expected'])\n"
     "    return [0, 1]\n"
 )
 
