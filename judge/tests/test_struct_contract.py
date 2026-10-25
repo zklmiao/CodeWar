@@ -8,12 +8,13 @@
 - expected 不进容器（test_executor.py::test_calls_payload_has_no_expected 强化版）
 - 题作者代码卫兵（超长/禁用调用/语法错 → judge-error，不注入容器）
 """
+import inspect
 import json
 import time
 
 import pytest
 
-from judgesvc import executor
+from judgesvc import executor, helpers
 
 needs_docker = pytest.mark.skipif(
     not executor.docker_ready(), reason="需要可用的 docker daemon（沙箱判题）",
@@ -23,10 +24,14 @@ needs_docker = pytest.mark.skipif(
 
 
 def _helpers_ns():
-    """在测试进程内 exec 辅助库，返回其 EXPORTS（与容器内同源代码）。"""
-    ns = {}
-    exec(executor._HELPERS, ns)
-    return ns
+    """返回辅助库模块的 EXPORTS（executor._HELPERS 即该模块源码，同源）。"""
+    return helpers.EXPORTS
+
+
+def test_helpers_source_is_module_source():
+    # 注入容器的源码即 judgesvc/helpers.py 的模块源码（单一真相源）：
+    # 任何一侧漂移（手抄副本、改模块未重注入）都会让本测试变红（26 号票）。
+    assert executor._HELPERS == inspect.getsource(helpers)
 
 
 def test_helpers_nodes_roundtrip():
