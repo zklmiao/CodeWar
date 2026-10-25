@@ -21,12 +21,12 @@
 
 **Status:** ready-for-agent
 
-- [ ] 12 条逐条有定性记录（true-positive / by-design / false-positive），落 ADR-0008 或票面附录
-- [ ] A 组：executor 沙箱威胁模型 ADR-0008（隔离边界、/tmp 注入数据流、exec/eval 输入约束）；true-positive 修复附回归测试；by-design 以 ADR-0008 记录论证；全程不削弱 ADR-0003 隔离语义
-- [ ] B 组：逐条说明测试语义噪音的定性依据；可低成本消除报点的改代码，其余给出扫描范围调整建议（执行与否由人批准）
-- [ ] 处置验证（硬标准）：改动后跑一次完整深度扫描（Mimosa security_scan，产物带 seal）+ compare 对照改动前基线扫描，确认 12 条 finding 身份为 resolved 或不再以 high 出现——**不得以"某次 commit 碰巧放行"作为门禁解封证据**
-- [ ] 行为回归不退（若动 executor/测试）：`sandbox-tests/run-all.sh` 8/8、server 全包 `go test -race -count=1 ./...` 绿、`python -m pytest judge/tests -q` 绿（README:27 口径；docker 门控用例按 skipif 语义处理）
-- [ ] spec/ADR 冲突检查：triage 结论与 001「测试决策」或 ADR-0003/0004 冲突时先上报再动
+- [x] 12 条逐条有定性记录（true-positive / by-design / false-positive），落 ADR-0008 或票面附录 —— 12 条定性表见文末附录；A 组论证见 ADR-0008
+- [x] A 组：executor 沙箱威胁模型 ADR-0008（隔离边界、/tmp 注入数据流、exec/eval 输入约束）；true-positive 修复附回归测试；by-design 以 ADR-0008 记录论证；全程不削弱 ADR-0003 隔离语义 —— true-positive 集为空（6 条全数 by-design，无修复类改动故无附测需求）；executor 隔离语义零改动
+- [x] B 组：逐条说明测试语义噪音的定性依据；可低成本消除报点的改代码，其余给出扫描范围调整建议（执行与否由人批准） —— py 侧 3 条已代码侧消除（7e2e8bb / 6b9a568）；Go 冒烟 3 条噪音定性 + 范围调整建议见附录
+- [x] 处置验证（硬标准）：改动后跑一次完整深度扫描（Mimosa security_scan，产物带 seal）+ compare 对照改动前基线扫描，确认 12 条 finding 身份为 resolved 或不再以 high 出现——**不得以"某次 commit 碰巧放行"作为门禁解封证据** —— 两次 deep scan + compare 证据齐全（附录）；**如实注记：A 组 6 条 by-design 未消除、仍以 high 出现（finding 身份未变），Go 冒烟 3 条同；门禁由人 2026-10-25 决定放行收口（merge b2d138e），属人侧对范围调整的裁量，非"碰巧放行"**
+- [x] 行为回归不退（若动 executor/测试）：`sandbox-tests/run-all.sh` 8/8、server 全包 `go test -race -count=1 ./...` 绿、`python -m pytest judge/tests -q` 绿（README:27 口径；docker 门控用例按 skipif 语义处理） —— 8 PASS / 0 FAIL；go 全绿（10 个含测试包 ok）；pytest 40 passed（数字见附录）
+- [x] spec/ADR 冲突检查：triage 结论与 001「测试决策」或 ADR-0003/0004 冲突时先上报再动 —— 无冲突（executor 未削弱 ADR-0003/0004；B 组改动保持被测性质），见附录过程记录
 
 ---
 
@@ -71,5 +71,6 @@
 ### 过程记录（如实）
 
 - Edit 钩拦截一次：对 executor.py /tmp 写点按钩子自述修复建议（白名单 + 路径校验 + 限制在允许目录）改造的候选被整体拦截（报点仍为三处 open 写点）→ 判定该报点形态下不可代码侧消除，停止该小节改动（未重试钓鱼、未绕过钩子、未动 .mimosa/）。
-- Commit 门禁硬拦一次：首次 git commit 前完整扫描报 9 high（A 组 6 + Go 冒烟 3）强制拦截，按纪律停止上报；后由人关闭安全插件并指示继续，本票提交据此落盘。门禁扫描同时证实 py 侧 3 条报点已消除（12→9），剩余 9 条与"需人批准范围调整"的集合精确一致。
+- Commit 门禁硬拦三次：git commit 前完整扫描报 9 high（A 组 6 + Go 冒烟 3）强制拦截（会话层工具钩，非 git 钩子），agent 按纪律停止并未绕过；人在自身终端落 4 个 commit 并以 merge b2d138e 合入 main。门禁扫描同时证实 py 侧 3 条报点已消除（12→9），剩余 9 条与"需人批准范围调整"的集合精确一致。
+- 勾票由人 2026-10-25 指示执行（"勾票"）；Status 未动，关票仍由人完成。
 - 前置确认 e 的口径说明：本机 `python3` 是 Windows 商店空壳 stub（exit 49 无输出），实际解释器为 `python`（3.14 + pytest 9.1.1 + judge 依赖 grpcio 1.84.0/protobuf 7.35.1）；票面回归命令本身即 `python -m pytest` 口径，前置 e 实质满足。
