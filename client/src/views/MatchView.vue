@@ -15,6 +15,7 @@ import { socket } from "../api/socket";
 import GameGrid from "../components/GameGrid.vue";
 import HpBar from "../components/HpBar.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
+import RoundStatusBar from "../components/RoundStatusBar.vue";
 import EventLog from "../components/EventLog.vue";
 import EndOverlay from "../components/EndOverlay.vue";
 import TutorialGoals from "../components/TutorialGoals.vue";
@@ -196,6 +197,9 @@ watch(
 <template>
   <div>
     <HpBar v-if="viewer" />
+    <!-- 24 号票：回合状态 sticky 条（HpBar 下方）——滚动时倒计时始终在场；
+         回合未开启不渲染（与原面板头部"等待对局开始…"语义一致） -->
+    <RoundStatusBar v-if="viewer && store.isRoundActive" />
 
     <main v-if="viewer">
       <div v-if="joinError" class="banner error">{{ joinError }}（<a href="/">返回入口</a>）</div>
@@ -207,8 +211,9 @@ watch(
           <GameGrid />
           <EventLog />
         </div>
-        <!-- 23 号票：右栏 = 题区容器（24 号票题卡+主工作区落位处，不预造）；
-             10 号票：教程目标清单仍在题区顶部（服务端事件驱动点亮，非教程不渲染） -->
+        <!-- 23 号票：右栏 = 题区容器；24 号票落位题卡 + 主工作区（回合状态已在上方
+             sticky 条）。10 号票：教程目标清单仍在题区顶部（服务端事件驱动点亮，
+             非教程不渲染） -->
         <div class="right-col">
           <TutorialGoals v-if="isTutorial" />
           <QuestionPanel :slots="isTutorial ? store.tutorial?.slots ?? [] : undefined" />
@@ -341,10 +346,14 @@ watch(
 <style>
 .cols { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
 /* 23 号票：左栏 = 棋盘上 + 日志下。宽度跟随棋盘自然尺寸（页宽增量让给右栏）；
-   align-self: stretch 拉到与右栏等高，EventLog 的 flex 弹性高度才有富余可吃。 */
+   align-self: stretch 拉到与右栏等高，EventLog 的 flex 弹性高度才有富余可吃。
+   24 号票：左栏加视口余量上限——日志内容超长时在本栏内滚动而不是把页面顶出
+   一屏（验收锚点 1366×768 无页面级滚动；160px = 页首头部/血条/状态条/页边留白与
+   .cols 下边距的实测占位，日志 flex:1 + overflow-y:auto 在上限内弹性收缩）。 */
 .left-col {
   display: flex; flex-direction: column; gap: var(--cw-space-4);
   align-self: stretch;
+  max-height: calc(100vh - 160px);
 }
 .banner {
   background: var(--cw-color-state-warning); color: var(--cw-color-bg-inset); padding: var(--cw-space-2) var(--cw-space-4);

@@ -143,29 +143,35 @@ describe("20 技能槽灰置随事件推导刷新（组件挂载）", () => {
     const s = useMatchStore();
     seedMatch(s);
     const wrapper = await mountPanel();
-    const slot = wrapper.find(".slot.skill");
+    // 24 号票题卡范式选择器迁移：.slot.skill → [data-testid="qcard-skill"]、
+    // .submit.skl → [data-testid="submit-skill"]（提交按钮在激活卡的主工作区，
+    // 先点卡激活）；cooldown 类与灰置/递减/恢复文案断言原样保留。
+    const slot = wrapper.find('[data-testid="qcard-skill"]');
+    expect(slot.exists()).toBe(true);
+    await slot.trigger("click");
+    await nextTick();
     expect(slot.classes()).not.toContain("cooldown");
-    expect(wrapper.find(".submit.skl").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find('[data-testid="submit-skill"]').attributes("disabled")).toBeUndefined();
 
     // R1 释放 → 灰置 4 回合
     s.applyEnvelope(judgedSkill(1, "p1", true));
     await nextTick();
     expect(slot.classes()).toContain("cooldown");
     expect(slot.text()).toContain("冷却中（还剩 4 回合）");
-    expect(wrapper.find(".submit.skl").attributes("disabled")).toBeDefined();
+    expect(wrapper.find('[data-testid="submit-skill"]').attributes("disabled")).toBeDefined();
 
-    // R2 roundStarted → 剩 3（面板虽为 null，槽头倒计时照常刷新）
+    // R2 roundStarted → 剩 3（面板虽为 null，卡片冷却角标/文案照常刷新）
     s.applyEnvelope(Envelope.fromJSON(envelope(2, "roundStarted", { round: 2, deadlineUnixMs: "999" })));
     await nextTick();
     expect(slot.text()).toContain("还剩 3 回合");
-    expect(wrapper.find(".submit.skl").attributes("disabled")).toBeDefined();
+    expect(wrapper.find('[data-testid="submit-skill"]').attributes("disabled")).toBeDefined();
 
     // 冷却结束（round ≥ cdUntil）→ 灰置解除、恢复可点
     s.applyEnvelope(Envelope.fromJSON(envelope(3, "roundStarted", { round: 5, deadlineUnixMs: "999" })));
     await nextTick();
     expect(slot.classes()).not.toContain("cooldown");
     expect(slot.text()).toContain("就绪");
-    expect(wrapper.find(".submit.skl").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find('[data-testid="submit-skill"]').attributes("disabled")).toBeUndefined();
     wrapper.unmount();
   });
 });
