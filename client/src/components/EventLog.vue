@@ -14,8 +14,10 @@ const store = useMatchStore();
 
 <style scoped>
 .log {
-  /* 22 号票：日志为等宽数值语境 → --cw-font-mono；字号 13px 归入 sm 档 */
-  height: 150px; overflow-y: auto; background: var(--cw-color-bg-surface);
+  /* 23 号票：固定 150px 改 flex 弹性高度——左栏内 flex:1 吃掉棋盘以下富余（右栏
+     更高则日志随之变高），min-height 150px 保底，窄屏/短题面下日志头部不消失；
+     内部滚动行为不变。22 号票：日志为等宽数值语境 → --cw-font-mono；字号 13px 归入 sm 档 */
+  flex: 1; min-height: 150px; overflow-y: auto; background: var(--cw-color-bg-surface);
   border-radius: 8px; padding: 8px 12px; font-size: var(--cw-font-size-sm);
   font-family: var(--cw-font-mono);
   color: var(--cw-color-text-secondary);
