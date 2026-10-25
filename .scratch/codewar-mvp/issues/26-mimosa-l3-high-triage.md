@@ -19,7 +19,7 @@
 
 **Blocked by:** None（可立即开工；23 号票的关票/合并等本票解封或人另行授权）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] 12 条逐条有定性记录（true-positive / by-design / false-positive），落 ADR-0008 或票面附录 —— 12 条定性表见文末附录；A 组论证见 ADR-0008
 - [x] A 组：executor 沙箱威胁模型 ADR-0008（隔离边界、/tmp 注入数据流、exec/eval 输入约束）；true-positive 修复附回归测试；by-design 以 ADR-0008 记录论证；全程不削弱 ADR-0003 隔离语义 —— true-positive 集为空（6 条全数 by-design，无修复类改动故无附测需求）；executor 隔离语义零改动
@@ -74,3 +74,10 @@
 - Commit 门禁硬拦三次：git commit 前完整扫描报 9 high（A 组 6 + Go 冒烟 3）强制拦截（会话层工具钩，非 git 钩子），agent 按纪律停止并未绕过；人在自身终端落 4 个 commit 并以 merge b2d138e 合入 main。门禁扫描同时证实 py 侧 3 条报点已消除（12→9），剩余 9 条与"需人批准范围调整"的集合精确一致。
 - 勾票由人 2026-10-25 指示执行（"勾票"）；Status 未动，关票仍由人完成。
 - 前置确认 e 的口径说明：本机 `python3` 是 Windows 商店空壳 stub（exit 49 无输出），实际解释器为 `python`（3.14 + pytest 9.1.1 + judge 依赖 grpcio 1.84.0/protobuf 7.35.1）；票面回归命令本身即 `python -m pytest` 口径，前置 e 实质满足。
+
+### 门禁豁免决定（2026-10-25，人批准；关票依据）
+
+- **批准范围**：(i) judge/judgesvc/executor.py 沙箱模板内的 open 写点（/tmp 注入）与 exec/eval——path-traversal（CWE-22）与 code-injection（CWE-95）按「文件 + 规则」豁免，威胁模型依据 ADR-0008；(ii) 测试文件 judge/tests/*、server/**/*_test.go 的 CWE-95/CWE-78 规则级排除（或逐文件豁免 realjudge_test.go / registry_test.go）。
+- **决定效力**：A 组 6 条 = by-design、残余风险由项目所有人接受——扫描层仍会以 high 出现（豁免是门禁层策略，非 finding 消除）；B 组 3 条已代码侧消除、3 条随豁免接受。验收第 4 项的"门禁解封"以人批准的豁免达成，非"碰巧放行"。
+- **落地事实（只读核查）**：插件当前整体关闭（人操作）；1.0.4 的 hooks.json / run-hook.cjs 无用户侧豁免配置面（exempt/suppress/allowlist 零命中）——豁免随复启生效需上游配置支持或本地补丁，属插件层、不在本票范围。复启形态建议序：带豁免重启 > 保持关闭 > 无豁免开启（A 组会再拦）。
+- **复启后首次扫描预期**：A 组 6 条仍 high（by-design 已接受）；B 组 py 侧 3 条应消失（已消除），Go 冒烟 3 条视豁免覆盖而定。
