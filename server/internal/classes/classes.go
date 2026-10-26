@@ -35,6 +35,107 @@ const (
 	DirRight = "right"
 )
 
+// ===== 形状语义：targeting 需方向/需距离的唯一判定（27 号票） =====
+// 引擎普攻/技能、bot 目标规划、客户端 /api/classes 全部消费本判定；新增形状
+// 只改 SemanticsForShape 一处，杜绝「客户端可选方向与服务端判定不一致」。
+
+// TargetingSemantics：形状对 targeting 的要求 + 几何参数。
+// 语义（需方向/需距离）只由形状决定；depth/range 由职业/技能表提供。
+type TargetingSemantics struct {
+	NeedsDirection bool
+	NeedsDistance  bool
+	Depth          int32
+	RangeMax       int32
+}
+
+// SemanticsForShape：形状 → 目标选择语义。
+//
+//	melee / burst8 / self：方向无关，无距离（近战邻域/全邻域/自身）
+//	line / band：需方向，无距离（线扫/横带由 depth 决定纵深）
+//	snipe：需方向 + 需距离（点狙）
+//
+// 未知形状按无目标选择处理（fail-closed，与 bot 旧分支一致）。
+func SemanticsForShape(shape string) TargetingSemantics {
+	switch shape {
+	case ShapeLine, ShapeBand:
+		return TargetingSemantics{NeedsDirection: true}
+	case ShapeSnipe:
+		return TargetingSemantics{NeedsDirection: true, NeedsDistance: true}
+	}
+	return TargetingSemantics{}
+}
+
+// NeedsDirection：该形状是否需要方向 targeting。
+func NeedsDirection(shape string) bool { return SemanticsForShape(shape).NeedsDirection }
+
+// NeedsDistance：该形状是否需要距离 targeting（点狙）。
+func NeedsDistance(shape string) bool { return SemanticsForShape(shape).NeedsDistance }
+
+// AttackSemantics：普攻的 targeting 语义（形状判定 + 职业表 depth/range）。
+func AttackSemantics(c Class) TargetingSemantics {
+	sem := SemanticsForShape(c.AttackShape)
+	sem.Depth, sem.RangeMax = c.AttackDepth, c.AttackRange
+	return sem
+}
+
+// SkillSemantics：技能的 targeting 语义（形状判定 + 技能表 depth/range）。
+func SkillSemantics(sk Skill) TargetingSemantics {
+	sem := SemanticsForShape(sk.Shape)
+	sem.Depth, sem.RangeMax = sk.Depth, sk.RangeMax
+	return sem
+}
+
+// ClampSnipeDistance：点狙距离钳到 [1, rangeMax] 的唯一实现
+// （引擎覆盖格/目标补齐、bot 规划共用；rangeMax<=0 = 不设上限）。
+func ClampSnipeDistance(distance int, rangeMax int32) int {
+	if distance < 1 {
+		distance = 1
+	}
+	if rangeMax > 0 && distance > int(rangeMax) {
+		distance = int(rangeMax)
+	}
+	return distance
+}
+
+// DirectionDelta：方向值 → 每步行列增量；非法/空方向返回 (0,0)。
+func DirectionDelta(dir string) (dr, dc int) {
+	switch dir {
+	case DirUp:
+		return -1, 0
+	case DirDown:
+		return 1, 0
+	case DirLeft:
+		return 0, -1
+	case DirRight:
+		return 0, 1
+	}
+	return 0, 0
+}
+
+// AxisDirection：相对位移 → 朝目标的主轴方向与轴向格距
+// （|Δrow| ≥ |Δcol| 取行轴，否则列轴；引擎自动瞄准与 bot 规划共用）。
+// 同格退化 (right, 0)——对局中双方不可能同格，保留 bot 纯函数的既有契约。
+func AxisDirection(dRow, dCol int) (dir string, steps int) {
+	absRow, absCol := dRow, dCol
+	if absRow < 0 {
+		absRow = -absRow
+	}
+	if absCol < 0 {
+		absCol = -absCol
+	}
+	switch {
+	case dRow > 0 && absRow >= absCol:
+		return DirDown, absRow
+	case dRow < 0 && absRow >= absCol:
+		return DirUp, absRow
+	case dCol > 0:
+		return DirRight, absCol
+	case dCol < 0:
+		return DirLeft, absCol
+	}
+	return DirRight, 0
+}
+
 // Skill：一个主动技能（设计 003 §4 表的一行）。
 type Skill struct {
 	ID       string `json:"id"`       // 协议内引用名（JoinRequest.skill / 快照 skill_id）
@@ -149,9 +250,49 @@ func ValidateLoadout(classID, skillID string) error {
 }
 
 // HTTPHandler：GET /api/classes —— 客户端职业选择的同源数据（裁决 1）。
+// 载荷在职业/技能数据之上附带形状语义字段（needsDirection/needsDistance），
+// 由 SemanticsForShape 单一判定派生——客户端不再自行按形状名判断
+// （纯 JSON，proto 不变）。
 func HTTPHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(map[string]any{"classes": All()})
+		all := All()
+		views := make([]classJSON, 0, len(all))
+		for _, c := range all {
+			atk := SemanticsForShape(c.AttackShape)
+			skills := make([]skillJSON, 0, len(c.Skills))
+			for _, sk := range c.Skills {
+				sem := SemanticsForShape(sk.Shape)
+				skills = append(skills, skillJSON{
+					Skill:          sk,
+					NeedsDirection: sem.NeedsDirection,
+					NeedsDistance:  sem.NeedsDistance,
+				})
+			}
+			views = append(views, classJSON{
+				Class:                c,
+				AttackNeedsDirection: atk.NeedsDirection,
+				AttackNeedsDistance:  atk.NeedsDistance,
+				Skills:               skills,
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"classes": views})
 	}
+}
+
+// skillJSON：技能载荷 = 技能表数据 + 形状语义（嵌入字段在 JSON 中平铺）。
+type skillJSON struct {
+	Skill
+	NeedsDirection bool `json:"needsDirection"`
+	NeedsDistance  bool `json:"needsDistance"`
+}
+
+// classJSON：职业载荷 = 职业表数据 + 普攻形状语义 + 带语义的技能列表。
+// 外层 Skills 遮蔽嵌入 Class 的同名字段（encoding/json 取浅层），确保每个技能
+// 条目都携带语义字段。
+type classJSON struct {
+	Class
+	AttackNeedsDirection bool        `json:"attackNeedsDirection"`
+	AttackNeedsDistance  bool        `json:"attackNeedsDistance"`
+	Skills               []skillJSON `json:"skills"`
 }

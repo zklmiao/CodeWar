@@ -423,11 +423,12 @@ func (e *Engine) resolveRound() {
 			}}})
 		case ActionAttack:
 			// 06 号票：普攻形状与数值来自职业表（裁决 1），方向/距离 targeting
-			// 结算时读取最新值（未提交走自动瞄准，裁决 3）
+			// 结算时读取最新值（未提交走自动瞄准，裁决 3）。需方向/需距离由形状
+			// 语义唯一判定（27 号票：melee 不再走无效的方向分支）。
 			cls := e.cls[p]
-			needsDist := cls.AttackShape == classes.ShapeSnipe
-			t := e.effectiveTargeting(p, true, needsDist, cls.AttackRange)
-			cells := coverageCells(e.pos[p], cls.AttackShape, cls.AttackDepth, cls.AttackRange, t)
+			sem := classes.AttackSemantics(cls)
+			t := e.effectiveTargeting(p, sem)
+			cells := coverageCells(e.pos[p], cls.AttackShape, sem.Depth, sem.RangeMax, t)
 			target := other(p)
 			if !cells[e.pos[target]] {
 				// 走位闪避：无伤害、无 HpChanged（验收 3）
@@ -453,10 +454,9 @@ func (e *Engine) resolveRound() {
 			// 未命中（形状覆盖判定）→ 伤害/汲取自疗都不发生，治疗系无目标概念）
 			sk := e.equipped[p]
 			target := other(p)
-			needsDir := sk.Shape != classes.ShapeBurst8 && sk.Shape != classes.ShapeSelf
-			needsDist := sk.Shape == classes.ShapeSnipe
-			t := e.effectiveTargeting(p, needsDir, needsDist, sk.RangeMax)
-			cells := coverageCells(e.pos[p], sk.Shape, sk.Depth, sk.RangeMax, t)
+			sem := classes.SkillSemantics(sk)
+			t := e.effectiveTargeting(p, sem)
+			cells := coverageCells(e.pos[p], sk.Shape, sem.Depth, sem.RangeMax, t)
 			hit := cells[e.pos[target]]
 			switch sk.Kind {
 			case classes.KindDamage:

@@ -12,6 +12,9 @@ export interface SkillView {
   shape: string; // melee | line | snipe | burst8 | band | self
   depth: number;
   rangeMax: number;
+  // 形状语义（27 号票）：由服务端 classes 包唯一判定下发，客户端不再自行判形状。
+  needsDirection: boolean;
+  needsDistance: boolean;
 }
 
 export interface ClassView {
@@ -22,6 +25,8 @@ export interface ClassView {
   attackShape: string;
   attackDepth: number;
   attackRange: number;
+  attackNeedsDirection: boolean; // 普攻形状语义（同上，服务端下发）
+  attackNeedsDistance: boolean;
   moveMax: number;
   color: string;
   skills: SkillView[];

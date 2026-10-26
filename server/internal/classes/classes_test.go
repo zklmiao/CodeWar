@@ -102,6 +102,131 @@ func TestValidateLoadout(t *testing.T) {
 	}
 }
 
+// 形状语义唯一判定（27 号票）：六形状 × (需方向/需距离)；未知形状 fail-closed。
+func TestShapeSemantics(t *testing.T) {
+	cases := []struct {
+		shape string
+		dir   bool
+		dist  bool
+	}{
+		{ShapeMelee, false, false},  // 相邻正交 4 格：方向无关
+		{ShapeBurst8, false, false}, // 3×3 全邻域：方向无关
+		{ShapeSelf, false, false},   // 自身：无目标选择
+		{ShapeLine, true, false},    // 线扫：仅方向（纵深由 depth 提供）
+		{ShapeBand, true, false},    // 横带：仅方向（纵深由 depth 提供）
+		{ShapeSnipe, true, true},    // 点狙：方向 + 距离
+		{"unknown", false, false},   // 未知形状：无目标选择（fail-closed）
+	}
+	for _, c := range cases {
+		if got := NeedsDirection(c.shape); got != c.dir {
+			t.Fatalf("%s NeedsDirection=%v，期望 %v", c.shape, got, c.dir)
+		}
+		if got := NeedsDistance(c.shape); got != c.dist {
+			t.Fatalf("%s NeedsDistance=%v，期望 %v", c.shape, got, c.dist)
+		}
+		sem := SemanticsForShape(c.shape)
+		if sem.NeedsDirection != c.dir || sem.NeedsDistance != c.dist {
+			t.Fatalf("%s SemanticsForShape 与便捷判定不一致：%+v", c.shape, sem)
+		}
+	}
+}
+
+// 语义携带几何参数：普攻/技能从各自表取 depth/range（engine 消费口径）。
+func TestSemanticsCarryDepthAndRange(t *testing.T) {
+	mage, _ := ByID("mage")
+	if sem := AttackSemantics(mage); !sem.NeedsDirection || sem.NeedsDistance ||
+		sem.Depth != 2 || sem.RangeMax != 0 {
+		t.Fatalf("法师普攻语义应为 方向+深度2，实际 %+v", sem)
+	}
+	ranger, _ := ByID("ranger")
+	if sem := AttackSemantics(ranger); !sem.NeedsDirection || !sem.NeedsDistance ||
+		sem.Depth != 0 || sem.RangeMax != 3 {
+		t.Fatalf("游侠普攻语义应为 方向+距离(≤3)，实际 %+v", sem)
+	}
+	pierce, ok, err := SkillByID("ranger", "pierce")
+	if err != nil || !ok {
+		t.Fatalf("pierce 应存在：ok=%v err=%v", ok, err)
+	}
+	if sem := SkillSemantics(pierce); !sem.NeedsDirection || !sem.NeedsDistance ||
+		sem.Depth != 0 || sem.RangeMax != 4 {
+		t.Fatalf("穿云箭语义应为 方向+距离(≤4)，实际 %+v", sem)
+	}
+	firestorm, ok, err := SkillByID("mage", "firestorm")
+	if err != nil || !ok {
+		t.Fatalf("firestorm 应存在：ok=%v err=%v", ok, err)
+	}
+	if sem := SkillSemantics(firestorm); !sem.NeedsDirection || sem.NeedsDistance ||
+		sem.Depth != 2 || sem.RangeMax != 0 {
+		t.Fatalf("烈焰风暴语义应为 方向+深度2，实际 %+v", sem)
+	}
+	windheal, ok, err := SkillByID("ranger", "windheal")
+	if err != nil || !ok {
+		t.Fatalf("windheal 应存在：ok=%v err=%v", ok, err)
+	}
+	if sem := SkillSemantics(windheal); sem.NeedsDirection || sem.NeedsDistance {
+		t.Fatalf("风行回复不应需要目标选择，实际 %+v", sem)
+	}
+}
+
+// ClampSnipeDistance：唯一钳制实现（低于 1 → 1；超射程 → 射程；rangeMax=0 不设上限）。
+func TestClampSnipeDistance(t *testing.T) {
+	cases := []struct {
+		dist, want int
+		rangeMax   int32
+	}{
+		{0, 1, 3},
+		{-2, 1, 3},
+		{2, 2, 3},
+		{4, 3, 3},
+		{9, 4, 4},
+		{5, 5, 0},
+	}
+	for _, c := range cases {
+		if got := ClampSnipeDistance(c.dist, c.rangeMax); got != c.want {
+			t.Fatalf("ClampSnipeDistance(%d,%d)=%d，期望 %d", c.dist, c.rangeMax, got, c.want)
+		}
+	}
+}
+
+// AxisDirection / DirectionDelta：主轴裁决与方向增量的唯一实现。
+func TestAxisDirectionAndDelta(t *testing.T) {
+	cases := []struct {
+		dRow, dCol int
+		wantDir    string
+		wantSteps  int
+	}{
+		{2, 1, DirDown, 2},
+		{-2, 1, DirUp, 2},
+		{1, 2, DirRight, 2},
+		{1, -2, DirLeft, 2},
+		{2, 2, DirDown, 2}, // 平局取行轴
+		{0, 0, DirRight, 0},
+	}
+	for _, c := range cases {
+		dir, steps := AxisDirection(c.dRow, c.dCol)
+		if dir != c.wantDir || steps != c.wantSteps {
+			t.Fatalf("AxisDirection(%d,%d)=(%s,%d)，期望 (%s,%d)",
+				c.dRow, c.dCol, dir, steps, c.wantDir, c.wantSteps)
+		}
+	}
+	for _, c := range []struct {
+		dir    string
+		dr, dc int
+	}{
+		{DirUp, -1, 0},
+		{DirDown, 1, 0},
+		{DirLeft, 0, -1},
+		{DirRight, 0, 1},
+		{"", 0, 0},
+		{"diagonal", 0, 0},
+	} {
+		dr, dc := DirectionDelta(c.dir)
+		if dr != c.dr || dc != c.dc {
+			t.Fatalf("DirectionDelta(%q)=(%d,%d)，期望 (%d,%d)", c.dir, dr, dc, c.dr, c.dc)
+		}
+	}
+}
+
 // /api/classes：JSON 形状（客户端同源数据契约）。
 func TestHTTPHandler(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/classes", nil)
@@ -112,11 +237,15 @@ func TestHTTPHandler(t *testing.T) {
 	}
 	var body struct {
 		Classes []struct {
-			ID     string `json:"id"`
-			HP     int32  `json:"hp"`
-			Skills []struct {
-				ID       string `json:"id"`
-				Cooldown int32  `json:"cooldown"`
+			ID                   string `json:"id"`
+			HP                   int32  `json:"hp"`
+			AttackNeedsDirection bool   `json:"attackNeedsDirection"`
+			AttackNeedsDistance  bool   `json:"attackNeedsDistance"`
+			Skills               []struct {
+				ID             string `json:"id"`
+				Cooldown       int32  `json:"cooldown"`
+				NeedsDirection bool   `json:"needsDirection"`
+				NeedsDistance  bool   `json:"needsDistance"`
 			} `json:"skills"`
 		} `json:"classes"`
 	}
@@ -128,5 +257,30 @@ func TestHTTPHandler(t *testing.T) {
 	}
 	if body.Classes[0].ID != "warrior" || body.Classes[0].Skills[0].ID != "cleave" {
 		t.Fatalf("首个职业应为剑士且首个技能为巨力斩：%+v", body.Classes[0])
+	}
+	// 形状语义字段（27 号票）：客户端 aimShape 直接读，不再自行按形状名判断。
+	byID := map[string]int{}
+	for i, c := range body.Classes {
+		byID[c.ID] = i
+	}
+	warrior, mage, ranger := body.Classes[byID["warrior"]], body.Classes[byID["mage"]], body.Classes[byID["ranger"]]
+	if warrior.AttackNeedsDirection || warrior.AttackNeedsDistance {
+		t.Fatalf("剑士普攻（melee）不应需要方向/距离：%+v", warrior)
+	}
+	if !mage.AttackNeedsDirection || mage.AttackNeedsDistance {
+		t.Fatalf("法师普攻（line）应仅需方向：%+v", mage)
+	}
+	if !ranger.AttackNeedsDirection || !ranger.AttackNeedsDistance {
+		t.Fatalf("游侠普攻（snipe）应需方向+距离：%+v", ranger)
+	}
+	skillByID := map[string]int{}
+	for i, s := range ranger.Skills {
+		skillByID[s.ID] = i
+	}
+	if s := ranger.Skills[skillByID["pierce"]]; !s.NeedsDirection || !s.NeedsDistance {
+		t.Fatalf("穿云箭应需方向+距离：%+v", s)
+	}
+	if s := ranger.Skills[skillByID["windheal"]]; s.NeedsDirection || s.NeedsDistance {
+		t.Fatalf("风行回复不应需要方向/距离：%+v", s)
 	}
 }
