@@ -98,11 +98,13 @@ type Timer interface {
 	Stop() bool
 }
 
-// 结算原因（proto MatchResult.reason）
+// 结算原因（proto MatchResult.reason / MatchEnded.reason）
 const (
 	ReasonKO        = "ko"
 	ReasonSelfKO    = "self-ko"
 	ReasonRoundsCap = "rounds-cap"
+	// 31 号票：投降认输（matches.end_reason 同步注释，列无 CHECK 约束）。
+	ReasonResign = "resign"
 )
 
 // 判题类别

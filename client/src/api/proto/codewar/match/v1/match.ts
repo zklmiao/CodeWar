@@ -357,7 +357,22 @@ export interface ClientMessage {
    * 目标选择（06 号票）：解出攻击/技能题后、结算前可随时提交/修改（免费操作
    * 不耗答题，设计 003 §1）；未提交则结算时走自动瞄准。
    */
-  setTargeting?: SetTargeting | undefined;
+  setTargeting?:
+    | SetTargeting
+    | undefined;
+  /**
+   * 投降认输（31 号票）：活跃对局生效（winner=对方、reason=resign、MatchEnded
+   * 恰好一次）；非活跃对局/已终局/教程局拒绝（不产生任何事件）；重复投降幂等。
+   * ADR-0002 事件流框架内的应用层消息，无新 ADR。
+   */
+  resign?: ResignRequest | undefined;
+}
+
+/**
+ * 投降请求（31 号票）：无字段——玩家身份由连接席位（join 绑定的 player）权威
+ * 决定，请求体不可指定对局或玩家（防代投/错席）。
+ */
+export interface ResignRequest {
 }
 
 export interface SetTargeting {
@@ -3237,7 +3252,7 @@ export const SubmissionRejected: MessageFns<SubmissionRejected> = {
 };
 
 function createBaseClientMessage(): ClientMessage {
-  return { join: undefined, submit: undefined, setTargeting: undefined };
+  return { join: undefined, submit: undefined, setTargeting: undefined, resign: undefined };
 }
 
 export const ClientMessage: MessageFns<ClientMessage> = {
@@ -3250,6 +3265,9 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     }
     if (message.setTargeting !== undefined) {
       SetTargeting.encode(message.setTargeting, writer.uint32(26).fork()).join();
+    }
+    if (message.resign !== undefined) {
+      ResignRequest.encode(message.resign, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -3291,6 +3309,14 @@ export const ClientMessage: MessageFns<ClientMessage> = {
             message.setTargeting = SetTargeting.decode(reader, reader.uint32());
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.resign = ResignRequest.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3312,6 +3338,7 @@ export const ClientMessage: MessageFns<ClientMessage> = {
         : isSet(object.set_targeting)
         ? SetTargeting.fromJSON(object.set_targeting)
         : undefined,
+      resign: isSet(object.resign) ? ResignRequest.fromJSON(object.resign) : undefined,
     };
   },
 
@@ -3325,6 +3352,9 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     }
     if (message.setTargeting !== undefined) {
       obj.setTargeting = SetTargeting.toJSON(message.setTargeting);
+    }
+    if (message.resign !== undefined) {
+      obj.resign = ResignRequest.toJSON(message.resign);
     }
     return obj;
   },
@@ -3343,6 +3373,61 @@ export const ClientMessage: MessageFns<ClientMessage> = {
     message.setTargeting = (object.setTargeting !== undefined && object.setTargeting !== null)
       ? SetTargeting.fromPartial(object.setTargeting)
       : undefined;
+    message.resign = (object.resign !== undefined && object.resign !== null)
+      ? ResignRequest.fromPartial(object.resign)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseResignRequest(): ResignRequest {
+  return {};
+}
+
+export const ResignRequest: MessageFns<ResignRequest> = {
+  encode(_: ResignRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResignRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseResignRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): ResignRequest {
+    return {};
+  },
+
+  toJSON(_: ResignRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResignRequest>, I>>(base?: I): ResignRequest {
+    return ResignRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResignRequest>, I>>(_: I): ResignRequest {
+    const message = createBaseResignRequest();
     return message;
   },
 };
