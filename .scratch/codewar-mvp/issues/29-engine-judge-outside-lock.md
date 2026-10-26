@@ -17,7 +17,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] 四条新测试落地；在修复前代码上的失败/通过情况实测并如实记录（测试 1 必须失败）
 - [x] `Submit` 三段拆分落地；既有测试零修改
@@ -27,3 +27,5 @@
 > **改号记录（2026-10-26，人裁决）**：本票开票时按提示词显式路径编号 28（`28-engine-judge-outside-lock.md`），因 28 号已让位给判题伪造票，顺延改号为 **29**（对齐提示词原标号）。修复提交 `6b549db` 标题中的 "ticket 28" 字样不可改，以本记录为准；engine.go / engine_concurrent_test.go 中的旧号自引用已随改号同步修订为 29。
 
 > **交付记录（2026-10-26，勾票）**：`ticket/28-engine-judge-outside-lock` 分支提交 `6b549db`（Submit 三段拆分：锁外取 received → 持锁预检 + `inFlight` 在途去重 → 锁外判题、重持锁落地；过期结果丢弃不发事件不罚；`solveMs = received - roundStart`，锁定起点同用 received）与 `25aea80`（自引用改号）。四条并发测试先写后修：公平性/响应性/过期丢弃在旧代码 2s 超时必败，`inFlight` 去重在旧代码靠锁串行化达成同外观通过（票内注记如实记录）。修复后四条全绿（`-race`，本会话复核）。回归：`go vet ./...` 绿；`go test ./... -count=1` 全绿（templates 冒烟 184.443s）；`go test -race` 三包（match/hub/bot）绿；`gofmt -l` 仅既有 `internal/elo/scale_test.go`（本票未触碰，未顺手修）。裁决落地：过期判题丢弃与 `inFlight` 瞬时窗口、solveSeq 平局按落地序——均经人裁决接受现状；锁序约定与同步返回语义不变（既有测试零修改全绿佐证）。
+
+> **关票记录（2026-10-26，人授权"按建议办"）**：分支（`6b549db` / `25aea80`）以 merge `d2b59d5` 合入 main；合并后回归 `go vet` + `go test -race ./...` 全包 ok（含 templates 冒烟 180.098s）。改号 28→29 与三项裁决（过期判题丢弃 / `inFlight` 瞬时窗口 / solveSeq 落地序）均经人确认生效（见改号记录与交付记录）；worktree 与分支随关票清理。
