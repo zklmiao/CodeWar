@@ -86,6 +86,7 @@ type Engine struct {
 	roundStart time.Time
 	panel      panel
 	actions    map[Player]*pendingAction // 一回合一人一行动
+	inFlight   map[Player]bool           // 29 号票：判题在途（预检登记，落地/丢弃时清除）
 	solveSeq   map[Player]int64          // 同毫秒 tie-break：先来后到
 	solveCnt   int64
 	pos        map[Player]Pos  // 结算位置（跨回合持续，移动题改变）
@@ -115,6 +116,7 @@ func NewEngine(clock Clock, questions QuestionPort, judge JudgePort, broadcast f
 		hp:        map[Player]int32{P1: legacy.HP, P2: legacy.HP},
 		lockUntil: map[Player]time.Time{},
 		actions:   map[Player]*pendingAction{},
+		inFlight:  map[Player]bool{},
 		solveSeq:  map[Player]int64{},
 		// 难度风险系数（05 号票）：缺省 L3 → 1.0（05 之前行为的字节级锚点）
 		riskCoeff: RiskCoeff(0),
@@ -238,26 +240,63 @@ func (e *Engine) currentTimerC() <-chan time.Time {
 	return e.timerC
 }
 
-// Submit：玩家提交（03 号票：带行动选择；06 号票：+技能位）。规则：
-//   - 非法 action / 回合外提交 / 已行动再交 / 对局已结束：静默丢弃（ADR-0002 迟到判无效）
+// submitGate：预检通过后携带的判题上下文（回合号 + 本次要判的题）。
+type submitGate struct {
+	round int
+	q     Question
+}
+
+// Submit：玩家提交（03 号票：带行动选择；06 号票：+技能位；29 号票：判题移出
+// 锁外）。规则：
+//   - 非法 action / 回合外提交 / 已行动再交 / 判题在途再交 / 对局已结束：静默丢弃（ADR-0002 迟到判无效）
 //   - 技能位未装备 / 冷却中：拒绝反馈事件（不判题不惩罚）
 //   - 移动参数非法：拒绝反馈事件（不判题不惩罚，改参数可重交）
 //   - 锁定中提交：只回 locked 事件，不罚不续锁
 //   - 判题失败（wrong-answer/timeout/syntax/runtime-error）：自损 3 + 锁 5 秒
 //   - judge-error：基础设施故障，不罚不锁，可重交
 //   - 通过：记录行动与解题耗时；双方都已行动 → 立即提前结算
+//
+// 并发模型（29 号票，三段式）：① 锁外取提交时刻 received；② 持锁预检并登记
+// 在途；③ 锁外判题，重新加锁落地。Docker 判题（0.2–3s，RPC 上限 16s）不再持
+// 引擎锁——对手提交、SetTargeting、Snapshot（重连）、计时泵 HandleRoundTimeout
+// 在判题期间全部照常工作，后到玩家的排队时间不再被算进 solveMs（spec 用户
+// 故事 12/15/16 镜像竞速公平）。判题期间回合已翻页或对局已结束 → 结果过期
+// 丢弃（不发事件不罚；替代方案"超时等待在途判题"见票据 28 待人裁决）。
+// 锁序约定不变：先引擎锁、后 h.mu，broadcast 在引擎锁内调用。对调用方仍同步
+// 返回（调用 goroutine 阻塞到判题与落地结束）。
 func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
+	// ① 锁外第一件事：提交时刻。判题移出锁外后，拿锁不再有排队延迟，received
+	// 即解题计时起点（时间系数与先手排序的唯一时间输入）。
+	received := e.clock.Now()
+
+	// ② 持锁预检：校验集合与顺序沿袭拆分前；通过则登记在途并记下回合与题目。
+	gate := e.preflight(player, action, moveTo, received)
+	if gate == nil {
+		return
+	}
+
+	// ③ 锁外判题 → 重新加锁落地（在途标记由 land 的 defer 清除）。
+	res := e.judge.Judge(context.Background(), code, gate.q.Tests)
+	e.land(player, action, moveTo, res, received, gate.round)
+}
+
+// preflight：持锁预检（29 号票）。返回 nil = 提交被拒/丢弃（拒绝反馈事件已在
+// 锁内发出，如有）；非 nil = 通过，且已置 inFlight[player]（land 负责清除）。
+func (e *Engine) preflight(player Player, action string, moveTo Pos, received time.Time) *submitGate {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.phase != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
-		return
+		return nil
 	}
 	if _, already := e.actions[player]; already {
-		return
+		return nil
+	}
+	if e.inFlight[player] {
+		return nil // 同一玩家判题在途：静默丢弃（与"已行动再交"一致，29 号票）
 	}
 	if action != ActionAttack && action != ActionMove && action != ActionDefend && action != ActionSkill {
-		return // 非法 action：静默丢弃（裁决 2）
+		return nil // 非法 action：静默丢弃（裁决 2）
 	}
 	// 技能位前置校验（裁决 2：判题成本宝贵，参数先验；拒绝不判题不惩罚）：
 	// 未装备 / 冷却中 → 拒绝反馈（验收 1"冷却中灰置不可选"的服务端权威面）
@@ -266,13 +305,13 @@ func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionRejected{SubmissionRejected: &matchpb.SubmissionRejected{
 				Player: player, Reason: "no-skill-equipped",
 			}}})
-			return
+			return nil
 		}
 		if e.round < e.skillReadyFrom[player] {
 			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionRejected{SubmissionRejected: &matchpb.SubmissionRejected{
 				Player: player, Reason: "skill-cooldown",
 			}}})
-			return
+			return nil
 		}
 	}
 	// 移动参数先验（裁决 2：判题成本宝贵，参数先验；拒绝不判题不惩罚）
@@ -281,20 +320,34 @@ func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 			e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionRejected{SubmissionRejected: &matchpb.SubmissionRejected{
 				Player: player, Reason: reason,
 			}}})
-			return
+			return nil
 		}
 	}
-
-	now := e.clock.Now()
-	if now.Before(e.lockUntil[player]) {
+	if received.Before(e.lockUntil[player]) {
 		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 			Player: player, Passed: false, Category: CategoryLocked, Action: action,
 		}}})
-		return
+		return nil
 	}
 
 	q, _ := e.panel.questionFor(player, action)
-	res := e.judge.Judge(context.Background(), code, q.Tests)
+	e.inFlight[player] = true
+	return &submitGate{round: e.round, q: q}
+}
+
+// land：判题落地（29 号票）。重新持锁；defer 清除在途标记（defer 后进先出，
+// 清除发生在放锁之前）。判题期间回合已翻页或对局已结束 → 结果过期，丢弃
+// （不发事件不罚）。
+func (e *Engine) land(player Player, action string, moveTo Pos, res JudgeResult,
+	received time.Time, round int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer func() { delete(e.inFlight, player) }()
+
+	if e.phase != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE || e.round != round {
+		return // 结果过期：回合已结算（超时翻页）或对局已结束
+	}
+
 	if res.Category == CategoryJudgeError {
 		e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 			Player: player, Passed: false, Category: CategoryJudgeError, Action: action,
@@ -303,7 +356,7 @@ func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 	}
 
 	if res.Passed {
-		solveMs := now.Sub(e.roundStart).Milliseconds()
+		solveMs := received.Sub(e.roundStart).Milliseconds()
 		if solveMs < 0 {
 			solveMs = 0
 		}
@@ -319,9 +372,9 @@ func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 		return
 	}
 
-	// 错误提交：自损 + 锁定
+	// 错误提交：自损 + 锁定（锁定起点 = 提交时刻 received）
 	e.hp[player] -= SelfDamage
-	e.lockUntil[player] = now.Add(LockDuration)
+	e.lockUntil[player] = received.Add(LockDuration)
 	e.emit(&matchpb.Envelope{Event: &matchpb.Envelope_SubmissionJudged{SubmissionJudged: &matchpb.SubmissionJudged{
 		Player: player, Passed: false, Category: res.Category, SelfDamageApplied: true,
 		LockUntilUnixMs: e.lockUntil[player].UnixMilli(), Action: action,
