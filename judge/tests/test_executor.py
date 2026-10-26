@@ -184,7 +184,7 @@ def test_fork_bomb_limit_exceeded():
     # 无限进程：pids 配额杀，容器不垮
     r = executor.run(FORK_BOMB, CASES, timeout_ms=5000)
     assert r["passed"] is False
-    # 遏制即契约（27 号票修订归因，实测取证）：fork 出的子进程继承 worker
+    # 遏制即契约（28 号票修订归因，实测取证）：fork 出的子进程继承 worker
     # 管道写端、各自 emit 一行同内容 call-error（errno 11）——worker stdout
     # 实测几十行结论行，"恰好一行"规则先于 errno 归因触发 → runtime-error；
     # 父进程被配额杀（-9/137）仍为 limit-exceeded，被饥饿拖到时钟先到期则
@@ -329,7 +329,7 @@ def test_outer_timeout_drains_completed_lines(monkeypatch):
     assert r["detail"] == ""
 
 
-# ---- 27 号票：结论伪造向量（fail-closed 回归） ----
+# ---- 28 号票：结论伪造向量（fail-closed 回归） ----
 # 信任前提：每个用例的 worker stdout 中，带 outcome 键的 JSON 行必须恰好一行。
 # 玩家代码若能在 emit 结论之后再写一行（atexit / import 期直写 __stdout__ /
 # fork 子进程延迟补写），旧逻辑"末行获胜"会把结论改写：错误答案被洗成
