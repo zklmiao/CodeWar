@@ -1,0 +1,25 @@
+# 27: 判题结论可被玩家代码伪造——atexit 伪造协议行绕过错误惩罚
+
+**What to build:** `judge/judgesvc/executor.py` 容器内 harness 取 worker 输出中**最后一行**带 `outcome` 的 JSON 当作结论（`_HARNESS` 里 `for v in reversed(_parse_json_lines(proc.stdout))`）。玩家代码可以注册 `atexit`，在 worker 的 `emit(result)` 之后再往 `sys.__stdout__` 写一行伪造协议，把任意错误答案变成 `judge-error`。引擎对 `judge-error` 不罚不锁（`server/internal/match/engine.go` 的 `Submit`），因此"答错自损 3 HP + 锁 5 秒"（spec 用户故事 14）被完全绕过，玩家还能借此无代价地探测隐藏用例输入。缺陷已复现（错误答案 + atexit 伪造 → judge-error）。
+
+修复要求（fail-closed）：
+1. `_WORKER`：`emit(result)` 之后立即 `os._exit(0)`，跳过 atexit 和解释器收尾。
+2. `_HARNESS`：每个用例的 worker stdout 中，带 `outcome` 键的 JSON 行必须**恰好一行**；0 行或多于 1 行一律判 `runtime-error`（fail-closed，走惩罚路径），不能判 `judge-error`。
+3. 不改变正常路径的行为：玩家 `print` 仍截留在内存里；结构体题的 setup/compare 契约（ADR-0004）不变。
+4. 更新 ADR-0003 中描述"真值行恒为末行"的段落，改为新规则；顺带把文中已过时的 `-v <代码目录>:/sandbox:ro` 挂载描述改为现行的"零挂载、stdin 注入"（以 `build_sandbox_cmd` 为准）。
+
+范围外（待人裁决，本票不实现）：
+- 玩家可以返回一个方法会抛异常的对象，让 compare 的 `_normalize` 崩溃；或定义同名函数，让 setup 崩溃（worker 用 `NS.setdefault`，玩家定义优先）。这两种情况现在会归为 `infra-error`，即同样免罚。修复它与 ADR-0004"setup/compare 失败 = 基础设施故障，不罚玩家"冲突，需要人裁决。
+- 引擎侧是否限制连续 `judge-error` 的次数（属于新规则）。
+
+**Blocked by:** None
+
+**Status:** ready-for-agent
+
+- [ ] atexit 伪造回归：错误答案 + atexit 伪造 outcome 行 → `wrong-answer`（不得为 judge-error/ok）
+- [ ] import 期向 `sys.__stdout__` 写伪造 outcome 行 → `runtime-error`（不得为 judge-error/ok）
+- [ ] `os.fork()` 子进程 sleep 后写伪造行 → `runtime-error` 或 `timeout`（不得为 judge-error/ok）
+- [ ] 对照组：正确答案 → `ok`；普通错误答案 → `wrong-answer`；玩家 `print` 大量输出时正确答案仍为 `ok`
+- [ ] ADR-0003 更新落地（"真值行恒为末行"段落改新规则；挂载描述改"零挂载、stdin 注入"）
+- [ ] `python -m pytest judge/tests -q` 全绿（docker 门控按 skipif 语义处理）
+- [ ] `cd server; go test ./internal/question/templates/ -count=1` 全模板参考解冒烟绿（偶发 judge-error 如实记录重跑结果，不掩盖）
