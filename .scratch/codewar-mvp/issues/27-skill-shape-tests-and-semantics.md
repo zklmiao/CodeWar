@@ -38,6 +38,6 @@
 - [ ] 重复辅助单源化：`dirDelta`/`delta` 合并、点狙距离钳单一实现、bot 主轴裁决复用引擎实现（或票内记录不能复用的理由）
 - [ ] `needsDirection` 死参数消除：普攻路径按形状语义传参，melee 不再走无效分支
 - [ ] 行为零变化：`go test -race ./...`（有 `CODEWAR_TEST_DSN` 时并行含 DB 包）、`pnpm -C client test`、`pnpm -C client build` 全绿；设计 003 §4 数值/形状零改动
-- [ ] 测试走事件流 seam（spec「测试决策」），不新增对私有 `coverageCells` 的直接断言（既有 `TestShapeCoverageMatrix` 的豁免仅限现状）
+- [ ] 测试走事件流 seam（spec「测试决策」）；几何逐格断言集中在既有 `TestShapeCoverageMatrix` 用例表内扩展（shapes.go 头注豁免延续，不另建直测函数），命中/落空/伤害/冷却等行为断言一律走事件流
 
 > **来源记录**：06 号票追认记录（2026-10-26）的「后续」项；同日双轴 code review 的 Standards 轴 4 项坏味道与 Spec 轴 4 处测试缺口在本票收口。
