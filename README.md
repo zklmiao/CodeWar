@@ -5,7 +5,8 @@
 ## 文档地图
 
 - **Spec**: [docs/specs/001-codewar-mvp.md](docs/specs/001-codewar-mvp.md) —— MVP 全量规格（用户故事 / 实现决策 / 测试决策 / 数值初稿 / 开放问题）
-- **票据**: `.scratch/codewar-mvp/issues/` —— 14 张 tracer-bullet 票，每张含阻塞关系与验收清单
+- **票据**: `.scratch/codewar-mvp/issues/` —— 一票一文件，含端到端交付描述、`Blocked by` 阻塞关系与验收清单；当前波次见下文
+- **优化审查**: [.scratch/codewar-mvp/optimization-review-2026-10-27.md](.scratch/codewar-mvp/optimization-review-2026-10-27.md) —— 29 号票后的三轴审查（功能 / UI / 工程质量），30+ 号票的来源任务列表
 - `ref_resources/` —— 参考资料（CodeCombat 源码、The Farmer Was Replaced 拆解），仅本地存在，不入库
 
 ## 并行开发约定（git worktree）
@@ -29,6 +30,10 @@
 
 ## 当前波次
 
-Wave 1 已交付：`01 Tracer（热座最小对局）` + `13 美术占位规范` + `14 霓虹质感精修`（均已合入 main，`Status: resolved`）。
+截至 2026-10-27：`01`-`29` 号票已全部交付关票（`Status: resolved`），MVP 主线落地——热座最小对局、判题沙箱硬化、三槽行动与形状、出题工厂、对局配置、四槽面板与职业技能、账号与 ELO、PvE 练习机器人、新手教程、美术占位规范、霓虹质感、DB 测试隔离、技能形状语义等。
 
-当前 frontier（阻塞已清零，可开工）：`02 判题沙箱硬化` + `03 移动防御攻击形状` + `04 出题工厂管线` + `07 账号战绩与 ELO`（四者均只被已关闭的 01 阻塞）。其余未开工票均有阻塞：`05←04`、`06←03/04`、`08←06/07`、`09←06`、`10←09`、`11←08/02`、`12←04`；选票时以票据 `Blocked by` 图为准。
+- **frontier（阻塞清零，可开工）**：`08 在线排行 1v1` + `11 防作弊硬化`。
+- **挂起**：`25 视觉打磨清单`（`needs-info`）——待美术票启动后一并处理。
+- **进行中**：来自 [optimization-review-2026-10-27.md](.scratch/codewar-mvp/optimization-review-2026-10-27.md) 第一批新票——`30 杂项清理与结算页统计`、`31 投降认输 + hub 连接卫生`（08 前置）；后续候选（回放/错题本、CI 门控、键盘动线等）见该审查文件的推荐开票组合。
+
+选票时以票据 `Blocked by` 图为准。
