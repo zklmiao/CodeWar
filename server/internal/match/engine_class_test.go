@@ -48,6 +48,13 @@ func TestShapeCoverageMatrix(t *testing.T) {
 			[]Pos{{0, 1}, {1, 0}, {1, 1}}},
 		{"烈焰风暴-向上横带6格", Pos{2, 2}, classes.ShapeBand, 2, 0, Targeting{Direction: "up"},
 			[]Pos{{1, 1}, {1, 2}, {1, 3}, {0, 1}, {0, 2}, {0, 3}}},
+		// 27 号票：横向旋转分支（left/right）与向下方向逐格断言——横带最易错的几何。
+		{"烈焰风暴-向下横带6格", Pos{2, 2}, classes.ShapeBand, 2, 0, Targeting{Direction: "down"},
+			[]Pos{{3, 1}, {3, 2}, {3, 3}, {4, 1}, {4, 2}, {4, 3}}},
+		{"烈焰风暴-向左横带6格", Pos{2, 2}, classes.ShapeBand, 2, 0, Targeting{Direction: "left"},
+			[]Pos{{1, 1}, {2, 1}, {3, 1}, {1, 0}, {2, 0}, {3, 0}}},
+		{"烈焰风暴-向右横带6格", Pos{2, 2}, classes.ShapeBand, 2, 0, Targeting{Direction: "right"},
+			[]Pos{{1, 3}, {2, 3}, {3, 3}, {1, 4}, {2, 4}, {3, 4}}},
 		{"巨力斩-场中满8格", Pos{2, 2}, classes.ShapeBurst8, 0, 0, Targeting{},
 			[]Pos{{1, 1}, {1, 2}, {1, 3}, {2, 1}, {2, 3}, {3, 1}, {3, 2}, {3, 3}}},
 	}
@@ -273,6 +280,230 @@ func TestDrainHeals(t *testing.T) {
 	}
 }
 
+// 秘法汲取落空（27 号票，TestDrainHeals 的反向断言）：Dodged 事件、
+// 无伤害 HpChanged、无自疗——未命中时伤害与汲取两段都不发生（设计 003 §4）。
+func TestDrainMiss(t *testing.T) {
+	h := newClassHarness(t, Setup{P1Class: "mage", P1Skill: "drain", P2Class: "warrior", P2Skill: "cleave"}, passOK())
+	// P2 先手右移 2 到 (2,4)：曼哈顿 3 > 汲取射程 2；法师自动瞄准 right+2 覆盖 (3,4)
+	h.eng.Submit(P2, ActionMove, "good", Pos{Row: 2, Col: 4})
+	h.clk.Advance(5 * time.Second)
+	h.eng.Submit(P1, ActionSkill, "good", Pos{})
+	h.timeoutRound()
+	acts := actions(h.events())
+	if len(acts) != 2 || acts[0].Action != ActionMove || acts[1].Action != ActionSkill {
+		t.Fatalf("应先手移动后施法：%+v", acts)
+	}
+	if !acts[1].Dodged || acts[1].Damage != 0 || acts[1].Heal != 0 {
+		t.Fatalf("汲取未命中应 Dodged 且无伤害/自疗：%+v", acts[1])
+	}
+	if hps := hpChanges(h.events()); len(hps) != 0 {
+		t.Fatalf("落空不应产生任何 HpChanged（含自疗）：%+v", hps)
+	}
+	snap := h.eng.Snapshot(P1)
+	if snap.Players[0].Hp != 90 || snap.Players[1].Hp != 110 {
+		t.Fatalf("落空后双方血量应不变（90/110），实际 %d/%d", snap.Players[0].Hp, snap.Players[1].Hp)
+	}
+}
+
+// 烈焰风暴事件流（27 号票）：横向旋转分支的产品级证据——对手在横带覆盖格内
+// 命中、带外闪避。矩阵逐格断言之外的结算 seam。
+func TestFirestormBandEventStream(t *testing.T) {
+	t.Run("横向带内命中40", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "mage", P1Skill: "firestorm", P2Class: "warrior"}, passOK())
+		// 剑士先手移到 (2,3)：向 up 施法时该格是横带的横向覆盖格
+		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 2, Col: 3})
+		h.clk.Advance(5 * time.Second)
+		h.eng.SetTargeting(P1, Targeting{Direction: "up"})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		acts := actions(h.events())
+		if len(acts) != 2 || acts[0].Action != ActionMove {
+			t.Fatalf("应先手移动后施法：%+v", acts)
+		}
+		if acts[1].Action != ActionSkill || acts[1].Dodged || acts[1].Damage != 40 {
+			t.Fatalf("横向带内应命中 40：%+v", acts[1])
+		}
+		if hp := lastHp(h.events(), "p2"); hp != 70 {
+			t.Fatalf("剑士 110-40=70，实际 %d", hp)
+		}
+	})
+	t.Run("横向带外闪避", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "mage", P1Skill: "firestorm", P2Class: "warrior"}, passOK())
+		// 剑士先手移到 (2,4)：在 up 横带（列 1..3）之外
+		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 2, Col: 4})
+		h.clk.Advance(5 * time.Second)
+		h.eng.SetTargeting(P1, Targeting{Direction: "up"})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		acts := actions(h.events())
+		if len(acts) != 2 || acts[1].Action != ActionSkill || !acts[1].Dodged {
+			t.Fatalf("横向带外应闪避：%+v", acts)
+		}
+		if hps := hpChanges(h.events()); len(hps) != 0 {
+			t.Fatalf("闪避不应产生 HpChanged：%+v", hps)
+		}
+		if hp := h.eng.Snapshot(P1).Players[1].Hp; hp != 110 {
+			t.Fatalf("闪避后剑士应仍为 110，实际 %d", hp)
+		}
+	})
+}
+
+// 穿云箭端到端（27 号票）：命中伤害 45（字面值不乘时间系数）、CD4 灰置窗口、
+// 距离 1/4 边界命中与超距落空。
+func TestPierceEndToEnd(t *testing.T) {
+	t.Run("距离1命中45与CD4", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "ranger", P1Skill: "pierce", P2Class: "warrior"}, passOK())
+		h.clk.Advance(30 * time.Second) // 慢解仍为字面 45（技能不乘时间系数）
+		h.eng.SetTargeting(P1, Targeting{Direction: "up", Distance: 1})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		acts := actions(h.events())
+		if len(acts) != 1 || acts[0].Dodged || acts[0].Damage != 45 {
+			t.Fatalf("穿云箭距离1应命中 45：%+v", acts)
+		}
+		if hp := lastHp(h.events(), "p2"); hp != 65 {
+			t.Fatalf("剑士 110-45=65，实际 %d", hp)
+		}
+		// CD4 登记：R1 释放 → 第 2 回合快照剩 3 回合（第 5 回合起可用）
+		if cd := h.eng.Snapshot(P1).Players[0].SkillCdRounds; cd != 3 {
+			t.Fatalf("CD4 在第 2 回合应剩 3 回合，实际 %d", cd)
+		}
+		// R2~R4 灰置拒绝（三次 skill-cooldown）；R5 恢复可释放并再次命中
+		for want := 1; want <= 3; want++ {
+			h.eng.Submit(P1, ActionSkill, "good", Pos{})
+			rej := rejections(h.events())
+			if len(rej) != want || rej[len(rej)-1].Reason != "skill-cooldown" {
+				t.Fatalf("第 %d 次冷却提交应被 skill-cooldown 拒绝：%+v", want, rej)
+			}
+			h.timeoutRound()
+		}
+		h.eng.SetTargeting(P1, Targeting{Direction: "up", Distance: 1})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		acts = actions(h.events())
+		if len(acts) != 2 || acts[1].Dodged || acts[1].Damage != 45 {
+			t.Fatalf("CD4 结束后应可再次命中 45：%+v", acts)
+		}
+		if hp := lastHp(h.events(), "p2"); hp != 20 {
+			t.Fatalf("第二发后剑士 65-45=20，实际 %d", hp)
+		}
+	})
+	t.Run("距离4边界命中（超上限距离钳到4）", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "ranger", P1Skill: "pierce", P2Class: "warrior"}, passOK())
+		// R1：游侠上移 3 到 (0,2)；R2：剑士再下移 2 到 (4,2)——轴向距离恰为射程上限 4
+		// （分两回合走位：剑士下移 2 的中间格 (3,2) 初始被游侠占据，不能同回合穿越）
+		h.eng.Submit(P1, ActionMove, "good", Pos{Row: 0, Col: 2})
+		h.timeoutRound()
+		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 4, Col: 2})
+		h.timeoutRound()
+		// R3：提交超上限距离 9 → 钳到 4，命中边界格
+		h.eng.SetTargeting(P1, Targeting{Direction: "down", Distance: 9})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		var skill *matchpb.ActionResolved
+		for _, a := range actions(h.events()) {
+			if a.Action == ActionSkill {
+				skill = a
+			}
+		}
+		if skill == nil || skill.Dodged || skill.Damage != 45 {
+			t.Fatalf("距离4边界应命中 45（距离钳到4）：%+v", skill)
+		}
+		if hp := lastHp(h.events(), "p2"); hp != 65 {
+			t.Fatalf("剑士 110-45=65，实际 %d", hp)
+		}
+	})
+	t.Run("超距落空", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "ranger", P1Skill: "pierce", P2Class: "warrior"}, passOK())
+		// R1：游侠左移 2 到 (3,0)，剑士右移 2 到 (2,4)——曼哈顿距离 5 > 射程 4
+		h.eng.Submit(P1, ActionMove, "good", Pos{Row: 3, Col: 0})
+		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 2, Col: 4})
+		h.timeoutRound()
+		// R2：right+4 覆盖 (3,4)，对手在 (2,4)——超距落空
+		h.eng.SetTargeting(P1, Targeting{Direction: "right", Distance: 4})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		var skill *matchpb.ActionResolved
+		for _, a := range actions(h.events()) {
+			if a.Action == ActionSkill {
+				skill = a
+			}
+		}
+		if skill == nil || !skill.Dodged || skill.Damage != 0 {
+			t.Fatalf("超距应落空：%+v", skill)
+		}
+		if hps := hpChanges(h.events()); len(hps) != 0 {
+			t.Fatalf("落空不应产生 HpChanged：%+v", hps)
+		}
+	})
+}
+
+// 风行回复（27 号票）：治疗 28、满血溢出封顶 0、CD2；自身治疗不经过瞄准/命中路径。
+func TestWindheal(t *testing.T) {
+	t.Run("满血溢出封顶0", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "ranger", P1Skill: "windheal", P2Class: "warrior"}, passOK())
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		acts := actions(h.events())
+		if len(acts) != 1 || acts[0].Action != ActionSkill || acts[0].Dodged || acts[0].Heal != 0 {
+			t.Fatalf("满血治疗量应为 0 且不闪避：%+v", acts)
+		}
+		for _, hp := range hpChanges(h.events()) {
+			if hp.Cause == "heal" {
+				t.Fatalf("满血不应产生治疗 HpChanged：%+v", hp)
+			}
+		}
+	})
+	t.Run("治疗28与CD2", func(t *testing.T) {
+		h := newClassHarness(t, Setup{P1Class: "ranger", P1Skill: "windheal", P2Class: "warrior"}, passOK())
+		// R1/R2：剑士普攻 26×2 → 游侠 95→43（治疗空间 ≥28）
+		h.eng.Submit(P2, ActionAttack, "good", Pos{})
+		h.timeoutRound()
+		h.eng.Submit(P2, ActionAttack, "good", Pos{})
+		h.timeoutRound()
+		// R3：对手远离（移到 (0,2)），并提交一个方向 targeting——自身治疗不受影响。
+		// 双方本回合都行动 → 引擎在第二次 Submit 内立即结算，不再拨钟（否则会多跳一回合）。
+		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 0, Col: 2})
+		h.clk.Advance(5 * time.Second)
+		h.eng.SetTargeting(P1, Targeting{Direction: "left", Distance: 1})
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		acts := actions(h.events())
+		var heal *matchpb.ActionResolved
+		for _, a := range acts {
+			if a.Action == ActionSkill {
+				heal = a
+			}
+		}
+		if heal == nil || heal.Dodged || heal.Heal != 28 {
+			t.Fatalf("风行回复应治疗 28 且不经命中判定：%+v", heal)
+		}
+		if hp := lastHp(h.events(), "p1"); hp != 71 {
+			t.Fatalf("游侠 43+28=71，实际 %d", hp)
+		}
+		// CD2：R3 释放 → R4 灰置拒绝；R5 恢复可释放
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		rej := rejections(h.events())
+		if len(rej) != 1 || rej[0].Reason != "skill-cooldown" {
+			t.Fatalf("CD2 第 4 回合应拒绝释放：%+v", rej)
+		}
+		h.timeoutRound()
+		h.eng.Submit(P1, ActionSkill, "good", Pos{})
+		h.timeoutRound()
+		if rej := rejections(h.events()); len(rej) != 1 {
+			t.Fatalf("R5 不应新增拒绝：%+v", rej)
+		}
+		skillActs := 0
+		for _, a := range actions(h.events()) {
+			if a.Action == ActionSkill {
+				skillActs++
+			}
+		}
+		if skillActs != 2 {
+			t.Fatalf("R3+R5 应有两次技能结算，实际 %d", skillActs)
+		}
+	})
+}
+
 // 盾 × 技能伤害：巨力斩 55 打在护盾上 → 55×0.4=22。
 func TestSkillDamageShielded(t *testing.T) {
 	h := newClassHarness(t, Setup{P1Class: "warrior", P1Skill: "cleave", P2Class: "mage", P2Skill: "firestorm"}, passOK())
@@ -294,8 +525,9 @@ func TestSkillDamageShielded(t *testing.T) {
 // 用事件刷新面板，技能题从第 2 回合起消失；快照路径（Snapshot.panel.skill）一直
 // 正确，两边测试各自绿、proto 契约在 seam 交叉处断了无人看。
 // 红证据（2026-10-24 修复前首跑）：R1 即红——
-//   "PanelReadyCarriesSkillQuestion: 第 1 回合 PanelReady.p1.skill 应携带当回合技能题（非 nil 且 ID 非空）"
-//   （PrivatePanel.skill 恒为 nil，与票面根因证据一致）。
+//
+//	"PanelReadyCarriesSkillQuestion: 第 1 回合 PanelReady.p1.skill 应携带当回合技能题（非 nil 且 ID 非空）"
+//	（PrivatePanel.skill 恒为 nil，与票面根因证据一致）。
 func TestPanelReadyCarriesSkillQuestion(t *testing.T) {
 	h := newClassHarness(t, Setup{P1Class: "warrior", P1Skill: "cleave"}, passOK())
 
