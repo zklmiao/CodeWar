@@ -14,7 +14,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] atexit 伪造回归：错误答案 + atexit 伪造 outcome 行 → `wrong-answer`（不得为 judge-error/ok）
 - [x] import 期向 `sys.__stdout__` 写伪造 outcome 行 → `runtime-error`（不得为 judge-error/ok）
@@ -27,3 +27,5 @@
 > **改号记录（2026-10-26，人裁决）**：本票开票时按提示词显式路径编号 27（`27-judge-verdict-forgery.md`），与已关票 `27-skill-shape-tests-and-semantics.md` 撞号，违反 issue-tracker「一票一号」惯例；经人裁决改号为 **28**（对齐提示词原标号）。修复提交 `e721108` 标题中的 "ticket 27" 字样不可改，以本记录为准；ADR-0003 / executor.py / test_executor.py 中的旧号自引用已随改号同步修订为 28。
 
 > **交付记录（2026-10-26，勾票）**：`ticket/27-judge-verdict-forgery` 分支提交 `e721108`（worker `emit` 后 `os._exit(0)` 硬退 + harness「每个用例恰好一行结论行」fail-closed 规则 + ADR-0003 三处更新）与 `75cb809`（自引用改号）。四条新测试先写后修、修复前实测：atexit 伪造 → judge-error（免罚，缺陷本体）；import 期伪造 → ok（虚假通过，比免罚更危险）；fork 子进程伪造 → wrong-answer 断言失败；print 截留对照组绿。修复后四条全绿（真实容器）。回归：`python -m pytest judge/tests -q` 44 passed（30.51s，docker 实跑；既有 fork-bomb 归因修订经人裁决接受——子进程继承管道写端各自 emit 结论行，「恰好一行」规则必先触发，同为惩罚路径）；全模板参考解冒烟 `go test ./internal/question/templates/ -count=1` ok 172.554s 一次通过、无偶发 judge-error。范围外维持：compare/setup 崩溃免罚向量与 judge-error 连续次数限制，另票收编。
+
+> **关票记录（2026-10-26，人授权"按建议办"）**：分支（`e721108` / `75cb809`）以 merge `63f0fb2` 合入 main；合并后回归 `python -m pytest judge/tests -q` **44 passed**（34.92s）、`go vet` + `go test -race ./...` 全包 ok（含 templates 冒烟 180.098s）。改号 27→28 与 fork-bomb 归因修订均经人裁决生效（见改号记录与交付记录）；worktree 与分支随关票清理。
