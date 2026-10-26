@@ -48,3 +48,32 @@ describe("终局面板 ELO 区块", () => {
     expect(w.text()).toContain("平局");
   });
 });
+
+// ===== 30 号票：统计区块（回合数/双方伤害/双方闪避；匿名局同样显示） =====
+describe("终局面板统计区块", () => {
+  it("显示事件流累计的回合数、双方总伤害与闪避次数", () => {
+    const s = endMatch("p1", [
+      { player: "p1", userId: "u1", eloBefore: 1000, eloAfter: 1016 },
+    ]);
+    s.stats = { rounds: 3, damageDealt: { p1: 47, p2: 9 }, dodges: { p1: 1, p2: 2 } };
+    const w = mount(EndOverlay);
+    const rows = w.findAll('[data-testid="end-stats"] .statrow');
+    expect(rows).toHaveLength(3);
+    expect(rows[0].text()).toContain("回合数");
+    expect(rows[0].text()).toContain("3");
+    expect(rows[1].text()).toContain("总伤害");
+    expect(rows[1].text()).toContain("P1 47 · P2 9");
+    expect(rows[2].text()).toContain("闪避");
+    expect(rows[2].text()).toContain("P1 1 · P2 2");
+  });
+
+  it("匿名局（elo 空）统计照样显示，ELO 区块仍隐藏", () => {
+    const s = endMatch("p1", []);
+    s.stats = { rounds: 10, damageDealt: { p1: 0, p2: 66 }, dodges: { p1: 0, p2: 0 } };
+    const w = mount(EndOverlay);
+    expect(w.find(".elo").exists()).toBe(false);
+    const rows = w.findAll('[data-testid="end-stats"] .statrow');
+    expect(rows).toHaveLength(3);
+    expect(rows[1].text()).toContain("P1 0 · P2 66");
+  });
+});

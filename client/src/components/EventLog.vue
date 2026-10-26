@@ -6,7 +6,7 @@ const store = useMatchStore();
 
 <template>
   <div class="log">
-    <div v-for="(l, i) in [...store.log].reverse()" :key="i" class="line">
+    <div v-for="(l, i) in [...store.log].reverse()" :key="i" class="line" :class="`kind-${l.kind}`">
       <span class="seq">{{ l.seq }}</span>{{ l.text }}
     </div>
   </div>
@@ -24,4 +24,9 @@ const store = useMatchStore();
 }
 .line { padding: 1px 0; }
 .seq { display: inline-block; width: 34px; color: var(--cw-color-text-muted); }
+/* 30 号票：kind 着色全走 token（004 §token 规则禁裸色值）。
+   system 为容器默认次级色，无需覆盖；序号列单独 muted，不随 kind 染色 */
+.kind-damage { color: var(--cw-color-state-danger); }
+.kind-heal { color: var(--cw-color-state-success); }
+.kind-dodge { color: var(--cw-color-state-warning); }
 </style>
