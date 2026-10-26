@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately；06 已 resolved，本票是其复核遗留)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **现状证据（2026-10-26 复核，HEAD 行号）：**
 
@@ -43,3 +43,5 @@
 > **交付记录（2026-10-26，勾票）**：`ticket/27-skill-shape-tests-and-semantics` 分支提交 `b0a6e1d`（四处测试缺口）、`89bdb52`（语义单源 + 重复收敛）、`5733ae8`（code-review 加固：满血治疗 HP 不变量与场景走位落点钉住，变异电池 M1/M3/M4/M5/M7/M8 + band 旋转全部必红后还原）。回归：`go vet ./...`、`go test -race ./...`、`CODEWAR_TEST_DSN` 并行 DB 包、`pnpm -C client test`（47/47）、`pnpm -C client build` 全绿。双轴 code review（Standards/Spec）无硬违规、无漏做；勾票依据见会话验收报告。
 
 > **来源记录**：06 号票追认记录（2026-10-26）的「后续」项；同日双轴 code review 的 Standards 轴 4 项坏味道与 Spec 轴 4 处测试缺口在本票收口。
+
+> **关票记录（2026-10-26，人授权"合并关票"）**：分支 `ticket/27-skill-shape-tests-and-semantics`（b0a6e1d / 89bdb52 / 5733ae8）以 merge 431ac15 合入 main，合并后回归全绿（`go vet` + `go test -race ./...` 全包 ok——templates 180s 大矩阵含内、`pnpm -C client test` 47/47、`pnpm -C client build` 通过）。Status 由 ready-for-agent 翻转；worktree 与分支随关票清理。
