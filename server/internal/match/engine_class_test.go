@@ -317,8 +317,10 @@ func TestFirestormBandEventStream(t *testing.T) {
 		h.eng.Submit(P1, ActionSkill, "good", Pos{})
 		h.timeoutRound()
 		acts := actions(h.events())
-		if len(acts) != 2 || acts[0].Action != ActionMove {
-			t.Fatalf("应先手移动后施法：%+v", acts)
+		if len(acts) != 2 || acts[0].Action != ActionMove ||
+			acts[0].MoveTo.Row != 2 || acts[0].MoveTo.Col != 3 {
+			// review 加固：走位必须真实落到 (2,3)，否则"横向格命中"退化为中心格命中
+			t.Fatalf("应先手移动到 (2,3) 后施法：%+v", acts)
 		}
 		if acts[1].Action != ActionSkill || acts[1].Dodged || acts[1].Damage != 40 {
 			t.Fatalf("横向带内应命中 40：%+v", acts[1])
@@ -336,7 +338,12 @@ func TestFirestormBandEventStream(t *testing.T) {
 		h.eng.Submit(P1, ActionSkill, "good", Pos{})
 		h.timeoutRound()
 		acts := actions(h.events())
-		if len(acts) != 2 || acts[1].Action != ActionSkill || !acts[1].Dodged {
+		if len(acts) != 2 || acts[0].Action != ActionMove ||
+			acts[0].MoveTo.Row != 2 || acts[0].MoveTo.Col != 4 {
+			// review 加固：走位必须真实落到 (2,4)，否则"带外闪避"的几何前提不成立
+			t.Fatalf("应先手移动到 (2,4) 后施法：%+v", acts)
+		}
+		if acts[1].Action != ActionSkill || !acts[1].Dodged {
 			t.Fatalf("横向带外应闪避：%+v", acts)
 		}
 		if hps := hpChanges(h.events()); len(hps) != 0 {
@@ -396,6 +403,12 @@ func TestPierceEndToEnd(t *testing.T) {
 		h.timeoutRound()
 		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 4, Col: 2})
 		h.timeoutRound()
+		// review 加固：钉住走位落点，防止"移动被静默拒绝后仍算边界命中"的假 pass
+		if mvs := actions(h.events()); len(mvs) != 2 ||
+			mvs[0].MoveTo.Row != 0 || mvs[0].MoveTo.Col != 2 ||
+			mvs[1].MoveTo.Row != 4 || mvs[1].MoveTo.Col != 2 {
+			t.Fatalf("边界场景走位应落 (0,2)/(4,2)：%+v", mvs)
+		}
 		// R3：提交超上限距离 9 → 钳到 4，命中边界格
 		h.eng.SetTargeting(P1, Targeting{Direction: "down", Distance: 9})
 		h.eng.Submit(P1, ActionSkill, "good", Pos{})
@@ -419,6 +432,13 @@ func TestPierceEndToEnd(t *testing.T) {
 		h.eng.Submit(P1, ActionMove, "good", Pos{Row: 3, Col: 0})
 		h.eng.Submit(P2, ActionMove, "good", Pos{Row: 2, Col: 4})
 		h.timeoutRound()
+		// review 加固：钉住走位落点——任一移动被静默拒绝时，本用例的"超距"前提
+		// 不成立（如游侠留在 (3,2)，right+4 出界同样闪避，会以假 pass 混过）
+		if mvs := actions(h.events()); len(mvs) != 2 ||
+			mvs[0].MoveTo.Row != 3 || mvs[0].MoveTo.Col != 0 ||
+			mvs[1].MoveTo.Row != 2 || mvs[1].MoveTo.Col != 4 {
+			t.Fatalf("超距场景走位应落 (3,0)/(2,4)：%+v", mvs)
+		}
 		// R2：right+4 覆盖 (3,4)，对手在 (2,4)——超距落空
 		h.eng.SetTargeting(P1, Targeting{Direction: "right", Distance: 4})
 		h.eng.Submit(P1, ActionSkill, "good", Pos{})
@@ -452,6 +472,13 @@ func TestWindheal(t *testing.T) {
 			if hp.Cause == "heal" {
 				t.Fatalf("满血不应产生治疗 HpChanged：%+v", hp)
 			}
+		}
+		// HP 不变量（review 加固）：封顶为 0 意味着满血治疗不得实际改动血量——
+		// 只看上报的 Heal=0 抓不住"上报 0 却暗中加血"的回归。
+		snap := h.eng.Snapshot(P1)
+		if snap.Players[0].Hp != 95 || snap.Players[1].Hp != 110 {
+			t.Fatalf("满血治疗后血量必须不变（95/110），实际 %d/%d",
+				snap.Players[0].Hp, snap.Players[1].Hp)
 		}
 	})
 	t.Run("治疗28与CD2", func(t *testing.T) {
