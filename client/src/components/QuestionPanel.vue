@@ -4,7 +4,7 @@
 // codes 按 action 分槽保留，切换/回切不丢码；同时仅挂载一个 CodeMirror（原四槽各一）。
 // 槽位：攻击（镜像竞速）/ 移动（私有 + 网格点选）/ 防御（私有）/
 // 技能（私有 + 冷却灰置 + 目标选择）。回合状态上移 RoundStatusBar（sticky 条）。
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useMatchStore } from "../stores/match";
 import { useClassesStore } from "../stores/classes";
 import { socket } from "../api/socket";
@@ -125,8 +125,11 @@ function aimDist(action: string, delta: number) {
   aim(action, cur.value.direction || "", next);
 }
 
+// 锁定剩余的 100ms 心跳（与 RoundStatusBar 同节奏；30 号票：卸载必须清理，
+// 否则离开对局页后定时器常驻——对照 RoundStatusBar.vue 的同款写法）
 const now = ref(Date.now());
-setInterval(() => (now.value = Date.now()), 100);
+const heartbeat = setInterval(() => (now.value = Date.now()), 100);
+onBeforeUnmount(() => clearInterval(heartbeat));
 
 const lockRemaining = computed(() =>
   Math.max(0, store.viewerLockUntil - (now.value + store.serverOffsetMs)),
