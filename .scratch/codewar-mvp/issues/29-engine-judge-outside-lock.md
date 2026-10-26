@@ -1,4 +1,4 @@
-# 28: 引擎在判题期间持锁——后到玩家的排队时间污染 solveMs（镜像竞速不公平）
+# 29: 引擎在判题期间持锁——后到玩家的排队时间污染 solveMs（镜像竞速不公平）
 
 **What to build:** `server/internal/match/engine.go` 的 `Submit` 全程持有 `e.mu`，包括同步调用 `e.judge.Judge`（Docker 判题，0.2–3 秒，RPC 上限 16 秒）。`now := e.clock.Now()` 在拿到锁之后才取，所以当对手（或 PvE Bot，见 `server/internal/bot/controller.go` 中的 `Submit` 调用）的判题正在进行时，后到玩家的排队时间会被算进 `solveMs`：时间系数变低、先手顺序被打乱，违反 spec 用户故事 12、15、16。判题期间 `SetTargeting`、`Snapshot`（重连）、计时泵 `HandleRoundTimeout` 也全部被阻塞。
 
@@ -23,3 +23,5 @@
 - [ ] `Submit` 三段拆分落地；既有测试零修改
 - [ ] `go vet ./...` 绿；`go test ./... -count=1` 绿；`go test -race ./internal/match/... ./internal/hub/... ./internal/bot/... -count=1` 绿（Windows 缺 cgo/gcc 时如实注明，不跳过其余检查）
 - [ ] 锁序约定与同步返回语义不变（代码检查 + 既有事件流断言佐证）
+
+> **改号记录（2026-10-26，人裁决）**：本票开票时按提示词显式路径编号 28（`28-engine-judge-outside-lock.md`），因 28 号已让位给判题伪造票，顺延改号为 **29**（对齐提示词原标号）。修复提交 `6b549db` 标题中的 "ticket 28" 字样不可改，以本记录为准；engine.go / engine_concurrent_test.go 中的旧号自引用已随改号同步修订为 29。

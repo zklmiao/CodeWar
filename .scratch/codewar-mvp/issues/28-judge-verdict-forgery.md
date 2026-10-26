@@ -1,4 +1,4 @@
-# 27: 判题结论可被玩家代码伪造——atexit 伪造协议行绕过错误惩罚
+# 28: 判题结论可被玩家代码伪造——atexit 伪造协议行绕过错误惩罚
 
 **What to build:** `judge/judgesvc/executor.py` 容器内 harness 取 worker 输出中**最后一行**带 `outcome` 的 JSON 当作结论（`_HARNESS` 里 `for v in reversed(_parse_json_lines(proc.stdout))`）。玩家代码可以注册 `atexit`，在 worker 的 `emit(result)` 之后再往 `sys.__stdout__` 写一行伪造协议，把任意错误答案变成 `judge-error`。引擎对 `judge-error` 不罚不锁（`server/internal/match/engine.go` 的 `Submit`），因此"答错自损 3 HP + 锁 5 秒"（spec 用户故事 14）被完全绕过，玩家还能借此无代价地探测隐藏用例输入。缺陷已复现（错误答案 + atexit 伪造 → judge-error）。
 
@@ -23,3 +23,5 @@
 - [ ] ADR-0003 更新落地（"真值行恒为末行"段落改新规则；挂载描述改"零挂载、stdin 注入"）
 - [ ] `python -m pytest judge/tests -q` 全绿（docker 门控按 skipif 语义处理）
 - [ ] `cd server; go test ./internal/question/templates/ -count=1` 全模板参考解冒烟绿（偶发 judge-error 如实记录重跑结果，不掩盖）
+
+> **改号记录（2026-10-26，人裁决）**：本票开票时按提示词显式路径编号 27（`27-judge-verdict-forgery.md`），与已关票 `27-skill-shape-tests-and-semantics.md` 撞号，违反 issue-tracker「一票一号」惯例；经人裁决改号为 **28**（对齐提示词原标号）。修复提交 `e721108` 标题中的 "ticket 27" 字样不可改，以本记录为准；ADR-0003 / executor.py / test_executor.py 中的旧号自引用已随改号同步修订为 28。
