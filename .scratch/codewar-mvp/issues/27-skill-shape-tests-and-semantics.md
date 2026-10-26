@@ -30,14 +30,16 @@
 - 点狙距离钳 `[1, rangeMax]` 三处重复（shapes.go 的 coverageCells 与 effectiveTargeting、bot/aim.go:37-43）。
 - bot `aimAxis`（aim.go:13）复刻引擎 `autoAim` 的主轴裁决。
 
-- [ ] 烈焰风暴四向均有断言；left/right 的横向旋转覆盖格逐格正确（6 格）
-- [ ] 穿云箭端到端：命中伤害 45、CD 4 登记；距离 1/4 边界与超距落空均有断言
-- [ ] 秘法汲取落空：Dodged 事件、无伤害 HpChanged、无自疗
-- [ ] 风行回复：治疗 28、满血不溢出、冷却 2 生效（不依赖瞄准/命中路径）
-- [ ] 形状语义单一来源：`classes` 包暴露需方向/需距离（及 depth/range）判定，engine 普攻+技能、client、bot 全部消费同一来源；四处散落 if/switch 消除（客户端经 `/api/classes` 或现职业载荷获取，不引入 proto 变更）
-- [ ] 重复辅助单源化：`dirDelta`/`delta` 合并、点狙距离钳单一实现、bot 主轴裁决复用引擎实现（或票内记录不能复用的理由）
-- [ ] `needsDirection` 死参数消除：普攻路径按形状语义传参，melee 不再走无效分支
-- [ ] 行为零变化：`go test -race ./...`（有 `CODEWAR_TEST_DSN` 时并行含 DB 包）、`pnpm -C client test`、`pnpm -C client build` 全绿；设计 003 §4 数值/形状零改动
-- [ ] 测试走事件流 seam（spec「测试决策」）；几何逐格断言集中在既有 `TestShapeCoverageMatrix` 用例表内扩展（shapes.go 头注豁免延续，不另建直测函数），命中/落空/伤害/冷却等行为断言一律走事件流
+- [x] 烈焰风暴四向均有断言；left/right 的横向旋转覆盖格逐格正确（6 格）
+- [x] 穿云箭端到端：命中伤害 45、CD 4 登记；距离 1/4 边界与超距落空均有断言
+- [x] 秘法汲取落空：Dodged 事件、无伤害 HpChanged、无自疗
+- [x] 风行回复：治疗 28、满血不溢出、冷却 2 生效（不依赖瞄准/命中路径）
+- [x] 形状语义单一来源：`classes` 包暴露需方向/需距离（及 depth/range）判定，engine 普攻+技能、client、bot 全部消费同一来源；四处散落 if/switch 消除（客户端经 `/api/classes` 或现职业载荷获取，不引入 proto 变更）
+- [x] 重复辅助单源化：`dirDelta`/`delta` 合并、点狙距离钳单一实现、bot 主轴裁决复用引擎实现（或票内记录不能复用的理由）
+- [x] `needsDirection` 死参数消除：普攻路径按形状语义传参，melee 不再走无效分支
+- [x] 行为零变化：`go test -race ./...`（有 `CODEWAR_TEST_DSN` 时并行含 DB 包）、`pnpm -C client test`、`pnpm -C client build` 全绿；设计 003 §4 数值/形状零改动
+- [x] 测试走事件流 seam（spec「测试决策」）；几何逐格断言集中在既有 `TestShapeCoverageMatrix` 用例表内扩展（shapes.go 头注豁免延续，不另建直测函数），命中/落空/伤害/冷却等行为断言一律走事件流
+
+> **交付记录（2026-10-26，勾票）**：`ticket/27-skill-shape-tests-and-semantics` 分支提交 `b0a6e1d`（四处测试缺口）、`89bdb52`（语义单源 + 重复收敛）、`5733ae8`（code-review 加固：满血治疗 HP 不变量与场景走位落点钉住，变异电池 M1/M3/M4/M5/M7/M8 + band 旋转全部必红后还原）。回归：`go vet ./...`、`go test -race ./...`、`CODEWAR_TEST_DSN` 并行 DB 包、`pnpm -C client test`（47/47）、`pnpm -C client build` 全绿。双轴 code review（Standards/Spec）无硬违规、无漏做；勾票依据见会话验收报告。
 
 > **来源记录**：06 号票追认记录（2026-10-26）的「后续」项；同日双轴 code review 的 Standards 轴 4 项坏味道与 Spec 轴 4 处测试缺口在本票收口。
