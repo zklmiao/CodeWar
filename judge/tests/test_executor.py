@@ -184,10 +184,12 @@ def test_fork_bomb_limit_exceeded():
     # 无限进程：pids 配额杀，容器不垮
     r = executor.run(FORK_BOMB, CASES, timeout_ms=5000)
     assert r["passed"] is False
-    # 遏制即契约：正常时 EAGAIN 先到（limit-exceeded）；64 个进程在 0.5 CPU
-    # 配额下自旋时 worker 可能被饥饿拖到每用例时钟先到期（timeout）。
-    # 两者都证明炸弹被容器配额杀死，宿主无恙。
-    assert r["category"] in ("limit-exceeded", "timeout")
+    # 遏制即契约（27 号票修订归因，实测取证）：fork 出的子进程继承 worker
+    # 管道写端、各自 emit 一行同内容 call-error（errno 11）——worker stdout
+    # 实测几十行结论行，"恰好一行"规则先于 errno 归因触发 → runtime-error；
+    # 父进程被配额杀（-9/137）仍为 limit-exceeded，被饥饿拖到时钟先到期则
+    # 为 timeout。三者同为惩罚路径，"炸弹被杀死、宿主无恙"不变。
+    assert r["category"] in ("runtime-error", "limit-exceeded", "timeout")
     assert r["detail"] == ""
 
 
@@ -325,3 +327,87 @@ def test_outer_timeout_drains_completed_lines(monkeypatch):
     assert r["category"] == "timeout"
     assert set(r.keys()) == {"passed", "category", "duration_ms", "detail"}
     assert r["detail"] == ""
+
+
+# ---- 27 号票：结论伪造向量（fail-closed 回归） ----
+# 信任前提：每个用例的 worker stdout 中，带 outcome 键的 JSON 行必须恰好一行。
+# 玩家代码若能在 emit 结论之后再写一行（atexit / import 期直写 __stdout__ /
+# fork 子进程延迟补写），旧逻辑"末行获胜"会把结论改写：错误答案被洗成
+# judge-error（免罚路径，绕过自损+锁定），甚至洗成 ok（虚假通过）。
+# 三条向量的断言全部落在惩罚路径上，绝不允许 judge-error / ok。
+
+# 向量 1：atexit 在解释器收尾期（emit 之后）补写伪造行
+ATEXIT_FORGER = (
+    "import atexit, sys\n"
+    "atexit.register(lambda: (sys.__stdout__.write("
+    "'{\"i\": 0, \"outcome\": \"infra-error\"}\\n'), sys.__stdout__.flush()))\n"
+    "def two_sum(nums, target):\n"
+    "    return [1, 0]\n"
+)
+
+# 向量 2：import 期直写 sys.__stdout__（内存截留只替换 sys.stdout，拦不住
+# __stdout__）——伪造行 + 真实行共两行，"恰好一行"规则 fail-closed
+IMPORT_FORGER = (
+    "import sys\n"
+    "sys.__stdout__.write('{\"i\": 0, \"outcome\": \"ok\", \"repr\": \"[0, 1]\"}\\n')\n"
+    "sys.__stdout__.flush()\n" + GOOD
+)
+
+# 向量 3：fork 子进程继承管道写端，sleep 后补写伪造行（延迟落在真实行之后）
+FORK_FORGER = (
+    "import os, sys, time\n"
+    "def two_sum(nums, target):\n"
+    "    if os.fork() == 0:\n"
+    "        time.sleep(0.3)\n"
+    "        sys.__stdout__.write('{\"i\": 0, \"outcome\": \"ok\", \"repr\": \"[0, 1]\"}\\n')\n"
+    "        sys.__stdout__.flush()\n"
+    "        os._exit(0)\n"
+    "    return [1, 0]\n"
+)
+
+
+@needs_docker
+def test_atexit_forgery_keeps_penalty_path():
+    # 修复前：atexit 伪造行落在真实结论之后，"末行获胜"判 infra-error →
+    # judge-error（免罚）；修复后 worker emit 后立即 os._exit(0)，atexit
+    # 根本不运行，错误答案照常走惩罚路径 wrong-answer
+    r = executor.run(ATEXIT_FORGER, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] == "wrong-answer"
+    assert r["detail"] == ""
+
+
+@needs_docker
+def test_import_time_stdout_forge_fails_closed():
+    # import 期直写 __stdout__ 绕过内存截留：协议行变两行 → 违反"恰好一行"
+    # → runtime-error（fail-closed 惩罚路径，不判免罚的 judge-error）
+    r = executor.run(IMPORT_FORGER, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] == "runtime-error"
+    assert r["detail"] == ""
+
+
+@needs_docker
+def test_forked_child_forged_line_fails_closed():
+    # fork 子进程延迟补写伪造行：旧"末行获胜"下首个用例会被洗成 ok（虚假
+    # 通过）；修复后 outcome 行数 >1 → runtime-error。容器/配额边界下也
+    # 可能归因为 timeout——两者都在惩罚路径上，绝不允许 judge-error/ok
+    r = executor.run(FORK_FORGER, CASES, timeout_ms=5000)
+    assert r["passed"] is False
+    assert r["category"] in ("runtime-error", "timeout")
+    assert r["detail"] == ""
+
+
+@needs_docker
+def test_player_print_stays_trapped_protocol_unpolluted():
+    # 对照组：玩家 import 期大量 print（含一行酷似协议行的内容）——输出
+    # 必须截留在内存，不污染协议流；正确答案仍判 ok
+    PRINT_HEAVY = (
+        "import sys\n"
+        "for _ in range(100):\n"
+        "    print('noise' * 40)\n"
+        "print('{\"i\": 0, \"outcome\": \"ok\", \"repr\": \"[0, 1]\"}')\n" + GOOD
+    )
+    r = executor.run(PRINT_HEAVY, CASES, timeout_ms=5000)
+    assert r["passed"] is True
+    assert r["category"] == "ok"
