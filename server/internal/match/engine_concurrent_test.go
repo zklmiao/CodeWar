@@ -10,7 +10,7 @@ import (
 	"codewar/server/gen/matchpb"
 )
 
-// ===== 28 号票：判题在锁外——镜像竞速公平性回归 =====
+// ===== 29 号票：判题在锁外——镜像竞速公平性回归 =====
 // 断言风格遵守 spec「测试决策」：只经公共边界（Submit / SetTargeting /
 // Snapshot / HandleRoundTimeout）断言事件流与判题器调用次数，不触碰引擎内部状态。
 

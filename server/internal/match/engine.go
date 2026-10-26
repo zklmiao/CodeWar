@@ -86,7 +86,7 @@ type Engine struct {
 	roundStart time.Time
 	panel      panel
 	actions    map[Player]*pendingAction // 一回合一人一行动
-	inFlight   map[Player]bool           // 28 号票：判题在途（预检登记，落地/丢弃时清除）
+	inFlight   map[Player]bool           // 29 号票：判题在途（预检登记，落地/丢弃时清除）
 	solveSeq   map[Player]int64          // 同毫秒 tie-break：先来后到
 	solveCnt   int64
 	pos        map[Player]Pos  // 结算位置（跨回合持续，移动题改变）
@@ -246,7 +246,7 @@ type submitGate struct {
 	q     Question
 }
 
-// Submit：玩家提交（03 号票：带行动选择；06 号票：+技能位；28 号票：判题移出
+// Submit：玩家提交（03 号票：带行动选择；06 号票：+技能位；29 号票：判题移出
 // 锁外）。规则：
 //   - 非法 action / 回合外提交 / 已行动再交 / 判题在途再交 / 对局已结束：静默丢弃（ADR-0002 迟到判无效）
 //   - 技能位未装备 / 冷却中：拒绝反馈事件（不判题不惩罚）
@@ -256,7 +256,7 @@ type submitGate struct {
 //   - judge-error：基础设施故障，不罚不锁，可重交
 //   - 通过：记录行动与解题耗时；双方都已行动 → 立即提前结算
 //
-// 并发模型（28 号票，三段式）：① 锁外取提交时刻 received；② 持锁预检并登记
+// 并发模型（29 号票，三段式）：① 锁外取提交时刻 received；② 持锁预检并登记
 // 在途；③ 锁外判题，重新加锁落地。Docker 判题（0.2–3s，RPC 上限 16s）不再持
 // 引擎锁——对手提交、SetTargeting、Snapshot（重连）、计时泵 HandleRoundTimeout
 // 在判题期间全部照常工作，后到玩家的排队时间不再被算进 solveMs（spec 用户
@@ -280,7 +280,7 @@ func (e *Engine) Submit(player Player, action, code string, moveTo Pos) {
 	e.land(player, action, moveTo, res, received, gate.round)
 }
 
-// preflight：持锁预检（28 号票）。返回 nil = 提交被拒/丢弃（拒绝反馈事件已在
+// preflight：持锁预检（29 号票）。返回 nil = 提交被拒/丢弃（拒绝反馈事件已在
 // 锁内发出，如有）；非 nil = 通过，且已置 inFlight[player]（land 负责清除）。
 func (e *Engine) preflight(player Player, action string, moveTo Pos, received time.Time) *submitGate {
 	e.mu.Lock()
@@ -293,7 +293,7 @@ func (e *Engine) preflight(player Player, action string, moveTo Pos, received ti
 		return nil
 	}
 	if e.inFlight[player] {
-		return nil // 同一玩家判题在途：静默丢弃（与"已行动再交"一致，28 号票）
+		return nil // 同一玩家判题在途：静默丢弃（与"已行动再交"一致，29 号票）
 	}
 	if action != ActionAttack && action != ActionMove && action != ActionDefend && action != ActionSkill {
 		return nil // 非法 action：静默丢弃（裁决 2）
@@ -335,7 +335,7 @@ func (e *Engine) preflight(player Player, action string, moveTo Pos, received ti
 	return &submitGate{round: e.round, q: q}
 }
 
-// land：判题落地（28 号票）。重新持锁；defer 清除在途标记（defer 后进先出，
+// land：判题落地（29 号票）。重新持锁；defer 清除在途标记（defer 后进先出，
 // 清除发生在放锁之前）。判题期间回合已翻页或对局已结束 → 结果过期，丢弃
 // （不发事件不罚）。
 func (e *Engine) land(player Player, action string, moveTo Pos, res JudgeResult,
