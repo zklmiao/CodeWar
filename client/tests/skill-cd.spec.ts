@@ -23,10 +23,12 @@ const WARRIOR = {
   attackShape: "melee",
   attackDepth: 0,
   attackRange: 1,
+  attackNeedsDirection: false,
+  attackNeedsDistance: false,
   moveMax: 2,
   color: "#b4552d",
   skills: [
-    { id: "cleave", name: "巨力斩", kind: "damage", power: 55, heal: 0, cooldown: 4, shape: "burst8", depth: 0, rangeMax: 1 },
+    { id: "cleave", name: "巨力斩", kind: "damage", power: 55, heal: 0, cooldown: 4, shape: "burst8", depth: 0, rangeMax: 1, needsDirection: false, needsDistance: false },
   ],
 };
 

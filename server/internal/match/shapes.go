@@ -7,21 +7,6 @@ import (
 	"codewar/server/internal/classes"
 )
 
-// dirDelta：方向值 → 每步行列增量。
-func dirDelta(dir string) (int, int) {
-	switch dir {
-	case classes.DirUp:
-		return -1, 0
-	case classes.DirDown:
-		return 1, 0
-	case classes.DirLeft:
-		return 0, -1
-	case classes.DirRight:
-		return 0, 1
-	}
-	return 0, 0
-}
-
 // validDirection：方向值合法（targeting 提交与自动瞄准补齐用）。
 func validDirection(dir string) bool {
 	switch dir {
@@ -52,23 +37,17 @@ func coverageCells(from Pos, shape string, depth, rangeMax int32, t Targeting) m
 	switch shape {
 	case classes.ShapeMelee:
 		for _, d := range []string{classes.DirUp, classes.DirDown, classes.DirLeft, classes.DirRight} {
-			dr, dc := dirDelta(d)
+			dr, dc := classes.DirectionDelta(d)
 			add(Pos{Row: from.Row + dr, Col: from.Col + dc})
 		}
 	case classes.ShapeLine:
-		dr, dc := dirDelta(t.Direction)
+		dr, dc := classes.DirectionDelta(t.Direction)
 		for step := 1; step <= int(depth); step++ {
 			add(Pos{Row: from.Row + dr*step, Col: from.Col + dc*step})
 		}
 	case classes.ShapeSnipe:
-		dr, dc := dirDelta(t.Direction)
-		dist := t.Distance
-		if dist < 1 {
-			dist = 1
-		}
-		if rangeMax > 0 && dist > int(rangeMax) {
-			dist = int(rangeMax)
-		}
+		dr, dc := classes.DirectionDelta(t.Direction)
+		dist := classes.ClampSnipeDistance(t.Distance, rangeMax)
 		add(Pos{Row: from.Row + dr*dist, Col: from.Col + dc*dist})
 	case classes.ShapeBurst8:
 		for dr := -1; dr <= 1; dr++ {
@@ -79,7 +58,7 @@ func coverageCells(from Pos, shape string, depth, rangeMax int32, t Targeting) m
 			}
 		}
 	case classes.ShapeBand:
-		dr, dc := dirDelta(t.Direction)
+		dr, dc := classes.DirectionDelta(t.Direction)
 		lr, lc := dc, dr // 横向 = 行进方向旋转 90°（up/down 的横向是左右，left/right 的横向是上下）
 		for step := 1; step <= int(depth); step++ {
 			base := Pos{Row: from.Row + dr*step, Col: from.Col + dc*step}
@@ -96,22 +75,13 @@ func coverageCells(from Pos, shape string, depth, rangeMax int32, t Targeting) m
 // autoAim：未提交 targeting 时的缺省瞄准（裁决 3）：方向取指向对手的坐标轴
 // （|Δrow| ≥ |Δcol| 取行轴，否则列轴；同行/同列时取唯一非零轴），点狙距离取
 // min(rangeMax, 曼哈顿距离)。非攻击者相对位形下自动瞄准可能落空——落空即闪避语义。
+// 主轴裁决与决策层共用 classes.AxisDirection（27 号票单源化）。
 func (e *Engine) autoAim(p Player, rangeMax int32) Targeting {
 	me, opp := e.pos[p], e.pos[other(p)]
-	dr, dc := opp.Row-me.Row, opp.Col-me.Col
-	dir := classes.DirDown
-	switch {
-	case dr > 0 && abs(dr) >= abs(dc):
-		dir = classes.DirDown
-	case dr < 0 && abs(dr) >= abs(dc):
-		dir = classes.DirUp
-	case dc > 0:
-		dir = classes.DirRight
-	case dc < 0:
-		dir = classes.DirLeft
-	}
+	dRow, dCol := opp.Row-me.Row, opp.Col-me.Col
+	dir, _ := classes.AxisDirection(dRow, dCol)
 	dist := int(rangeMax)
-	if m := abs(dr) + abs(dc); m < dist {
+	if m := abs(dRow) + abs(dCol); m < dist {
 		dist = m
 	}
 	if dist < 1 {
@@ -121,25 +91,24 @@ func (e *Engine) autoAim(p Player, rangeMax int32) Targeting {
 }
 
 // effectiveTargeting：玩家提交的 targeting 优先，缺口用自动瞄准补齐；
-// 距离钳到 [1, rangeMax]（needsDistance 的形状才带距离语义）。
-func (e *Engine) effectiveTargeting(p Player, needsDirection, needsDistance bool, rangeMax int32) Targeting {
+// 需方向/需距离由形状语义唯一判定（classes.TargetingSemantics），距离钳到
+// [1, rangeMax]（needsDistance 的形状才带距离语义）。
+func (e *Engine) effectiveTargeting(p Player, sem classes.TargetingSemantics) Targeting {
 	t := e.targeting[p]
-	auto := e.autoAim(p, rangeMax)
-	if needsDirection && !validDirection(t.Direction) {
+	auto := e.autoAim(p, sem.RangeMax)
+	if sem.NeedsDirection && !validDirection(t.Direction) {
 		t.Direction = auto.Direction
 	}
-	if !needsDirection {
+	if !sem.NeedsDirection {
 		t.Direction = ""
 	}
-	if !needsDistance {
+	if !sem.NeedsDistance {
 		t.Distance = 0
 		return t
 	}
 	if t.Distance < 1 {
 		t.Distance = auto.Distance
 	}
-	if rangeMax > 0 && t.Distance > int(rangeMax) {
-		t.Distance = int(rangeMax)
-	}
+	t.Distance = classes.ClampSnipeDistance(t.Distance, sem.RangeMax)
 	return t
 }

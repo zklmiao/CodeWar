@@ -136,8 +136,8 @@ func EffectiveReach(c classes.Class, s classes.Skill, hasSkill, skillReady bool)
 //     落点做最大进度（同距取较小步数，不越过对手）——跨回合收敛进射程；
 //   - 轴向被完全封死（无合法落点）时返回 false，调用方退化现行随机移动。
 func ApproachMove(from, opp match.Pos, moveMax, reach int) (match.Pos, bool) {
-	dir, _ := aimAxis(from, opp)
-	dr, dc := delta(dir)
+	dir, _ := classes.AxisDirection(opp.Row-from.Row, opp.Col-from.Col)
+	dr, dc := classes.DirectionDelta(dir)
 	best, bestDist := match.Pos{}, -1
 	var inRange match.Pos
 	hasInRange := false

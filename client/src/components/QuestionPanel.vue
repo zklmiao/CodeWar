@@ -88,22 +88,23 @@ const DIRS = [
 ];
 const cur = computed(() => store.pendingTargeting ?? { direction: "", distance: 0 });
 
-// 某行动是否需要方向/距离（形状语义来自职业表；melee/burst8/self 无方向）
+// 某行动是否需要方向/距离：语义字段由 /api/classes 下发（服务端 classes 包唯一判定，
+// 27 号票）；客户端不再按形状名自行判断，新增形状零改动。
 function aimShape(action: string): { dir: boolean; dist: boolean; rangeMax: number } {
   if (action === "attack") {
     const c = myClass.value;
     if (!c) return { dir: false, dist: false, rangeMax: 0 };
     return {
-      dir: c.attackShape !== "melee",
-      dist: c.attackShape === "snipe",
+      dir: c.attackNeedsDirection,
+      dist: c.attackNeedsDistance,
       rangeMax: c.attackRange,
     };
   }
   const k = mySkill.value;
   if (!k) return { dir: false, dist: false, rangeMax: 0 };
   return {
-    dir: k.shape !== "burst8" && k.shape !== "self",
-    dist: k.shape === "snipe",
+    dir: k.needsDirection,
+    dist: k.needsDistance,
     rangeMax: k.rangeMax,
   };
 }
