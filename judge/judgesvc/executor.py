@@ -181,8 +181,10 @@ def guard_author_code(src: str, what: str) -> None:
 # ---- 容器内 harness：父进程（逐用例 fork worker，首败即停） ----
 # 程序本体经 `python -c` 加载（stdin 完整留给 payload）；stdin JSON 携带
 # 解法源码 + worker 脚本 + call 清单（无期望值）；harness 把解法与 worker
-# 写入 /tmp tmpfs，每行输出一个用例结论；正常结束（即使首败即停）必以
-# summary 行收尾；
+# 写入 /tmp tmpfs，每行输出一个用例结论。协议不变量（28 号票）：每个用例
+# 的 worker stdout 中带 outcome 键的结论行必须恰好一行，0 行或多于 1 行
+# 一律 fail-closed 判 runtime-error（走惩罚路径）；正常结束（即使首败即停）
+# 必以 summary 行收尾；
 # 全程 exit 0（非零退出一律视为 infra 故障）。
 _HARNESS = (
     "import json, os, subprocess, sys, time\n"
@@ -237,14 +239,16 @@ for idx, c in enumerate(calls):
     if proc.returncode in (-9, 137):
         emit({"i": idx, "status": "limit-exceeded"})  # 配额杀：OOM-killer
         break
-    got = None
-    for v in reversed(_parse_json_lines(proc.stdout)):
-        if isinstance(v.get("outcome"), str):
-            got = v
-            break
-    if got is None:
-        emit({"i": idx, "status": "runtime-error"})  # worker 无结构化输出
+    # 28 号票 fail-closed：结论行必须恰好一行。0 行 = worker 无结构化输出；
+    # 多于 1 行 = 协议流被污染（atexit / 直写 __stdout__ / fork 子进程在真实
+    # 结论之后补写伪造行——玩家可借此把任意结论改写成免罚的 judge-error 甚
+    # 至虚假通过）。一律走惩罚路径 runtime-error，绝不采信其中任何一行。
+    outcomes = [v for v in _parse_json_lines(proc.stdout)
+                if isinstance(v.get("outcome"), str)]
+    if len(outcomes) != 1:
+        emit({"i": idx, "status": "runtime-error"})
         break
+    got = outcomes[0]
     outcome = got["outcome"]
     if outcome == "ok":
         emit({"i": idx, "status": "ok", "repr": got.get("repr", "")})
@@ -277,8 +281,11 @@ summary()
 # 就没有）。15 号票 v2 流程：import 玩家代码 → NS 并入构造辅助库 → exec
 # setup（题作者声明，失败=infra 不罚玩家）→ eval(call) → 若声明 compare
 # 则用其 _normalize 把 got 规范化为 repr 字符串回传（值比对在宿主）。
+# 28 号票：结论 emit 后立即 os._exit(0) 硬退——跳过 atexit 与解释器收尾，
+# 玩家代码无法在结论之后经收尾钩子向协议流补写伪造行；emit 已 flush，
+# 缓冲不会丢。
 _WORKER = r'''
-import io, json, sys
+import io, json, os, sys
 
 job = json.load(sys.stdin)
 idx = job["i"]
@@ -361,6 +368,7 @@ finally:
     sys.stdout, sys.stderr = old_out, old_err
 
 emit(result)
+os._exit(0)  # 硬退：跳过 atexit/解释器收尾，堵死"结论之后补写协议行"的伪造面
 '''
 
 
