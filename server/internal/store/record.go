@@ -14,7 +14,7 @@ import (
 type MatchResult struct {
 	MatchID    uuid.UUID // 本场唯一 ID（hub 按场生成；主键防并发双写）
 	Winner     string    // "p1" | "p2" | ""=平局
-	Reason     string    // ko | self-ko | rounds-cap
+	Reason     string    // ko | self-ko | rounds-cap | resign（31 号票起；无枚举校验，透传入库）
 	DurationMs int32     // 开赛到终局的毫秒数
 	P1UserID   uuid.UUID
 	P2UserID   uuid.UUID

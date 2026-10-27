@@ -249,8 +249,16 @@ message ClientMessage {
     // 目标选择（06 号票）：解出攻击/技能题后、结算前可随时提交/修改（免费操作
     // 不耗答题，设计 003 §1）；未提交则结算时走自动瞄准。
     SetTargeting set_targeting = 3;
+    // 投降认输（31 号票）：活跃对局生效（winner=对方、reason=resign、MatchEnded
+    // 恰好一次）；非活跃对局/已终局/教程局拒绝（不产生任何事件）；重复投降幂等。
+    // ADR-0002 事件流框架内的应用层消息，无新 ADR。
+    ResignRequest resign = 4;
   }
 }
+
+// 投降请求（31 号票）：无字段——玩家身份由连接席位（join 绑定的 player）权威
+// 决定，请求体不可指定对局或玩家（防代投/错席）。
+message ResignRequest {}
 
 message SetTargeting {
   Targeting targeting = 1;

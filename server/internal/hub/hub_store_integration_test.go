@@ -40,6 +40,9 @@ func dialWS(t *testing.T, srvURL, player, token string) *websocket.Conn {
 	if err != nil {
 		t.Fatalf("[%s] 拨号失败：%v", player, err)
 	}
+	// 31 号票：hub 读窗口靠 pong 保活（生产客户端是浏览器自动回 pong），
+	// 长 PVP 集成对局超过 pongTimeout，测试客户端须扮演同样行为。
+	enablePong(ws)
 	join, _ := protojson.Marshal(&matchpb.ClientMessage{Payload: &matchpb.ClientMessage_Join{
 		Join: &matchpb.JoinRequest{Player: player, Token: token},
 	}})
@@ -97,8 +100,12 @@ func (j contentJudge) Judge(_ context.Context, code string, _ []match.TestCase) 
 // selfDestructLoop：P2 策略——血量制导的自损：仅当 lastHP > 22 时提交毒码
 // （降入 P1 一击必杀区间 [1,22] 即停手），使 P1 的回合超时攻击成为致命一击
 // → reason=ko。每次错误 -3 HP + 5 秒锁（约 6s 一步）；P1 满血不受威胁。
+// 等锁睡眠分片为 900ms/片，每片手动补一个 pong（WriteControl 与读循环并发
+// 安全）——31 号票起 hub 读窗口靠 pong 续窗，一次性长睡眠会让 ping 的 pong
+// 迟到（27s ping + 5.4s sleep > 30s 窗口）被服务端判死。
 func selfDestructLoop(t *testing.T, ws *websocket.Conn, player string, ends chan<- *matchpb.MatchEnded) {
 	t.Helper()
+	enablePong(ws) // 31 号票：hub 读窗口靠 pong 保活（同浏览器自动回 pong）
 	_ = ws.SetReadDeadline(time.Now().Add(400 * time.Second))
 	lastHP := int32(100) // 引擎初始 HP（spec 附注）
 	wrongs := 0
@@ -125,7 +132,10 @@ func selfDestructLoop(t *testing.T, ws *websocket.Conn, player string, ends chan
 				if err := ws.WriteMessage(websocket.TextMessage, sub); err == nil {
 					wrongs++
 				}
-				time.Sleep(5400 * time.Millisecond) // 等锁过期（服务端 5s）
+				for wait := 0; wait < 5400; wait += 900 { // 等锁过期（服务端 5s）
+					time.Sleep(900 * time.Millisecond)
+					_ = ws.WriteControl(websocket.PongMessage, nil, time.Now().Add(2*time.Second))
+				}
 			}
 			if me := env.GetMatchEnded(); me != nil {
 				ends <- me

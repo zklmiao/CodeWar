@@ -29,3 +29,10 @@
 - [ ] 对齐记录：resign 属 ADR-0002 事件流框架内的应用层消息，票内记录消息命名与拒绝语义即可，无新 ADR
 
 > 来源：optimization-review-2026-10-27.md「推荐开票组合」第 2 项。
+
+## 对齐记录（31 号票实现裁决，无新 ADR）
+
+- **消息命名**：`ClientMessage` oneof 新增 `ResignRequest resign = 4`（沿 JoinRequest/SubmitRequest 命名风格；请求体无字段——玩家身份由 join 绑定的连接席位权威决定，请求体不可指定对局或玩家，防代投/错席）。ADR-0002 事件流框架内的应用层消息，`MatchEnded.reason` 增值 `resign`，无 schema migration（end_reason 为 TEXT+注释、无 CHECK；已核实 `store.RecordMatch` 无枚举校验、直通入库；`db/migrations/000001_init.up.sql` 行内注释与 store 侧 `MatchResult.Reason` 注释同步）。
+- **拒绝语义与归属**：`Engine.Resign(player) error`——仅 ROUND_ACTIVE 生效（winner=对方 / reason=resign / MatchEnded 恰好一次，走与超时/自损同一条 `endMatch` 收束路径，hub 终局广播零改动复用）；拒绝（返回错误、零事件）：禁投对局 / 非活跃（WAITING）/ 已终局（含上一次投降——重复投降幂等即由此保证）。**教程局拒绝的实现取"禁投标记"而非"教程标记"**：引擎内不得出现 tutorial 字样（10 号票 `TestMatchPackageHasNoTutorialReferences` 零侵入边界），故 Setup 增加通用 `ResignLocked bool`，hub 在教程局设置——引擎不知道禁投动机，教学局拒绝是接入层的裁决；同理引擎注释不出现 bot 字样（`TestMatchPackageHasNoBotReferences`）。
+- **hub 连接卫生参数**（hub.go 常量块，注释含依据）：pongTimeout=30s（读窗口）/ pingPeriod=27s（=90%，gorilla chat 惯例）/ writeTimeout=10s / joinTimeout=10s（首条 join 读取窗）/ maxConns=8（当前拓扑单场 ≤2 连接，08 号票在线化前的防滥用兜底，08 重估）。附带修复：`conn.send` 满缓冲从阻塞改丢弃——broadcast 在引擎锁内扇出，慢消费者/死链缓冲填满会卡死全场事件流（丢弃后断号，客户端按 ADR-0002 重连自愈）。
+- **测试时长说明**：死链回收/保活（`TestDeadConnRecycledAndPongKeepsAlive`）与握手超时（`TestJoinHandshakeTimeout`）走真实墙钟与真实 socket（SetReadDeadline 无法注入假钟），t.Parallel 重叠执行，hub 包 -race 总时长 ≈35s。

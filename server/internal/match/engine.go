@@ -98,6 +98,7 @@ type Engine struct {
 	skillReadyFrom map[Player]int           // 技能再度可用回合（第 N 回合释放 → N+CD）
 	targeting      map[Player]Targeting     // 攻击/技能目标选择（可随时覆盖，结算时读取）
 	riskCoeff      float64                  // 难度风险系数（05 号票，只乘普攻伤害）
+	resignLocked   bool                     // 禁投对局标记（31 号票，Resign 拒绝依据）
 	timer          Timer
 	timerC         <-chan time.Time
 	resetC         chan struct{} // armTimer 替换 timer 时 close+重建，唤醒阻塞在旧 timerC 上的泵
@@ -141,6 +142,11 @@ type Setup struct {
 	// 技能效果为设计 003 字面值不乘系数）。0 = 未配置 → L3（系数 1.0，
 	// 匿名缺省链路零行为变化）。
 	RiskTier int
+	// ResignLocked：该对局禁止投降（31 号票）。引擎不关心禁投的动机——接入层
+	// 对"胜负之外还有更高目标"的对局设置此标记（教学引导局：中途认输会作废
+	// 教学管线，目标判定停止、进度不落库、完成页永不出现），Resign 一律拒绝
+	//（fail-closed，不产生任何事件）。缺省 false = 正常对局，零行为变化。
+	ResignLocked bool
 }
 
 // NewEngineWithSetup：带职业配置的构造（hub 用；未知组合由 hub 先行校验，
@@ -148,6 +154,7 @@ type Setup struct {
 func NewEngineWithSetup(clock Clock, questions QuestionPort, judge JudgePort,
 	broadcast func(*matchpb.Envelope), setup Setup) *Engine {
 	e := NewEngine(clock, questions, judge, broadcast)
+	e.resignLocked = setup.ResignLocked
 	_ = e.BindClass(P1, setup.P1Class, setup.P1Skill)
 	_ = e.BindClass(P2, setup.P2Class, setup.P2Skill)
 	if setup.RiskTier != 0 {
@@ -671,6 +678,31 @@ func (e *Engine) Stop() {
 
 func (e *Engine) closeDone() {
 	e.doneOnce.Do(func() { close(e.done) })
+}
+
+// Resign：玩家投降认输（31 号票）。仅活跃对局（ROUND_ACTIVE）生效：winner=对方、
+// reason=resign、MatchEnded 恰好一次——与超时/自损走同一条 endMatch 收束路径，
+// hub 的终局广播（结算落库 / 模拟对手停机 / 引擎作废）零改动复用。
+// 拒绝路径（返回错误，不产生任何事件）：
+//   - 禁投对局（Setup.ResignLocked，接入层对教学引导局等设置）；
+//   - 非活跃对局（WAITING 未开赛）；
+//   - 已终局（ENDED，含上一次投降）。
+//
+// 重复投降幂等：第一次已把对局推到 ENDED，第二次落入"已终局"拒绝——
+// 无第二个 MatchEnded（事件流唯一性由此保证，与广播恰好一次同源）。
+// 投降时不扣血、不触发在途判题的落地（land 对 ENDED 相位的结果过期丢弃，
+// 与回合翻页同一防护）。
+func (e *Engine) Resign(player Player) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.resignLocked {
+		return fmt.Errorf("该对局不支持投降")
+	}
+	if e.phase != matchpb.MatchPhase_MATCH_PHASE_ROUND_ACTIVE {
+		return fmt.Errorf("对局不在活跃状态（%s），投降被拒", e.phase)
+	}
+	e.endMatch(other(player), ReasonResign)
+	return nil
 }
 
 // emitSkillDodged：技能被闪避的统一事件（伤害/汲取的未命中分支共用）。

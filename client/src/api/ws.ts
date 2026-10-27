@@ -2,6 +2,7 @@
 import {
   ClientMessage,
   JoinRequest,
+  ResignRequest,
   SubmitRequest,
 } from "../api/proto/codewar/match/v1/match";
 
@@ -90,6 +91,14 @@ export class MatchSocket {
     const msg: ClientMessage = {
       setTargeting: { targeting: { direction: t.direction, distance: t.distance } },
     };
+    this.ws.send(JSON.stringify(ClientMessage.toJSON(msg)));
+  }
+
+  // 31 号票：投降认输——请求体无字段（玩家身份由 join 绑定的席位权威决定）；
+  // 服务端拒绝路径（非活跃/已终局/教程局）不产生任何事件，静默丢弃。
+  resign(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const msg: ClientMessage = { resign: ResignRequest.fromJSON({}) };
     this.ws.send(JSON.stringify(ClientMessage.toJSON(msg)));
   }
 

@@ -34,7 +34,7 @@ CREATE TABLE matches (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     winner       TEXT,                 -- 'p1' | 'p2' | NULL=平局
-    end_reason   TEXT NOT NULL,        -- ko | self-ko | rounds-cap
+    end_reason   TEXT NOT NULL,        -- ko | self-ko | rounds-cap | resign（31 号票；写入侧无枚举校验，注释即契约）
     duration_ms  INT NOT NULL DEFAULT 0, -- 开赛（双方就位）到终局的毫秒数
     p1_user_id   UUID REFERENCES users (id),
     p2_user_id   UUID REFERENCES users (id)

@@ -15,6 +15,7 @@ const reasonText = computed(
       ko: "击杀对手",
       "self-ko": "对手错误提交自损殆尽",
       "rounds-cap": "10 回合打满，按剩余 HP 裁决",
+      resign: "对手主动认输（31 号票）",
     })[store.result?.reason ?? ""] ?? store.result?.reason,
 );
 // ELO 变化行：before → after（+delta）；匿名对局 elo 为空，不显示本区块。

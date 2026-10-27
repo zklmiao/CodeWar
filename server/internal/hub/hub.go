@@ -43,7 +43,11 @@ type conn struct {
 func (c *conn) send(b []byte) {
 	select {
 	case c.outbox <- b:
-	case <-c.closed:
+	default:
+		// outbox 满（慢消费者/死链写泵已停）：丢弃而非等待——broadcast 在引擎
+		// 锁内扇出，阻塞即全场事件流停摆（31 号票连接卫生：死链占位的比
+		// "永久占名额"更严重的后果）。被丢连接的事件序号出现断号，客户端
+		// 按 ADR-0002 断号重连、快照重建，自愈路径是既有机制。
 	}
 }
 
@@ -60,6 +64,30 @@ func (c *conn) close() {
 // settleTimeout：终局落库的 DB 预算（H3）。结算实测毫秒级，5s 只拦挂死；
 // 超时走"落库失败降级"分支（无 ELO 广播，对局照常结束），不引入新失败模式。
 const settleTimeout = 5 * time.Second
+
+// hub 连接卫生参数（31 号票，08 号票在线化前置）。集中常量化，禁止内联散写。
+const (
+	// pongTimeout：一次读操作的 deadline 窗口。依据：回合 75s 内客户端可能
+	// 整回合无上行（解不出题不提交），读方向的死活只能靠 pong 保活判定——
+	// 30s 无任何 pong/读 → 判死回收（断网/休眠/半开连接不再永久占位）。
+	// 误杀面：链路完全双向阻断 30s 的活链（此时提交同样发不过去，判死合理，
+	// 客户端重连自愈）。08 号票公网在线化时可再重估（移动网络 NAT 保活）。
+	pongTimeout = 30 * time.Second
+	// pingPeriod：服务端 ping 间隔，= pongTimeout 的 90%（gorilla chat 示例
+	// 惯例）——留一个周期余量，单次 pong 丢失后下一个 ping 仍能在窗口内续上。
+	// ping/pong 是 WebSocket 控制帧（零 proto 变化）；浏览器协议栈自动回 pong。
+	pingPeriod = pongTimeout * 9 / 10
+	// writeTimeout：单次写（数据帧/控制帧）的 deadline。慢客户端/死链的写
+	// 阻塞不得卡死 writePump（卡住即事件扇出停摆）。
+	writeTimeout = 10 * time.Second
+	// joinTimeout：升级后首条 join 的读取窗口。正常客户端 onopen 即发 join
+	//（毫秒级）；只握不发 join 的连接在此窗口内回收，防握手期占坑。
+	joinTimeout = 10 * time.Second
+	// maxConns：hub 并发活跃连接上限，按 conns 在册数计（连接关闭即时释放，
+	// 断线重连不被锁死）。当前拓扑单场对局 ≤2 连接（PvP 两席位 / 单人一席），
+	// 上限 8 是 08 号票在线多对局化前的防滥用兜底（不是容量规划值，08 重估）。
+	maxConns = 8
+)
 
 type Hub struct {
 	mu     sync.Mutex
@@ -119,6 +147,18 @@ func New(judge match.JudgePort, logger *slog.Logger, st *store.Store) *Hub {
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		return
+	}
+
+	// 连接卫生（31 号票）：并发上限按活跃连接（conns 在册）计，超限直接走
+	// 既有 close-frame 拒绝路径——在 readJoin 之前判（握手期的死链不占名额，
+	// 但也不该为它消耗 joinTimeout 与读缓冲）。释放即 conns 删除（removeConn），
+	// 断线重连不会被自己的旧名额锁死。
+	h.mu.Lock()
+	full := len(h.conns) >= maxConns
+	h.mu.Unlock()
+	if full {
+		h.reject(ws, "服务器连接数已达上限，请稍后重试")
 		return
 	}
 
@@ -263,10 +303,13 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			}
 			questions = bank
 			// 教程固定职业组合（不做盲选，数值可复现才好教学）。
+			// 31 号票：教程局禁止投降（教学管线不可中途作废）——引擎不知道
+			// "教程"概念（零侵入边界，10 号票立约），只接受"该局禁投"标记。
 			setup = match.Setup{
 				P1Class: level.PlayerClass, P1Skill: level.PlayerSkill,
 				P2Class: level.BotClass, P2Skill: level.BotSkill,
-				RiskTier: mc.tier,
+				RiskTier:     mc.tier,
+				ResignLocked: true,
 			}
 		} else {
 			questions = newQuestions(mc)
@@ -414,6 +457,9 @@ func newQuestions(mc matchConfig) *question.Factory {
 }
 
 func (h *Hub) readJoin(ws *websocket.Conn) (match.Player, string, string, string, joinConfig, error) {
+	// 连接卫生（31 号票）：join 只读一条消息，窗口封顶——只握不发 join 的
+	// 连接（恶意占坑/半开死链）到期回收，不无限占用 goroutine 与读缓冲。
+	_ = ws.SetReadDeadline(time.Now().Add(joinTimeout))
 	_, data, err := ws.ReadMessage()
 	if err != nil {
 		return "", "", "", "", joinConfig{}, err
@@ -457,6 +503,13 @@ func (h *Hub) reject(ws *websocket.Conn, msg string) {
 }
 
 func (h *Hub) readLoop(c *conn) {
+	// 连接卫生（31 号票）：读窗口 pongTimeout，pong 到达即续窗（浏览器协议栈
+	// 自动回 pong）。不回 pong 且不上行的死链（断网/休眠/半开连接）在窗口
+	// 到期时由 ReadMessage 的超时错误回收——回收走下方 defer（释放 conns 名额）。
+	_ = c.ws.SetReadDeadline(time.Now().Add(pongTimeout))
+	c.ws.SetPongHandler(func(string) error {
+		return c.ws.SetReadDeadline(time.Now().Add(pongTimeout))
+	})
 	defer func() {
 		c.close()
 		h.removeConn(c)
@@ -506,6 +559,22 @@ func (h *Hub) readLoop(c *conn) {
 				})
 			}
 		}
+		// 31 号票：投降认输——玩家身份取连接席位（请求体无字段，防代投）。
+		// 拒绝路径（教程局/非活跃/已终局）由引擎返回错误，不产生任何事件，
+		// 与 Submit 的非活跃静默丢弃同一语义；PvP 走引擎 endMatch → 终局广播 →
+		// 既有 settle 全链（matches.end_reason='resign' + elo_history 两行 +
+		// self-play guard 沿用）；PvE 由广播路径的 Bot 停机 + settleEnded 的
+		// 单人模式守卫兜住（bot 胜、零落库）。
+		if msg.GetResign() != nil {
+			h.mu.Lock()
+			eng := h.engine
+			h.mu.Unlock()
+			if eng != nil {
+				if err := eng.Resign(c.player); err != nil {
+					h.logger.Info("投降被拒", "player", c.player, "err", err)
+				}
+			}
+		}
 	}
 }
 
@@ -541,12 +610,23 @@ func (h *Hub) removeConn(c *conn) {
 }
 
 // writePump：串行写 ws。退出条件：closed 信号（21 号票：outbox 永不关闭，
-// 不再以通道关闭作退出信号）或写失败；退出前收尾排干（drainOutbox）。
+// 不再以通道关闭作退出信号）、写失败或 ping 写失败；退出前收尾排干（drainOutbox）。
+// 连接卫生（31 号票）：每 pingPeriod 发一次 ping（客户端 pong 续读窗口）；
+// 所有写都带 writeTimeout——慢客户端/死链不得卡死事件扇出。
 func (h *Hub) writePump(c *conn) {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
 	for {
 		select {
 		case b := <-c.outbox:
+			_ = c.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
 			if err := c.ws.WriteMessage(websocket.TextMessage, b); err != nil {
+				return
+			}
+		case <-ticker.C:
+			// ping 写失败（含写超时）即退出：读侧的 pongTimeout 会独立判死回收
+			//（写侧死亡最终由读侧超时兜底，两条路径任一先到即可）。
+			if err := c.ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeTimeout)); err != nil {
 				return
 			}
 		case <-c.closed:
@@ -563,6 +643,7 @@ func (h *Hub) drainOutbox(c *conn) {
 	for {
 		select {
 		case b := <-c.outbox:
+			_ = c.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
 			if err := c.ws.WriteMessage(websocket.TextMessage, b); err != nil {
 				return
 			}
