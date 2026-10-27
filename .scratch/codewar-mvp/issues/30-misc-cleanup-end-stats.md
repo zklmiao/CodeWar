@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **现状证据（2026-10-27，HEAD `161d4f9`）：**
 
@@ -15,12 +15,14 @@
 - EventLog.vue:9-12：逐行渲染 `store.log`，无 kind 分类。
 - EndOverlay.vue：仅 title/reason/ELO 行。
 
-- [ ] README「当前波次」刷新至实态（概览 01-29 已关、frontier=08/11、25 挂起待美术票；与 optimization-review-2026-10-27.md 互链）
-- [ ] App.vue 标题「07 号票 · 账号与 ELO」开发标注移除（导航链接、用户名旁 ELO 展示行为零变化）
-- [ ] QuestionPanel 心跳补 `onBeforeUnmount` 清理（组件卸载后无残留定时器；vitest fake timers 断言或等价证据）
-- [ ] LogEntry 增加 `kind` 分类（按事件类型：伤害/治疗/闪避/系统等），EventLog 按 kind 着色（伤害红/治疗绿/闪避黄/系统默认次级色）；日志文案与 seq 语义零变化
-- [ ] match store 由事件流累计终局统计：回合数、双方总伤害、双方闪避次数（不依赖 50 条日志上限）；EndOverlay 增统计区块（匿名局同样显示，ELO 行为不变）
-- [ ] 新增 vitest：store 统计累计正确性 + EventLog kind 着色渲染；沿用既有 spec 文件组织（match-store.spec / EndOverlay.spec / 新 eventlog.spec）
-- [ ] `pnpm -C client test` 与 `pnpm -C client build` 全绿；match.proto 与服务端零改动
+- [x] README「当前波次」刷新至实态（概览 01-29 已关、frontier=08/11、25 挂起待美术票；与 optimization-review-2026-10-27.md 互链）
+- [x] App.vue 标题「07 号票 · 账号与 ELO」开发标注移除（导航链接、用户名旁 ELO 展示行为零变化）
+- [x] QuestionPanel 心跳补 `onBeforeUnmount` 清理（组件卸载后无残留定时器；vitest fake timers 断言或等价证据）
+- [x] LogEntry 增加 `kind` 分类（按事件类型：伤害/治疗/闪避/系统等），EventLog 按 kind 着色（伤害红/治疗绿/闪避黄/系统默认次级色）；日志文案与 seq 语义零变化
+- [x] match store 由事件流累计终局统计：回合数、双方总伤害、双方闪避次数（不依赖 50 条日志上限）；EndOverlay 增统计区块（匿名局同样显示，ELO 行为不变）
+- [x] 新增 vitest：store 统计累计正确性 + EventLog kind 着色渲染；沿用既有 spec 文件组织（match-store.spec / EndOverlay.spec / 新 eventlog.spec）
+- [x] `pnpm -C client test` 与 `pnpm -C client build` 全绿；match.proto 与服务端零改动
 
 > 来源：optimization-review-2026-10-27.md「推荐开票组合」第 1 项。
+
+> **关票记录（2026-10-27 合并后验收）**：ticket/30 三个提交合入 main（merge 49204dd）。验证：分支 `pnpm -C client test` 56/56 → 合并后 main 64/64；`pnpm -C client build` 通过；match.proto 与 server/ 零改动（diff 核对）。对应测试：match-store.spec（统计累计/LogEntry.kind）、eventlog.spec（kind 着色）、EndOverlay.spec（统计区块/匿名局）、QuestionPanel.spec（卸载心跳清理）。
