@@ -29,6 +29,21 @@ function deltaText(before: number, after: number): string {
     <div class="card">
       <h2>{{ title }}</h2>
       <p>{{ reasonText }}</p>
+      <!-- 30 号票：对局统计区块（store 由事件流累计；匿名局同样显示，ELO 行为不变） -->
+      <div class="stats" data-testid="end-stats">
+        <div class="statrow">
+          <span class="who">回合数</span>
+          <span class="val">{{ store.stats.rounds }}</span>
+        </div>
+        <div class="statrow">
+          <span class="who">总伤害</span>
+          <span class="val">P1 {{ store.stats.damageDealt.p1 }} · P2 {{ store.stats.damageDealt.p2 }}</span>
+        </div>
+        <div class="statrow">
+          <span class="who">闪避次数</span>
+          <span class="val">P1 {{ store.stats.dodges.p1 }} · P2 {{ store.stats.dodges.p2 }}</span>
+        </div>
+      </div>
       <div v-if="store.result?.elo?.length" class="elo">
         <div v-for="e in store.result.elo" :key="e.player" class="elorow">
           <span class="who">{{ e.player }}</span>
@@ -53,6 +68,10 @@ function deltaText(before: number, after: number): string {
   text-align: center; color: var(--cw-color-text-primary);
 }
 .card h2 { font-size: var(--cw-font-size-xl); margin: 0 0 10px; }
+/* 30 号票：统计区块（结构与 elorow 同款行式布局）；数值等宽对齐 */
+.stats { margin: 12px 0 4px; font-size: var(--cw-font-size-md); }
+.statrow { display: flex; gap: 10px; justify-content: center; padding: 3px 0; }
+.statrow .val { font-variant-numeric: tabular-nums; }
 .elo { margin: 12px 0 4px; font-size: var(--cw-font-size-md); }
 .elorow { display: flex; gap: 10px; justify-content: center; padding: 3px 0; }
 .who { color: var(--cw-color-text-secondary); }

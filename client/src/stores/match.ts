@@ -11,9 +11,16 @@ import {
 } from "../api/proto/codewar/match/v1/match";
 import { useClassesStore } from "./classes";
 
+// 30 号票：日志按事件语义分类，EventLog 据此着色（伤害红/治疗绿/闪避黄/系统次级色）。
+// 分类只看事件类型与其字段——提交生命周期类（judged/rejected/回合分隔/终局）归 system，
+// HP 效果与落空行才进入战斗三色（judged 的"提交错误"文案行报的是提交流水，
+// 自损的 HP 变化由成对的 hpChanged 行以 damage 呈现）。
+export type LogKind = "damage" | "heal" | "dodge" | "system";
+
 export interface LogEntry {
   seq: number;
   text: string;
+  kind: LogKind;
 }
 
 export interface PlayerEloView {
@@ -29,6 +36,15 @@ export interface MatchResultView {
   // 双方 ELO 变化（07 号票）：已结算对局（含平局，before==after）才有内容；
   // 匿名对局为空数组，终局面板不显示 ELO 区块。
   elo: PlayerEloView[];
+}
+
+// 30 号票：终局统计——由事件流逐事件累计（日志有 50 条上限，禁止从 log 文本反推）。
+// damageDealt 只计攻击/技能落地伤害（actionResolved.damage，护盾折减后的实际值）；
+// 提交错误自损是惩罚而非战斗伤害，不计入。dodges 记在闪避方（对方攻击/技能落空时）。
+export interface MatchStatsView {
+  rounds: number; // 已开始的回合数（roundStarted 事件计数）
+  damageDealt: Record<string, number>; // 各方造成的战斗总伤害
+  dodges: Record<string, number>; // 各方闪避次数
 }
 
 export interface PosView {
@@ -116,6 +132,7 @@ export interface MatchState {
   pendingMoveTo: PosView | null; // 移动槽的待提交目标格（网格点选）
   result: MatchResultView | null;
   log: LogEntry[];
+  stats: MatchStatsView; // 30 号票：终局统计（事件流累计，重连快照不清零——seq 断号守卫防重放）
   serverOffsetMs: number; // 服务端时钟 - 本地时钟
   gapDetected: boolean; // 事件序号断裂 → 需要重连（ADR-0002）
   // 20 号票 B：技能冷却的事件推导锚点——查看者释放回合 + CD（与引擎 skillReadyFrom
@@ -127,6 +144,20 @@ export interface MatchState {
 function toProblem(p: { id: string; statement: string; signature: string; starterCode: string } | null | undefined): ProblemView | null {
   if (!p) return null;
   return { id: p.id, statement: p.statement, signature: p.signature, starterCode: p.starterCode };
+}
+
+// 对方席位（客户端只有 p1/p2 双方，与 hp 初始态同约定）
+function other(p: string): string {
+  return p === "p1" ? "p2" : "p1";
+}
+
+// actionResolved 单条事件的日志 kind（引擎对"伤害+治疗"双效果拆两条事件，
+// 单条至多一种战斗效果；落空优先——落空行的语义就是闪避）
+function actionKind(a: { dodged?: boolean; damage?: number; heal?: number }): LogKind {
+  if (a.dodged) return "dodge";
+  if ((a.damage ?? 0) > 0) return "damage";
+  if ((a.heal ?? 0) > 0) return "heal";
+  return "system";
 }
 
 export const useMatchStore = defineStore("match", {
@@ -150,6 +181,7 @@ export const useMatchStore = defineStore("match", {
     pendingMoveTo: null,
     result: null,
     log: [],
+    stats: { rounds: 0, damageDealt: { p1: 0, p2: 0 }, dodges: { p1: 0, p2: 0 } },
     serverOffsetMs: 0,
     gapDetected: false,
     skillCdUntilRound: 0,
@@ -266,6 +298,7 @@ export const useMatchStore = defineStore("match", {
         this.pendingTargeting = null;
         this.shield = {}; // 护盾不跨回合；位置跨回合持续
         this.panel = null;
+        this.stats.rounds++; // 30 号票：回合数由 roundStarted 事件累计
         this.pushLog(`—— 第 ${this.round} 回合 ——`);
       } else if (env.panelReady) {
         this.applyPanel(env.panelReady);
@@ -276,13 +309,13 @@ export const useMatchStore = defineStore("match", {
       } else if (env.hpChanged) {
         const p = env.hpChanged.player;
         this.hp[p] = env.hpChanged.hp;
-        this.pushLog(
-          env.hpChanged.cause === "self-damage"
-            ? `✖ ${p} 提交错误，自损 3（剩余 ${env.hpChanged.hp}）`
-            : env.hpChanged.cause === "heal"
-              ? `✚ ${p} 恢复 ${env.hpChanged.delta} HP（剩余 ${env.hpChanged.hp}）`
-              : `💢 ${p} 受到 ${-env.hpChanged.delta} 伤害（剩余 ${env.hpChanged.hp}）`,
-        );
+        if (env.hpChanged.cause === "self-damage") {
+          this.pushLog(`✖ ${p} 提交错误，自损 3（剩余 ${env.hpChanged.hp}）`, "damage");
+        } else if (env.hpChanged.cause === "heal") {
+          this.pushLog(`✚ ${p} 恢复 ${env.hpChanged.delta} HP（剩余 ${env.hpChanged.hp}）`, "heal");
+        } else {
+          this.pushLog(`💢 ${p} 受到 ${-env.hpChanged.delta} 伤害（剩余 ${env.hpChanged.hp}）`, "damage");
+        }
       } else if (env.submissionRejected) {
         const why = env.submissionRejected.reason;
         const what = why === "skill-cooldown" ? "技能冷却中" : why === "no-skill-equipped" ? "未装备技能" : "移动参数";
@@ -350,7 +383,8 @@ export const useMatchStore = defineStore("match", {
         this.pushLog(`✖ ${j.player} 提交错误（${j.category}）`);
       }
     },
-    // 行动结算：移动改写位置、防御挂盾、攻击按 闪避→护盾 顺序渲染
+    // 行动结算：移动改写位置、防御挂盾、攻击按 闪避→护盾 顺序渲染；
+    // 30 号票：伤害/闪避统计在同分支累计（伤害记出手方、闪避记闪避方）
     applyAction(a: NonNullable<Envelope["actionResolved"]>) {
       const p = a.attacker;
       if (a.action === "move" && a.moveTo) {
@@ -361,20 +395,26 @@ export const useMatchStore = defineStore("match", {
         this.pushLog(`🛡 ${p} 挂起护盾（本回合减伤 60%）`);
       } else if (a.action === "skill") {
         if (a.dodged) {
-          this.pushLog(`💨 ${p} 的技能落空——目标不在覆盖范围`);
+          this.stats.dodges[other(p)]++;
+          this.pushLog(`💨 ${p} 的技能落空——目标不在覆盖范围`, "dodge");
         } else {
           const parts: string[] = [];
-          if (a.damage > 0) parts.push(`造成 ${a.damage} 伤害`);
+          if (a.damage > 0) {
+            this.stats.damageDealt[p] += a.damage;
+            parts.push(`造成 ${a.damage} 伤害`);
+          }
           if (a.heal > 0) parts.push(`恢复 ${a.heal} HP`);
           const tail = a.shielded ? "（护盾折减）" : "";
-          this.pushLog(`✨ ${p} 释放技能：${parts.join("、")}${tail}`);
+          this.pushLog(`✨ ${p} 释放技能：${parts.join("、")}${tail}`, actionKind(a));
         }
       } else if (a.action === "attack") {
         if (a.dodged) {
-          this.pushLog(`💨 ${p} 的攻击落空——目标已移出相邻格`);
+          this.stats.dodges[other(p)]++;
+          this.pushLog(`💨 ${p} 的攻击落空——目标已移出相邻格`, "dodge");
         } else {
+          if (a.damage > 0) this.stats.damageDealt[p] += a.damage;
           const tail = a.shielded ? "（护盾折减）" : "";
-          this.pushLog(`⚔ ${p} 出手，造成 ${a.damage} 伤害${tail}`);
+          this.pushLog(`⚔ ${p} 出手，造成 ${a.damage} 伤害${tail}`, actionKind(a));
         }
       }
     },
@@ -385,8 +425,8 @@ export const useMatchStore = defineStore("match", {
     setTargeting(t: TargetingView | null) {
       this.pendingTargeting = t;
     },
-    pushLog(text: string) {
-      this.log.push({ seq: this.seq, text });
+    pushLog(text: string, kind: LogKind = "system") {
+      this.log.push({ seq: this.seq, text, kind });
       if (this.log.length > 50) this.log.shift();
     },
   },

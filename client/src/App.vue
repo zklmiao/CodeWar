@@ -31,7 +31,7 @@ async function logout() {
 <template>
   <div class="page" :class="{ 'page--wide': wide }">
     <header>
-      <h1>CodeWar · 代码战争 <small>07 号票 · 账号与 ELO</small></h1>
+      <h1>CodeWar · 代码战争</h1>
       <nav>
         <router-link to="/">对局</router-link>
         <template v-if="user.loggedIn">
@@ -58,7 +58,6 @@ body { margin: 0; background: var(--cw-color-bg-base); font-family: var(--cw-fon
 .page--wide { max-width: 1240px; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 h1 { font-size: var(--cw-font-size-lg); color: var(--cw-color-text-primary); margin: 0; }
-h1 small { color: var(--cw-color-text-muted); font-size: var(--cw-font-size-xs); font-weight: 400; margin-left: 8px; }
 nav { display: flex; gap: 16px; font-size: var(--cw-font-size-sm); }
 nav a { color: var(--cw-color-text-secondary); text-decoration: none; }
 nav a.router-link-active { color: var(--cw-color-state-success); }
