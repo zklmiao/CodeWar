@@ -12,7 +12,7 @@
 
 ![对局实况：左栏棋盘与战报，右栏四张题卡与共享工作区](docs/assets/screenshot-match.png)
 
-![Go 1.26](https://img.shields.io/badge/Go_1.26-00ADD8?logo=go&logoColor=white) ![Vue 3.5](https://img.shields.io/badge/Vue_3.5-4FC08D?logo=vuedotjs&logoColor=white) ![TypeScript 5](https://img.shields.io/badge/TypeScript_5-3178C6?logo=typescript&logoColor=white) ![Python 3.12](https://img.shields.io/badge/Python_3.12-3776AB?logo=python&logoColor=white) ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL_16-4169E1?logo=postgresql&logoColor=white) ![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
+![Go 1.26](https://img.shields.io/badge/Go_1.26-00ADD8?logo=go&logoColor=white) ![Vue 3.5](https://img.shields.io/badge/Vue_3.5-4FC08D?logo=vuedotjs&logoColor=white) ![TypeScript 5](https://img.shields.io/badge/TypeScript_5-3178C6?logo=typescript&logoColor=white) ![Python 3.12](https://img.shields.io/badge/Python_3.12-3776AB?logo=python&logoColor=white) ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL_16-4169E1?logo=postgresql&logoColor=white) ![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white) ![gRPC](https://img.shields.io/badge/gRPC-244C5A) [![License](https://img.shields.io/badge/license-PolyForm_NC_1.0.0-D97706)](LICENSE)
 
 </div>
 
