@@ -1,0 +1,31 @@
+# CodeWar 内容许可（Content License）
+
+Copyright (c) 2026 zklmiao
+
+本仓库中的**文档与美术内容**采用
+**Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International（CC BY-NC-SA 4.0）** 许可。
+
+- 许可全文：<https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode>
+- 人类可读摘要：<https://creativecommons.org/licenses/by-nc-sa/4.0/>
+- 署名（BY）：CodeWar · 代码战争，作者 zklmiao
+- 非商用（NC）：商业使用需获得作者书面许可（联系 <hysytess@gmail.com>）
+- 相同方式共享（SA）：修改后的内容须以相同许可发布
+
+## 适用范围
+
+适用本许可的内容：
+
+- `docs/` —— 产品规格、ADR、设计文档与截图
+- `design/` —— 设计 token、占位资产与风格页
+- `.scratch/` —— 票据、验收报告与项目工作文档
+- `README.md`、`AGENTS.md`
+
+**不适用**本许可、随根目录 `LICENSE` 按 PolyForm Noncommercial 1.0.0 授权的内容：
+
+- 全部源代码与配置：`client/`、`server/`、`judge/`、`proto/`、`db/`、`deploy/`、`scripts/` 及根目录构建配置
+- `server/internal/question/templates/` 下的题库模板（属于代码，非内容资产）
+
+## 商用授权
+
+任何商业用途（包括但不限于商业产品集成、付费服务、商业分发）均需获得作者书面许可。
+联系方式：<hysytess@gmail.com>

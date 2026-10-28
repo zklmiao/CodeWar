@@ -226,6 +226,19 @@ docs/
 - [ ] 视觉打磨：SVG 图标、动效落地、职业色血条、难度徽标（25）
 - [ ] 对局回放与错题本、排行榜、CI 门控补全
 
+## 许可
+
+本项目采用 **源码可见（source-available）** 模式，不是 OSI 开源项目：
+
+| 范围 | 许可 |
+|---|---|
+| 代码（`client/` `server/` `judge/` `proto/` `db/` `deploy/` `scripts/`，含题库模板） | [PolyForm Noncommercial 1.0.0](LICENSE) —— 非商用自由使用、修改与分发；含专利授权；须保留 [NOTICE](NOTICE) 署名 |
+| 内容（`docs/` `design/` `.scratch/` 与项目文档） | [CC BY-NC-SA 4.0](LICENSE-CONTENT) —— 署名、非商用、相同方式共享 |
+
+- **商用需授权**：任何商业用途（商业产品集成、付费服务、商业分发）须获得作者书面许可，联系 <hysytess@gmail.com>。
+- **署名**：保留 `NOTICE` 中的 `Required Notice: Copyright (c) 2026 zklmiao` 行；内容转载须注明「CodeWar · 代码战争 / zklmiao」及许可链接。
+- **贡献**：欢迎 PR，提交即表示同意按相同许可并入；商用授权仅覆盖作者本人创作部分，含外部贡献的部分需另行取得相应贡献者同意。
+
 ## 说明
 
 - 美术资产为统一占位系统（设计 token 单源，可整包替换为正式美术）。

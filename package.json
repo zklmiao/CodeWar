@@ -1,6 +1,7 @@
 {
   "name": "codewar",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
     "gen:proto": "bash scripts/gen-proto.sh",
     "dev:client": "pnpm --dir client dev",

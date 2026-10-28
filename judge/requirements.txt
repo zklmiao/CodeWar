@@ -1,3 +1,4 @@
+# 许可：PolyForm Noncommercial 1.0.0（见仓库根目录 LICENSE；未经授权禁止商用）
 # 运行时依赖（判题执行 + gRPC 服务 + 测试）
 grpcio>=1.66
 protobuf>=5.26
