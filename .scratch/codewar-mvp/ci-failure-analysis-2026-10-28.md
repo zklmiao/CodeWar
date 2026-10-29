@@ -102,3 +102,11 @@ client job 在 `pnpm/action-setup@v4` 的自安装阶段立即失败，日志原
 - **风险**：极低，改动仅限 `.github/workflows/ci.yml`，不触碰运行时逻辑。
 
 > 本文只做分析，未修改任何 CI 配置；处置方式待人工 review 后决定。
+
+## 6. 处置记录（2026-10-30）
+
+经人工 review 确认采用 **方案 A + 可选修复 1**，已实施：
+
+- `.github/workflows/ci.yml`：client job 删除 `pnpm/action-setup` 的 `version: 12`（根 `package.json` 的 `packageManager: pnpm@12.4.1` 成为唯一版本源）；server job 的 `setup-go` 增加 `cache-dependency-path: server/go.sum`。
+- 修复提交 `0dd3dd2`（"ci: resolve pnpm version conflict and fix go cache path"）推送后，run `40974981793` **三 job 全绿**：client 22s（此前 6s 失败）、server 4m5s（"Restore cache failed" 告警消失）、judge 36s。
+- 剩余注解仅 Node.js 20 弃用告警与 ubuntu-latest 迁移提示，均为非阻塞项，见「可选顺带修复」第 2/3 条，择机处理。
